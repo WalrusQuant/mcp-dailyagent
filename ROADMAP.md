@@ -292,9 +292,11 @@ Replace the old settings page with a new account settings page:
 
 ---
 
-## Phase 4: API Key Management
+## Phase 4: API Key Management ✅
 
 Users generate API keys from the dashboard to authenticate MCP connections.
+
+**Completed 2026-03-22** — Key generation (da_sk_ + 36 bytes), SHA-256 hashing, validation middleware, CRUD API routes, settings UI fully wired. Free plan 1-key limit enforced.
 
 ### 4.1 — API Key Generation & Storage
 
