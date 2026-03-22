@@ -605,8 +605,6 @@ export default function AdminPage() {
               <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Type</label>
               <select value={providerForm.type} onChange={(e) => setProviderForm({ ...providerForm, type: e.target.value as LLMProvider["type"] })} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}>
                 <option value="openai-compatible">OpenAI Compatible</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google</option>
               </select>
             </div>
             {providerForm.type === "openai-compatible" && (

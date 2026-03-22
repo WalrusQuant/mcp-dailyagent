@@ -65,7 +65,7 @@ export default function AdminUsagePage() {
 
   // Form state
   const [formUserId, setFormUserId] = useState<string>("");
-  const [formLimitType, setFormLimitType] = useState<"cost" | "tokens">("cost");
+  const [formLimitType, setFormLimitType] = useState<"requests" | "ai_suggestions">("requests");
   const [formLimitValue, setFormLimitValue] = useState("");
   const [formPeriod, setFormPeriod] = useState<"daily" | "monthly">("monthly");
   const [formMode, setFormMode] = useState<"hard" | "soft">("hard");
@@ -103,7 +103,7 @@ export default function AdminUsagePage() {
   const openAddModal = () => {
     setEditingLimit(null);
     setFormUserId("");
-    setFormLimitType("cost");
+    setFormLimitType("requests");
     setFormLimitValue("");
     setFormPeriod("monthly");
     setFormMode("hard");
@@ -312,7 +312,7 @@ export default function AdminUsagePage() {
                         {l.limit_type}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
-                        {l.limit_type === "cost" ? `$${Number(l.limit_value).toFixed(2)}` : formatTokens(Number(l.limit_value))}
+                        {formatTokens(Number(l.limit_value))}
                       </td>
                       <td className="px-4 py-3 capitalize" style={{ color: "var(--text-primary)" }}>
                         {l.period}
@@ -402,12 +402,12 @@ export default function AdminUsagePage() {
                     <label className="block mb-1" style={labelStyle}>Type</label>
                     <select
                       value={formLimitType}
-                      onChange={(e) => setFormLimitType(e.target.value as "cost" | "tokens")}
+                      onChange={(e) => setFormLimitType(e.target.value as "requests" | "ai_suggestions")}
                       className="w-full px-3 py-2 rounded-lg text-sm"
                       style={inputStyle}
                     >
-                      <option value="cost">Cost ($)</option>
-                      <option value="tokens">Tokens</option>
+                      <option value="requests">Requests</option>
+                      <option value="ai_suggestions">AI Suggestions</option>
                     </select>
                   </div>
                   <div>
@@ -427,15 +427,15 @@ export default function AdminUsagePage() {
             )}
             <div>
               <label className="block mb-1" style={labelStyle}>
-                Value {formLimitType === "cost" ? "($)" : "(tokens)"}
+                Value (count)
               </label>
               <input
                 type="number"
-                step={formLimitType === "cost" ? "0.01" : "1000"}
+                step="1"
                 min="0"
                 value={formLimitValue}
                 onChange={(e) => setFormLimitValue(e.target.value)}
-                placeholder={formLimitType === "cost" ? "10.00" : "1000000"}
+                placeholder="100"
                 className="w-full px-3 py-2 rounded-lg text-sm"
                 style={inputStyle}
               />

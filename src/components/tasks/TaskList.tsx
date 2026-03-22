@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
-import { Task, Project } from "@/types/database";
+import { Task, Space } from "@/types/database";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TaskItem } from "./TaskItem";
@@ -103,7 +103,7 @@ function groupByPriority(tasks: Task[]): PriorityGroup[] {
 export function TaskList() {
   const [date, setDate] = useState(getToday());
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -130,7 +130,7 @@ export function TaskList() {
   useEffect(() => {
     fetch("/api/projects")
       .then((r) => r.ok ? r.json() : [])
-      .then(setProjects)
+      .then(setSpaces)
       .catch(() => {});
   }, []);
 
@@ -255,7 +255,7 @@ export function TaskList() {
       {showForm && (
         <TaskFormModal
           task={editingTask}
-          projects={projects}
+          spaces={spaces}
           defaultDate={date}
           onClose={() => { setShowForm(false); setEditingTask(null); }}
           onSave={handleSave}

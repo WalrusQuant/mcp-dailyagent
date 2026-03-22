@@ -663,6 +663,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      app_models: {
+        Row: {
+          id: string;
+          model_id: string;
+          api_model_id: string;
+          name: string;
+          provider_id: string | null;
+          type: "chat" | "image";
+          is_default: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          model_id: string;
+          api_model_id: string;
+          name: string;
+          provider_id?: string | null;
+          type?: "chat" | "image";
+          is_default?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          model_id?: string;
+          api_model_id?: string;
+          name?: string;
+          provider_id?: string | null;
+          type?: "chat" | "image";
+          is_default?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       llm_providers: {
         Row: {
           id: string;
@@ -672,6 +708,7 @@ export interface Database {
           api_key_setting: string | null;
           is_enabled: boolean;
           supports_tools: boolean;
+          supports_images: boolean;
           supports_streaming: boolean;
           extra_headers: Record<string, string>;
           sort_order: number;
@@ -685,6 +722,7 @@ export interface Database {
           api_key_setting?: string | null;
           is_enabled?: boolean;
           supports_tools?: boolean;
+          supports_images?: boolean;
           supports_streaming?: boolean;
           extra_headers?: Record<string, string>;
           sort_order?: number;
@@ -698,6 +736,7 @@ export interface Database {
           api_key_setting?: string | null;
           is_enabled?: boolean;
           supports_tools?: boolean;
+          supports_images?: boolean;
           supports_streaming?: boolean;
           extra_headers?: Record<string, string>;
           sort_order?: number;
@@ -821,6 +860,7 @@ export type WeeklyReview = Database["public"]["Tables"]["weekly_reviews"]["Row"]
 export type DailyBriefing = Database["public"]["Tables"]["daily_briefings"]["Row"];
 export type InsightCache = Database["public"]["Tables"]["insight_cache"]["Row"];
 export type AppSetting = Database["public"]["Tables"]["app_settings"]["Row"];
+export type AppModel = Database["public"]["Tables"]["app_models"]["Row"];
 export type LLMProvider = Database["public"]["Tables"]["llm_providers"]["Row"];
 export type StripeEvent = Database["public"]["Tables"]["stripe_events"]["Row"];
 export type SubscriptionHistory = Database["public"]["Tables"]["subscription_history"]["Row"];

@@ -5,6 +5,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  void request;
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -16,8 +17,8 @@ export async function GET(
   }
 
   const { data, error } = await supabase
-    .from("projects")
-    .select("*, conversations(count)")
+    .from("spaces")
+    .select("*")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -53,8 +54,6 @@ export async function PATCH(
     allowedFields.status = body.status;
   if (typeof body.progress === "number" && body.progress >= 0 && body.progress <= 100)
     allowedFields.progress = body.progress;
-  if (typeof body.system_prompt === "string" || body.system_prompt === null)
-    allowedFields.system_prompt = body.system_prompt;
   if (typeof body.deadline === "string" || body.deadline === null)
     allowedFields.deadline = body.deadline;
 
@@ -65,7 +64,7 @@ export async function PATCH(
   allowedFields.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("spaces")
     .update(allowedFields)
     .eq("id", id)
     .eq("user_id", user.id)
@@ -83,6 +82,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  void request;
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -93,20 +93,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Delete storage files first
-  const { data: files } = await supabase
-    .from("project_files")
-    .select("storage_path")
-    .eq("project_id", id)
-    .eq("user_id", user.id);
-
-  if (files && files.length > 0) {
-    const paths = files.map((f) => f.storage_path);
-    await supabase.storage.from("project-files").remove(paths);
-  }
-
   const { error } = await supabase
-    .from("projects")
+    .from("spaces")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);

@@ -75,8 +75,8 @@ export async function PATCH(
   if (typeof body.done === "boolean") allowedFields.done = body.done;
   if (typeof body.done_at === "string" || body.done_at === null) allowedFields.done_at = body.done_at;
   if (typeof body.task_date === "string") allowedFields.task_date = body.task_date;
-  if (typeof body.project_id === "string" || body.project_id === null)
-    allowedFields.project_id = body.project_id;
+  if (typeof body.space_id === "string" || body.space_id === null)
+    allowedFields.space_id = body.space_id;
   if (typeof body.goal_id === "string" || body.goal_id === null)
     allowedFields.goal_id = body.goal_id;
   if (body.recurrence !== undefined) allowedFields.recurrence = body.recurrence;
@@ -117,7 +117,7 @@ export async function PATCH(
       notes: data.notes,
       priority: data.priority,
       task_date: nextDate,
-      project_id: data.project_id,
+      space_id: data.space_id,
       recurrence: data.recurrence,
       sort_order: data.sort_order,
     });

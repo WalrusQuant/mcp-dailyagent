@@ -15,8 +15,8 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status");
 
   let query = supabase
-    .from("projects")
-    .select("*, conversations(count)")
+    .from("spaces")
+    .select("*")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
 
@@ -44,20 +44,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { name, description, status, system_prompt, deadline } = body;
+  const { name, description, status, deadline } = body;
 
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
   const { data, error } = await supabase
-    .from("projects")
+    .from("spaces")
     .insert({
       user_id: user.id,
       name,
       description: description || null,
       status: status || "active",
-      system_prompt: system_prompt || null,
       deadline: deadline || null,
     })
     .select()

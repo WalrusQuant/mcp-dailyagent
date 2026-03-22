@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { Project } from "@/types/database";
+import { Space } from "@/types/database";
 
 interface ProjectFormModalProps {
-  project?: Project | null;
+  project?: Space | null;
   onClose: () => void;
-  onSave: (project: Project) => void;
+  onSave: (space: Space) => void;
 }
 
 export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalProps) {
@@ -15,7 +15,6 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
   const [description, setDescription] = useState(project?.description || "");
   const [status] = useState<"active" | "paused" | "completed">(project?.status || "active");
   const [deadline] = useState(project?.deadline || "");
-  const [systemPrompt, setSystemPrompt] = useState(project?.system_prompt || "");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -43,7 +42,6 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
           description: description.trim() || null,
           status,
           deadline: deadline || null,
-          system_prompt: systemPrompt.trim() || null,
         }),
       });
 
@@ -52,7 +50,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
         onSave(data);
       }
     } catch (error) {
-      console.error("Failed to save project:", error);
+      console.error("Failed to save space:", error);
     } finally {
       setIsSaving(false);
     }
@@ -67,7 +65,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
       >
         <div className="flex items-center justify-between p-4" style={{ borderBottom: "1px solid var(--border-default)" }}>
           <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            {project ? "Edit Project" : "New Project"}
+            {project ? "Edit Space" : "New Space"}
           </h2>
           <button onClick={onClose} className="p-1" style={{ color: "var(--text-muted)" }}>
             <X className="w-5 h-5" />
@@ -89,7 +87,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
                 color: "var(--text-primary)",
                 border: "1px solid var(--border-default)",
               }}
-              placeholder="Project name"
+              placeholder="Space name"
               autoFocus
             />
           </div>
@@ -108,25 +106,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
                 border: "1px solid var(--border-default)",
               }}
               rows={3}
-              placeholder="What is this project about?"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              System Prompt
-            </label>
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none font-mono"
-              style={{
-                background: "var(--bg-base)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-default)",
-              }}
-              rows={4}
-              placeholder="Custom instructions for all conversations in this project..."
+              placeholder="What is this space about?"
             />
           </div>
 
@@ -145,7 +125,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
               className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
               style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
             >
-              {isSaving ? "Saving..." : project ? "Save Changes" : "Create Project"}
+              {isSaving ? "Saving..." : project ? "Save Changes" : "Create Space"}
             </button>
           </div>
         </form>

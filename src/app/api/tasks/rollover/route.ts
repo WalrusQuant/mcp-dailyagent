@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     notes: task.notes,
     priority: task.priority,
     task_date: todayStr,
-    project_id: task.project_id,
+    space_id: task.space_id,
     recurrence: task.recurrence,
     sort_order: task.sort_order,
     rolled_from: task.id,

@@ -3,25 +3,25 @@
 import { useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
-import { Task, Project } from "@/types/database";
+import { Task, Space } from "@/types/database";
 
 interface TaskFormModalProps {
   task?: Task | null;
-  projects?: Project[];
+  spaces?: Space[];
   defaultDate?: string;
-  defaultProjectId?: string;
+  defaultSpaceId?: string;
   onClose: () => void;
   onSave: (task: Task) => void;
 }
 
 const PRIORITY_LABELS: Record<string, string> = { A: "Must Do", B: "Should Do", C: "Nice to Do" };
 
-export function TaskFormModal({ task, projects, defaultDate, defaultProjectId, onClose, onSave }: TaskFormModalProps) {
+export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClose, onSave }: TaskFormModalProps) {
   const [title, setTitle] = useState(task?.title || "");
   const [notes, setNotes] = useState(task?.notes || "");
   const [priority, setPriority] = useState(task?.priority || "B1");
   const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || new Date().toISOString().split("T")[0]);
-  const [projectId, setProjectId] = useState(task?.project_id || defaultProjectId || "");
+  const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
   const [goalId, setGoalId] = useState(task?.goal_id || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
   const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +40,7 @@ export function TaskFormModal({ task, projects, defaultDate, defaultProjectId, o
         notes: notes.trim() || null,
         priority,
         task_date: taskDate,
-        project_id: projectId || null,
+        space_id: spaceId || null,
         goal_id: goalId || null,
         recurrence: recurrenceType ? { type: recurrenceType } : null,
       };
@@ -164,20 +164,20 @@ export function TaskFormModal({ task, projects, defaultDate, defaultProjectId, o
 
         <GoalPicker value={goalId} onChange={setGoalId} />
 
-        {projects && projects.length > 0 && (
+        {spaces && spaces.length > 0 && (
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              Project
+              Space
             </label>
             <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              value={spaceId}
+              onChange={(e) => setSpaceId(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
               style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             >
-              <option value="">No project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">No space</option>
+              {spaces.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </div>

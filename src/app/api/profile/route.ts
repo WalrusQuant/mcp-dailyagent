@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("system_prompt, search_model, search_results_basic, search_results_advanced, context_injection, tool_calling_enabled, briefing_enabled, ai_model_config, monthly_budget, memory_notes")
+    .select("display_name, avatar_url, timezone, plan, ai_model_config, tool_calling_enabled, briefing_enabled")
     .eq("id", user.id)
     .single();
 
@@ -22,16 +22,13 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    systemPrompt: profile?.system_prompt || "",
-    searchModel: profile?.search_model || null,
-    searchResultsBasic: profile?.search_results_basic ?? 10,
-    searchResultsAdvanced: profile?.search_results_advanced ?? 20,
-    contextInjection: profile?.context_injection ?? true,
+    displayName: profile?.display_name ?? null,
+    avatarUrl: profile?.avatar_url ?? null,
+    timezone: profile?.timezone ?? "UTC",
+    plan: profile?.plan ?? "free",
     toolCallingEnabled: profile?.tool_calling_enabled ?? true,
     briefingEnabled: profile?.briefing_enabled ?? true,
     aiModelConfig: profile?.ai_model_config ?? null,
-    monthlyBudget: profile?.monthly_budget ?? null,
-    memoryNotes: profile?.memory_notes ?? null,
   });
 }
 
@@ -48,32 +45,16 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json();
   const allowed: Record<string, unknown> = {};
 
-  if (typeof body.systemPrompt === "string") {
-    allowed.system_prompt = body.systemPrompt || null;
+  if (typeof body.displayName === "string" || body.displayName === null) {
+    allowed.display_name = body.displayName || null;
   }
 
-  if (body.searchModel !== undefined) {
-    allowed.search_model = typeof body.searchModel === "string" ? body.searchModel : null;
+  if (typeof body.avatarUrl === "string" || body.avatarUrl === null) {
+    allowed.avatar_url = body.avatarUrl || null;
   }
 
-  if (body.searchResultsBasic !== undefined) {
-    const val = Number(body.searchResultsBasic);
-    if (!Number.isInteger(val) || val < 1 || val > 50) {
-      return NextResponse.json({ error: "searchResultsBasic must be an integer 1-50" }, { status: 400 });
-    }
-    allowed.search_results_basic = val;
-  }
-
-  if (body.searchResultsAdvanced !== undefined) {
-    const val = Number(body.searchResultsAdvanced);
-    if (!Number.isInteger(val) || val < 1 || val > 50) {
-      return NextResponse.json({ error: "searchResultsAdvanced must be an integer 1-50" }, { status: 400 });
-    }
-    allowed.search_results_advanced = val;
-  }
-
-  if (typeof body.contextInjection === "boolean") {
-    allowed.context_injection = body.contextInjection;
+  if (typeof body.timezone === "string") {
+    allowed.timezone = body.timezone;
   }
 
   if (typeof body.toolCallingEnabled === "boolean") {
@@ -82,22 +63,6 @@ export async function PATCH(request: NextRequest) {
 
   if (typeof body.briefingEnabled === "boolean") {
     allowed.briefing_enabled = body.briefingEnabled;
-  }
-
-  if (body.monthlyBudget !== undefined) {
-    if (body.monthlyBudget === null) {
-      allowed.monthly_budget = null;
-    } else {
-      const val = Number(body.monthlyBudget);
-      if (isNaN(val) || val < 0) {
-        return NextResponse.json({ error: "monthlyBudget must be a positive number" }, { status: 400 });
-      }
-      allowed.monthly_budget = val;
-    }
-  }
-
-  if (typeof body.memoryNotes === "string") {
-    allowed.memory_notes = body.memoryNotes || null;
   }
 
   if (body.aiModelConfig !== undefined) {
@@ -133,31 +98,12 @@ export async function DELETE() {
   }
 
   try {
-    // Get all conversation IDs for this user
-    const { data: convs } = await supabase
-      .from("conversations")
-      .select("id")
-      .eq("user_id", user.id);
-
-    // Delete messages (linked to conversations)
-    if (convs && convs.length > 0) {
-      const convIds = convs.map((c) => c.id);
-      await supabase.from("messages").delete().in("conversation_id", convIds);
-    }
-
-    // Delete conversations
-    await supabase.from("conversations").delete().eq("user_id", user.id);
-
-    // Delete generated images
-    await supabase.from("generated_images").delete().eq("user_id", user.id);
-
     // Clear profile data (keep row for auth integrity)
     await supabase
       .from("profiles")
       .update({
-        system_prompt: null,
-        search_model: null,
         display_name: null,
+        avatar_url: null,
       })
       .eq("id", user.id);
 

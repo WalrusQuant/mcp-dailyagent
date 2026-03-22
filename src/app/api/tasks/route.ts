@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
-  const projectId = searchParams.get("project_id");
+  const projectId = searchParams.get("space_id");
 
   const today = new Date().toISOString().split("T")[0];
   const taskDate = dateParam || today;
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       .order("sort_order", { ascending: true });
 
     if (projectId) {
-      query = query.eq("project_id", projectId);
+      query = query.eq("space_id", projectId);
     }
 
     const { data, error } = await query;
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     .order("sort_order", { ascending: true });
 
   if (projectId) {
-    query = query.eq("project_id", projectId);
+    query = query.eq("space_id", projectId);
   }
 
   const { data, error } = await query;
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, notes, priority, task_date, project_id, goal_id, recurrence, sort_order } = body;
+  const { title, notes, priority, task_date, space_id, goal_id, recurrence, sort_order } = body;
 
   if (!title || typeof title !== "string") {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       notes: notes || null,
       priority: typeof priority === "string" ? priority : "B1",
       task_date: task_date || today,
-      project_id: project_id || null,
+      space_id: space_id || null,
       goal_id: goal_id || null,
       recurrence: recurrence || null,
       sort_order: typeof sort_order === "number" ? sort_order : 0,
