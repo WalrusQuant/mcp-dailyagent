@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Key, Plus, Copy, Trash2, AlertCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Key, Plus, Copy, Trash2, AlertCircle, Loader2 } from "lucide-react";
+import { useToast } from "@/lib/toast-context";
 
 interface ApiKey {
   id: string;
@@ -13,11 +14,80 @@ interface ApiKey {
 }
 
 export function ApiKeysTab() {
-  const [keys] = useState<ApiKey[]>([]);
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const { addToast } = useToast();
+
+  const loadKeys = useCallback(async () => {
+    try {
+      const res = await fetch("/api/keys");
+      if (res.ok) {
+        const data = await res.json();
+        setKeys(data);
+      }
+    } catch {
+      addToast("Failed to load API keys", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    loadKeys();
+  }, [loadKeys]);
+
+  const handleCreate = async () => {
+    if (!newKeyName.trim()) return;
+    setIsCreating(true);
+
+    try {
+      const res = await fetch("/api/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newKeyName.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        addToast(data.error || "Failed to create key", "error");
+        return;
+      }
+
+      setCreatedKey(data.key);
+      setShowCreateModal(false);
+      setNewKeyName("");
+      loadKeys();
+      addToast("API key created", "success");
+    } catch {
+      addToast("Failed to create key", "error");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    setRevokingId(id);
+    try {
+      const res = await fetch(`/api/keys/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setKeys((prev) => prev.filter((k) => k.id !== id));
+        addToast("API key revoked", "success");
+      } else {
+        addToast("Failed to revoke key", "error");
+      }
+    } catch {
+      addToast("Failed to revoke key", "error");
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   const handleCopyKey = async () => {
     if (!createdKey) return;
@@ -25,6 +95,14 @@ export function ApiKeysTab() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--text-muted)" }} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -89,6 +167,13 @@ export function ApiKeysTab() {
                   {copied ? "Copied!" : "Copy"}
                 </button>
               </div>
+              <button
+                onClick={() => setCreatedKey(null)}
+                className="text-xs mt-2 transition-opacity hover:opacity-80"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         </div>
@@ -135,11 +220,17 @@ export function ApiKeysTab() {
                 </div>
               </div>
               <button
-                className="p-2 rounded-lg transition-colors hover:opacity-80"
+                onClick={() => handleRevoke(key.id)}
+                disabled={revokingId === key.id}
+                className="p-2 rounded-lg transition-colors hover:opacity-80 disabled:opacity-50"
                 style={{ color: "var(--accent-negative)" }}
                 title="Revoke key"
               >
-                <Trash2 className="w-4 h-4" />
+                {revokingId === key.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
               </button>
             </div>
           ))}
@@ -167,6 +258,7 @@ export function ApiKeysTab() {
                 type="text"
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && newKeyName.trim() && handleCreate()}
                 className="w-full rounded-lg px-4 py-3 focus:outline-none transition-colors"
                 style={{
                   background: "var(--bg-input)",
@@ -192,19 +284,18 @@ export function ApiKeysTab() {
                 Cancel
               </button>
               <button
-                disabled={!newKeyName.trim()}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                onClick={handleCreate}
+                disabled={!newKeyName.trim() || isCreating}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{
                   background: "var(--accent-primary)",
                   color: "var(--bg-base)",
                 }}
               >
+                {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
                 Create Key
               </button>
             </div>
-            <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
-              API key generation will be available once the backend is wired up in Phase 4.
-            </p>
           </div>
         </div>
       )}
