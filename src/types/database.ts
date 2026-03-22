@@ -667,34 +667,40 @@ export interface Database {
         Row: {
           id: string;
           model_id: string;
-          api_model_id: string;
           name: string;
-          provider_id: string | null;
+          provider: string;
+          description: string;
           type: "chat" | "image";
           is_default: boolean;
           sort_order: number;
+          provider_id: string | null;
+          api_model_id: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           model_id: string;
-          api_model_id: string;
           name: string;
-          provider_id?: string | null;
+          provider: string;
+          description?: string;
           type?: "chat" | "image";
           is_default?: boolean;
           sort_order?: number;
+          provider_id?: string | null;
+          api_model_id?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           model_id?: string;
-          api_model_id?: string;
           name?: string;
-          provider_id?: string | null;
+          provider?: string;
+          description?: string;
           type?: "chat" | "image";
           is_default?: boolean;
           sort_order?: number;
+          provider_id?: string | null;
+          api_model_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -748,6 +754,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string | null;
+          plan: "free" | "active" | null;
           limit_type: "requests" | "ai_suggestions";
           limit_value: number;
           period: "daily" | "monthly";
@@ -759,6 +766,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string | null;
+          plan?: "free" | "active" | null;
           limit_type: "requests" | "ai_suggestions";
           limit_value: number;
           period: "daily" | "monthly";
@@ -770,6 +778,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string | null;
+          plan?: "free" | "active" | null;
           limit_type?: "requests" | "ai_suggestions";
           limit_value?: number;
           period?: "daily" | "monthly";
@@ -868,6 +877,7 @@ export type SubscriptionHistory = Database["public"]["Tables"]["subscription_his
 export interface UsageLimit {
   id: string;
   user_id: string | null;
+  plan: "free" | "active" | null;
   limit_type: "requests" | "ai_suggestions";
   limit_value: number;
   period: "daily" | "monthly";

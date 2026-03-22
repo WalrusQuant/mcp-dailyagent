@@ -599,10 +599,46 @@ VALUES (
   true, true, true, '{}', 0
 ) ON CONFLICT (id) DO NOTHING;
 
--- Usage Limits (admin-managed per-user limits)
+-- App Models (admin-managed model list for AI features)
+CREATE TABLE public.app_models (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'openrouter',
+  description TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'chat' CHECK (type IN ('chat', 'image')),
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  provider_id UUID REFERENCES public.llm_providers(id) ON DELETE SET NULL,
+  api_model_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_app_models_type ON public.app_models(type);
+
+ALTER TABLE public.app_models ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read models" ON public.app_models
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins can insert models" ON public.app_models
+  FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can update models" ON public.app_models
+  FOR UPDATE TO authenticated USING (public.is_admin());
+
+CREATE POLICY "Admins can delete models" ON public.app_models
+  FOR DELETE TO authenticated USING (public.is_admin());
+
+-- Usage Limits (admin-managed, plan-aware)
+-- plan = NULL means applies to all plans (global default)
+-- plan = 'free' or 'active' means applies only to that plan
+-- user_id = NULL means global default for that plan
+-- user_id = specific user means per-user override
 CREATE TABLE public.usage_limits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  plan TEXT DEFAULT NULL CHECK (plan IN ('free', 'active', NULL)),
   limit_type TEXT NOT NULL CHECK (limit_type IN ('requests', 'ai_suggestions')),
   limit_value NUMERIC NOT NULL CHECK (limit_value > 0),
   period TEXT NOT NULL CHECK (period IN ('daily', 'monthly')),
@@ -615,7 +651,12 @@ CREATE TABLE public.usage_limits (
 CREATE INDEX idx_usage_limits_user ON public.usage_limits(user_id);
 
 CREATE UNIQUE INDEX idx_usage_limits_unique
-  ON public.usage_limits(COALESCE(user_id, '00000000-0000-0000-0000-000000000000'), limit_type, period);
+  ON public.usage_limits(
+    COALESCE(user_id, '00000000-0000-0000-0000-000000000000'),
+    limit_type,
+    period,
+    COALESCE(plan, '__any__')
+  );
 
 ALTER TABLE public.usage_limits ENABLE ROW LEVEL SECURITY;
 

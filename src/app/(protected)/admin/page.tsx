@@ -1,233 +1,49 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Shield, Eye, EyeOff, Loader2, Check, X, ArrowLeft, Trash2,
-  Plus, Pencil, ChevronDown, Power,
+  Shield, Eye, EyeOff, Loader2, Check, X, Trash2, Plus, Save,
 } from "lucide-react";
 import Link from "next/link";
-import type { LLMProvider } from "@/types/database";
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface SettingRow {
-  key: string;
-  value?: string;
-  configured: boolean;
-  masked?: string;
-  is_encrypted: boolean;
-  category: string;
-  description: string | null;
-  updated_at: string;
+interface AppModel {
+  id: string;
+  model_id: string;
+  name: string;
+  description: string;
+  is_default: boolean;
+  sort_order: number;
 }
-
-interface SettingsState {
-  settings: SettingRow[];
-  envStatus: Record<string, boolean>;
-}
-
-type StatusType = "db" | "env" | "missing";
-
-// ── StatusBadge ────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: StatusType }) {
-  if (status === "db") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-        style={{ background: "var(--accent-positive)", color: "#fff" }}
-      >
-        <Check className="w-2.5 h-2.5" /> Database
-      </span>
-    );
-  }
-  if (status === "env") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-        style={{ background: "#d4a574", color: "#fff" }}
-      >
-        <Check className="w-2.5 h-2.5" /> Env Fallback
-      </span>
-    );
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-      style={{ background: "var(--accent-negative, #ef4444)", color: "#fff" }}
-    >
-      <X className="w-2.5 h-2.5" /> Not Set
-    </span>
-  );
-}
-
-// ── SettingField ───────────────────────────────────────────────────────
-
-interface SettingFieldProps {
-  label: string;
-  settingKey: string;
-  settings: SettingRow[];
-  envStatus: Record<string, boolean>;
-  isSecret?: boolean;
-  testProvider?: string;
-  placeholder?: string;
-  onSave: (key: string, value: string, category: string) => Promise<void>;
-  onDelete: (key: string) => Promise<void>;
-  category: string;
-}
-
-function SettingField({
-  label, settingKey, settings, envStatus, isSecret, testProvider,
-  placeholder, onSave, onDelete, category,
-}: SettingFieldProps) {
-  const existing = settings.find((s) => s.key === settingKey);
-  const hasEnvFallback = envStatus[settingKey] || false;
-  const status: StatusType = existing?.configured ? "db" : hasEnvFallback ? "env" : "missing";
-
-  const [value, setValue] = useState(existing?.value || "");
-  const [showSecret, setShowSecret] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    if (!isSecret && existing?.value) setValue(existing.value);
-  }, [existing, isSecret]);
-
-  const handleSave = async () => {
-    if (!value.trim()) return;
-    setSaving(true);
-    try {
-      await onSave(settingKey, value.trim(), category);
-      if (isSecret) setValue("");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    if (!testProvider) return;
-    const testKey = value.trim() || undefined;
-    if (!testKey && !existing?.configured && !hasEnvFallback) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      if (!testKey) { setTestResult({ success: false, error: "Enter a key to test" }); return; }
-      const res = await fetch("/api/admin/settings/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: testProvider, apiKey: testKey }),
-      });
-      setTestResult(await res.json());
-    } catch {
-      setTestResult({ success: false, error: "Request failed" });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!existing?.configured) return;
-    setDeleting(true);
-    try { await onDelete(settingKey); } finally { setDeleting(false); }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</label>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={status} />
-          {existing?.configured && (
-            <button onClick={handleDelete} disabled={deleting} className="p-1 rounded transition-colors hover:opacity-80" style={{ color: "var(--text-muted)" }} title="Remove (revert to env fallback)">
-              {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-            </button>
-          )}
-        </div>
-      </div>
-      {isSecret && existing?.configured && (
-        <div className="text-xs" style={{ color: "var(--text-muted)" }}>Current: {existing.masked}</div>
-      )}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <input
-            type={isSecret && !showSecret ? "password" : "text"}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={placeholder || `Enter ${label.toLowerCase()}`}
-            className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none pr-8"
-            style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-          />
-          {isSecret && (
-            <button onClick={() => setShowSecret(!showSecret)} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }}>
-              {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
-        <button onClick={handleSave} disabled={saving || !value.trim()} className="px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-        </button>
-        {testProvider && (
-          <button onClick={handleTest} disabled={testing} className="px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}>
-            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Test"}
-          </button>
-        )}
-      </div>
-      {testResult && (
-        <div className="text-xs px-2 py-1 rounded" style={{ color: testResult.success ? "var(--accent-positive)" : "var(--accent-negative, #ef4444)", background: testResult.success ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)" }}>
-          {testResult.success ? "Connection successful" : testResult.error || "Connection failed"}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── AdminPage ─────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createClient();
   const [isAdmin, setIsAdmin] = useState<boolean | undefined>(undefined);
 
-  // App settings state
-  const [state, setState] = useState<SettingsState | null>(null);
+  // API Key state
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [apiKeyMasked, setApiKeyMasked] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  // Models state
+  const [models, setModels] = useState<AppModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [showAddModel, setShowAddModel] = useState(false);
+  const [newModelId, setNewModelId] = useState("");
+  const [newModelName, setNewModelName] = useState("");
+  const [newModelDesc, setNewModelDesc] = useState("");
+  const [savingModel, setSavingModel] = useState(false);
+
+  // Loading
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Provider state
-  const [providers, setProviders] = useState<LLMProvider[]>([]);
-  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
-  const [showProviderForm, setShowProviderForm] = useState(false);
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
-  const [providerForm, setProviderForm] = useState({
-    name: "", type: "openai-compatible" as LLMProvider["type"],
-    base_url: "", api_key_setting: "",
-    supports_tools: true, supports_images: false, supports_streaming: true,
-  });
-  const [isSavingProvider, setIsSavingProvider] = useState(false);
-
-  // Search settings state
-  const [searchModel, setSearchModel] = useState("");
-  const [savedSearchModel, setSavedSearchModel] = useState("");
-  const [searchModelOpen, setSearchModelOpen] = useState(false);
-  const searchModelRef = useRef<HTMLDivElement>(null);
-  const [searchResultsBasic, setSearchResultsBasic] = useState(10);
-  const [savedSearchResultsBasic, setSavedSearchResultsBasic] = useState(10);
-  const [searchResultsAdvanced, setSearchResultsAdvanced] = useState(20);
-  const [savedSearchResultsAdvanced, setSavedSearchResultsAdvanced] = useState(20);
-  const [isSavingSearch, setIsSavingSearch] = useState(false);
-  const [searchSaved, setSearchSaved] = useState(false);
-  const searchTimeout = useRef<NodeJS.Timeout>(undefined);
-
-  const searchSettingsChanged =
-    searchModel !== savedSearchModel ||
-    searchResultsBasic !== savedSearchResultsBasic ||
-    searchResultsAdvanced !== savedSearchResultsAdvanced;
-
-  // Check admin status and redirect non-admins
+  // Check admin
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push("/login"); return; }
@@ -240,179 +56,120 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close search model dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchModelRef.current && !searchModelRef.current.contains(e.target as Node)) {
-        setSearchModelOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // ── Load data ──
-
+  // Load API key status
   const loadSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/settings");
-      if (!res.ok) {
-        if (res.status === 403) { router.push("/settings"); return; }
-        throw new Error("Failed to load settings");
+      if (!res.ok) return;
+      const data = await res.json();
+      const orKey = data.settings?.find((s: { key: string; configured: boolean; masked?: string }) => s.key === "openrouter_api_key");
+      if (orKey) {
+        setApiKeyConfigured(orKey.configured);
+        setApiKeyMasked(orKey.masked || "");
       }
-      setState(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load settings");
     } finally {
       setIsLoadingSettings(false);
     }
-  }, [router]);
-
-  const loadProviders = useCallback(async () => {
-    setIsLoadingProviders(true);
-    try {
-      const res = await fetch("/api/admin/providers");
-      if (res.ok) setProviders(await res.json());
-    } catch (err) {
-      console.error("Failed to load providers:", err);
-    } finally {
-      setIsLoadingProviders(false);
-    }
   }, []);
 
-  const loadSearchSettings = useCallback(async () => {
+  // Load models
+  const loadModels = useCallback(async () => {
+    setIsLoadingModels(true);
     try {
-      const res = await fetch("/api/profile");
-      if (res.ok) {
-        const data = await res.json();
-        setSearchModel(data.searchModel || "");
-        setSavedSearchModel(data.searchModel || "");
-        setSearchResultsBasic(data.searchResultsBasic ?? 10);
-        setSavedSearchResultsBasic(data.searchResultsBasic ?? 10);
-        setSearchResultsAdvanced(data.searchResultsAdvanced ?? 20);
-        setSavedSearchResultsAdvanced(data.searchResultsAdvanced ?? 20);
-      }
-    } catch (err) {
-      console.error("Failed to load search settings:", err);
+      const { data, error } = await supabase
+        .from("app_models")
+        .select("id, model_id, name, description, is_default, sort_order")
+        .order("sort_order", { ascending: true });
+      if (!error && data) setModels(data);
+    } finally {
+      setIsLoadingModels(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadSettings();
-    loadProviders();
-    loadSearchSettings();
-  }, [loadSettings, loadProviders, loadSearchSettings]);
+    loadModels();
+  }, [loadSettings, loadModels]);
 
-  // ── App settings handlers ──
-
-  const handleSaveSetting = async (key: string, value: string, category: string) => {
-    const res = await fetch("/api/admin/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value, category }),
-    });
-    if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Save failed"); }
-    await loadSettings();
-  };
-
-  const handleDeleteSetting = async (key: string) => {
-    const res = await fetch("/api/admin/settings", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
-    });
-    if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Delete failed"); }
-    await loadSettings();
-  };
-
-  // ── Provider handlers ──
-
-  const resetProviderForm = () => {
-    setProviderForm({ name: "", type: "openai-compatible", base_url: "", api_key_setting: "", supports_tools: true, supports_images: false, supports_streaming: true });
-    setShowProviderForm(false);
-    setEditingProviderId(null);
-  };
-
-  const startEditingProvider = (p: LLMProvider) => {
-    setEditingProviderId(p.id);
-    setProviderForm({
-      name: p.name, type: p.type, base_url: p.base_url || "",
-      api_key_setting: p.api_key_setting || "",
-      supports_tools: p.supports_tools, supports_images: p.supports_images,
-      supports_streaming: p.supports_streaming,
-    });
-    setShowProviderForm(true);
-  };
-
-  const handleSaveProvider = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!providerForm.name || !providerForm.type) return;
-    setIsSavingProvider(true);
+  // Save API key
+  const handleSaveKey = async () => {
+    if (!apiKey.trim()) return;
+    setSavingKey(true);
     try {
-      if (editingProviderId) {
-        const res = await fetch("/api/admin/providers", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editingProviderId, ...providerForm }),
-        });
-        if (res.ok) { resetProviderForm(); await loadProviders(); }
-      } else {
-        const res = await fetch("/api/admin/providers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(providerForm),
-        });
-        if (res.ok) { resetProviderForm(); await loadProviders(); }
-      }
-    } catch (err) { console.error("Failed to save provider:", err); }
-    finally { setIsSavingProvider(false); }
-  };
-
-  const handleDeleteProvider = async (id: string) => {
-    try {
-      const res = await fetch(`/api/admin/providers?id=${id}`, { method: "DELETE" });
-      if (res.ok) { setProviders((prev) => prev.filter((p) => p.id !== id)); }
-    } catch (err) { console.error("Failed to delete provider:", err); }
-  };
-
-  const handleToggleProvider = async (id: string, enabled: boolean) => {
-    try {
-      const res = await fetch("/api/admin/providers", {
-        method: "PATCH",
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, is_enabled: enabled }),
+        body: JSON.stringify({ key: "openrouter_api_key", value: apiKey.trim(), category: "api_keys" }),
       });
       if (res.ok) {
-        setProviders((prev) => prev.map((p) => p.id === id ? { ...p, is_enabled: enabled } : p));
+        setApiKey("");
+        await loadSettings();
       }
-    } catch (err) { console.error("Failed to toggle provider:", err); }
+    } finally {
+      setSavingKey(false);
+    }
   };
 
-  // ── Search handlers ──
-
-  const handleSaveSearch = async () => {
-    setIsSavingSearch(true);
+  // Test API key
+  const handleTestKey = async () => {
+    const keyToTest = apiKey.trim();
+    if (!keyToTest && !apiKeyConfigured) return;
+    setTestingKey(true);
+    setTestResult(null);
     try {
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
+      const res = await fetch("/api/admin/settings/test", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ searchModel: searchModel || null, searchResultsBasic, searchResultsAdvanced }),
+        body: JSON.stringify({ provider: "openrouter", apiKey: keyToTest || undefined }),
       });
-      if (res.ok) {
-        setSavedSearchModel(searchModel);
-        setSavedSearchResultsBasic(searchResultsBasic);
-        setSavedSearchResultsAdvanced(searchResultsAdvanced);
-        setSearchSaved(true);
-        if (searchTimeout.current) clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(() => setSearchSaved(false), 2000);
-      }
-    } catch (err) { console.error("Failed to save search settings:", err); }
-    finally { setIsSavingSearch(false); }
+      setTestResult(await res.json());
+    } catch {
+      setTestResult({ success: false, error: "Request failed" });
+    } finally {
+      setTestingKey(false);
+    }
   };
 
-  const searchModelLabel = searchModel || "None (use raw search)";
+  // Add model
+  const handleAddModel = async () => {
+    if (!newModelId.trim() || !newModelName.trim()) return;
+    setSavingModel(true);
+    try {
+      const { error } = await supabase.from("app_models").insert({
+        model_id: newModelId.trim(),
+        name: newModelName.trim(),
+        description: newModelDesc.trim() || "",
+        provider: "openrouter",
+        type: "chat",
+        is_default: models.length === 0,
+        sort_order: models.length,
+      });
+      if (!error) {
+        setNewModelId("");
+        setNewModelName("");
+        setNewModelDesc("");
+        setShowAddModel(false);
+        await loadModels();
+      }
+    } finally {
+      setSavingModel(false);
+    }
+  };
 
-  // ── Loading / error states ──
+  // Delete model
+  const handleDeleteModel = async (id: string) => {
+    const { error } = await supabase.from("app_models").delete().eq("id", id);
+    if (!error) setModels((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  // Set default model
+  const handleSetDefault = async (id: string) => {
+    // Unset all defaults first
+    await supabase.from("app_models").update({ is_default: false }).neq("id", "");
+    await supabase.from("app_models").update({ is_default: true }).eq("id", id);
+    await loadModels();
+  };
 
   if (isAdmin === undefined || isLoadingSettings) {
     return (
@@ -422,232 +179,325 @@ export default function AdminPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-sm" style={{ color: "var(--accent-negative, #ef4444)" }}>{error}</p>
-      </div>
-    );
-  }
-
-  if (!state) return null;
-
-  // ── Render ──
-
   return (
     <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0" style={{ background: "var(--bg-base)" }}>
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/settings" className="p-2 rounded-lg transition-colors hover:opacity-80" style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)" }}>
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+        {/* Header */}
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5" style={{ color: "var(--accent-primary)" }} />
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Admin Settings</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Admin</h1>
         </div>
-      </div>
 
-      <Link
-        href="/admin/usage"
-        className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", color: "var(--accent-primary)" }}
-      >
-        <Shield className="w-4 h-4" />
-        Usage & Limits — View user usage stats and manage rate/cost limits
-      </Link>
+        {/* Usage & Limits */}
+        <Link
+          href="/admin/usage"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", color: "var(--accent-primary)" }}
+        >
+          <Shield className="w-4 h-4" />
+          Usage & Limits — View user stats and manage rate limits
+        </Link>
 
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-        Configure application settings. Values saved here take priority over environment variables.
-        Removing a setting reverts to the env var fallback.
-      </p>
+        {/* OpenRouter API Key */}
+        <section
+          className="rounded-xl p-5 space-y-4"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              OpenRouter API Key
+            </h2>
+            {apiKeyConfigured ? (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{ background: "var(--accent-positive)", color: "#fff" }}
+              >
+                <Check className="w-2.5 h-2.5" /> Connected
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{ background: "var(--accent-negative)", color: "#fff" }}
+              >
+                <X className="w-2.5 h-2.5" /> Not Set
+              </span>
+            )}
+          </div>
 
-      {/* API Keys */}
-      <section className="rounded-xl p-5 space-y-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-        <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>API Keys</h2>
-        <SettingField label="OpenRouter API Key" settingKey="openrouter_api_key" settings={state.settings} envStatus={state.envStatus} isSecret testProvider="openrouter" placeholder="sk-or-v1-..." onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="api_keys" />
-        <SettingField label="Anthropic API Key" settingKey="anthropic_api_key" settings={state.settings} envStatus={state.envStatus} isSecret testProvider="anthropic" placeholder="sk-ant-..." onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="api_keys" />
-        <SettingField label="Google AI API Key" settingKey="google_api_key" settings={state.settings} envStatus={state.envStatus} isSecret testProvider="google" placeholder="AI..." onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="api_keys" />
-        <SettingField label="OpenAI API Key" settingKey="openai_api_key" settings={state.settings} envStatus={state.envStatus} isSecret testProvider="openai" placeholder="sk-..." onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="api_keys" />
-        <SettingField label="Tavily API Key" settingKey="tavily_api_key" settings={state.settings} envStatus={state.envStatus} isSecret testProvider="tavily" placeholder="tvly-..." onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="api_keys" />
-      </section>
+          {apiKeyConfigured && (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Current: {apiKeyMasked}
+            </p>
+          )}
 
-      {/* LLM Providers */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>LLM Providers</h2>
-        {isLoadingProviders ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--text-muted)" }} /></div>
-        ) : (
-          <div className="space-y-2">
-            {providers.map((p) => (
-              <div key={p.id} className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", opacity: p.is_enabled ? 1 : 0.6 }}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{p.name}</span>
-                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>{p.type}</span>
-                    {!p.is_enabled && (
-                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--accent-negative, #ef4444)", color: "#fff" }}>Disabled</span>
-                    )}
-                  </div>
-                  {p.base_url && <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>{p.base_url}</p>}
-                  {p.api_key_setting && <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Key: {p.api_key_setting}</p>}
-                </div>
-                <div className="flex items-center gap-1 ml-3">
-                  <button onClick={() => handleToggleProvider(p.id, !p.is_enabled)} className="p-2 rounded-lg transition-colors" style={{ color: p.is_enabled ? "var(--accent-positive)" : "var(--text-muted)" }} title={p.is_enabled ? "Disable" : "Enable"}>
-                    <Power className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => startEditingProvider(p)} className="p-2 rounded-lg transition-colors" style={{ color: "var(--text-muted)" }} title="Edit provider">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => handleDeleteProvider(p.id)} className="p-2 rounded-lg transition-colors" style={{ color: "var(--text-muted)" }} title="Remove provider">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-or-v1-..."
+                className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none pr-8"
+                style={{
+                  background: "var(--bg-base)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-default)",
+                }}
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
             <button
-              onClick={() => { resetProviderForm(); setShowProviderForm(true); }}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl w-full transition-colors text-sm"
-              style={{ border: "1px dashed var(--border-default)", color: "var(--text-muted)" }}
-            >
-              <Plus className="w-4 h-4" /> Add provider
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* Search */}
-      <section className="rounded-xl p-5 space-y-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-        <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Search</h2>
-        <div>
-          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Search Model</label>
-          <div ref={searchModelRef} className="relative">
-            <button type="button" onClick={() => setSearchModelOpen(!searchModelOpen)}
-              className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none text-left flex items-center justify-between"
-              style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            >
-              <span>{searchModelLabel}</span>
-              <ChevronDown className="w-4 h-4 shrink-0" style={{ color: "var(--text-muted)", transform: searchModelOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
-            </button>
-            {searchModelOpen && (
-              <div className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-lg" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-                <button type="button" onClick={() => { setSearchModel(""); setSearchModelOpen(false); }}
-                  className="w-full px-4 py-2.5 text-sm text-left transition-colors"
-                  style={{ color: searchModel === "" ? "var(--accent-primary)" : "var(--text-primary)", background: searchModel === "" ? "var(--bg-elevated)" : undefined }}
-                >None (use raw search)</button>
-              </div>
-            )}
-          </div>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            A fast model to optimize queries and summarize results before the main model sees them.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Basic search results</label>
-            <input type="number" min={1} max={50} value={searchResultsBasic}
-              onChange={(e) => setSearchResultsBasic(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-              className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none"
-              style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Advanced search results</label>
-            <input type="number" min={1} max={50} value={searchResultsAdvanced}
-              onChange={(e) => setSearchResultsAdvanced(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-              className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none"
-              style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button onClick={handleSaveSearch} disabled={isSavingSearch || !searchSettingsChanged}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-            style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-          >
-            {isSavingSearch ? <Loader2 className="w-3 h-3 animate-spin" /> : searchSaved ? <><Check className="w-3 h-3" /> Saved</> : "Save"}
-          </button>
-        </div>
-      </section>
-
-      {/* Site Branding */}
-      <section className="rounded-xl p-5 space-y-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-        <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Site Branding</h2>
-        <SettingField label="Site Name" settingKey="site_name" settings={state.settings} envStatus={state.envStatus} placeholder="Daily Agent" onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="branding" />
-        <SettingField label="Site Description" settingKey="site_description" settings={state.settings} envStatus={state.envStatus} placeholder="Your AI productivity agent" onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="branding" />
-      </section>
-
-      {/* Security */}
-      <section className="rounded-xl p-5 space-y-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-        <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Security</h2>
-        <SettingField label="Signup Secret" settingKey="signup_secret" settings={state.settings} envStatus={state.envStatus} isSecret placeholder="Access code for new signups" onSave={handleSaveSetting} onDelete={handleDeleteSetting} category="security" />
-      </section>
-    </div>
-
-    {/* Add/Edit Provider Modal */}
-    {showProviderForm && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-        <div className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-              {editingProviderId ? "Edit" : "Add"} Provider
-            </h3>
-            <button onClick={resetProviderForm} className="p-1" style={{ color: "var(--text-muted)" }}><X className="w-5 h-5" /></button>
-          </div>
-          <form onSubmit={handleSaveProvider} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Name</label>
-              <input type="text" value={providerForm.name} onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })} placeholder="OpenAI Direct" required className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Type</label>
-              <select value={providerForm.type} onChange={(e) => setProviderForm({ ...providerForm, type: e.target.value as LLMProvider["type"] })} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}>
-                <option value="openai-compatible">OpenAI Compatible</option>
-              </select>
-            </div>
-            {providerForm.type === "openai-compatible" && (
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Base URL</label>
-                <input type="text" value={providerForm.base_url} onChange={(e) => setProviderForm({ ...providerForm, base_url: e.target.value })} placeholder="https://api.openai.com/v1" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>API Key Setting</label>
-              <input type="text" value={providerForm.api_key_setting} onChange={(e) => setProviderForm({ ...providerForm, api_key_setting: e.target.value })} placeholder="openai_api_key" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                References a key in the API Keys section above (e.g., anthropic_api_key)
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Capabilities</label>
-              <div className="flex flex-wrap gap-3">
-                <label className="flex items-center gap-1.5 text-sm" style={{ color: "var(--text-primary)" }}>
-                  <input type="checkbox" checked={providerForm.supports_tools} onChange={(e) => setProviderForm({ ...providerForm, supports_tools: e.target.checked })} />
-                  Tools
-                </label>
-                <label className="flex items-center gap-1.5 text-sm" style={{ color: "var(--text-primary)" }}>
-                  <input type="checkbox" checked={providerForm.supports_images} onChange={(e) => setProviderForm({ ...providerForm, supports_images: e.target.checked })} />
-                  Images
-                </label>
-                <label className="flex items-center gap-1.5 text-sm" style={{ color: "var(--text-primary)" }}>
-                  <input type="checkbox" checked={providerForm.supports_streaming} onChange={(e) => setProviderForm({ ...providerForm, supports_streaming: e.target.checked })} />
-                  Streaming
-                </label>
-              </div>
-            </div>
-            <button type="submit" disabled={isSavingProvider || !providerForm.name}
-              className="w-full py-2.5 rounded-lg font-medium transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={handleSaveKey}
+              disabled={savingKey || !apiKey.trim()}
+              className="px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
             >
-              {isSavingProvider ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : editingProviderId ? "Save Changes" : "Add Provider"}
+              {savingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
             </button>
-          </form>
-        </div>
-      </div>
-    )}
+            <button
+              onClick={handleTestKey}
+              disabled={testingKey}
+              className="px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{
+                background: "var(--bg-elevated)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-default)",
+              }}
+            >
+              {testingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Test"}
+            </button>
+          </div>
 
+          {testResult && (
+            <div
+              className="text-xs px-2 py-1.5 rounded"
+              style={{
+                color: testResult.success ? "var(--accent-positive)" : "var(--accent-negative)",
+                background: testResult.success ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+              }}
+            >
+              {testResult.success ? "Connection successful" : testResult.error || "Connection failed"}
+            </div>
+          )}
+
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Get your API key from{" "}
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--accent-primary)" }}
+            >
+              openrouter.ai/keys
+            </a>
+            . This key is used for all AI features (briefings, insights, reviews, journal prompts).
+          </p>
+        </section>
+
+        {/* Models */}
+        <section
+          className="rounded-xl p-5 space-y-4"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                Models
+              </h2>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                OpenRouter models used for AI features. The default model is used for briefings, insights, and suggestions.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddModel(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
+              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+            >
+              <Plus className="w-4 h-4" />
+              Add
+            </button>
+          </div>
+
+          {isLoadingModels ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--text-muted)" }} />
+            </div>
+          ) : models.length === 0 ? (
+            <div
+              className="rounded-lg p-6 text-center"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)" }}
+            >
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                No models configured. Add an OpenRouter model to enable AI features.
+              </p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                Example: <code style={{ color: "var(--accent-primary)" }}>google/gemini-2.5-flash-preview</code>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {models.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between rounded-lg px-4 py-3"
+                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)" }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        {m.name}
+                      </span>
+                      {m.is_default && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                          style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+                        >
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                      {m.model_id}
+                    </p>
+                    {m.description && (
+                      <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        {m.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 ml-3">
+                    {!m.is_default && (
+                      <button
+                        onClick={() => handleSetDefault(m.id)}
+                        className="px-2 py-1 rounded text-xs font-medium transition-colors"
+                        style={{ color: "var(--text-muted)", border: "1px solid var(--border-default)" }}
+                        title="Set as default"
+                      >
+                        Set Default
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteModel(m.id)}
+                      className="p-2 rounded-lg transition-colors hover:opacity-80"
+                      style={{ color: "var(--accent-negative)" }}
+                      title="Remove model"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Add Model Modal */}
+        {showAddModel && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+            <div
+              className="w-full max-w-md rounded-xl p-6"
+              style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Add Model
+                </h3>
+                <button
+                  onClick={() => { setShowAddModel(false); setNewModelId(""); setNewModelName(""); setNewModelDesc(""); }}
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                    Model ID
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelId}
+                    onChange={(e) => setNewModelId(e.target.value)}
+                    placeholder="google/gemini-2.5-flash-preview"
+                    className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none"
+                    style={{
+                      background: "var(--bg-base)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                    autoFocus
+                  />
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                    The OpenRouter model ID (e.g. google/gemini-2.5-flash-preview)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    placeholder="Gemini 2.5 Flash"
+                    className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none"
+                    style={{
+                      background: "var(--bg-base)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                    Description (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelDesc}
+                    onChange={(e) => setNewModelDesc(e.target.value)}
+                    placeholder="Fast, cheap model for AI suggestions"
+                    className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none"
+                    style={{
+                      background: "var(--bg-base)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    onClick={() => { setShowAddModel(false); setNewModelId(""); setNewModelName(""); setNewModelDesc(""); }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium"
+                    style={{ color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddModel}
+                    disabled={savingModel || !newModelId.trim() || !newModelName.trim()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+                  >
+                    {savingModel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Add Model
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

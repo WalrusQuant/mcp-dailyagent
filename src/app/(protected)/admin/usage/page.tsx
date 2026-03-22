@@ -14,43 +14,39 @@ interface UserUsage {
   email: string;
   displayName: string | null;
   isAdmin: boolean;
-  monthlyBudget: number | null;
-  currentMonthCost: number;
-  currentMonthMessages: number;
-  currentMonthTokens: number;
+  plan: string;
+  subscriptionStatus: string | null;
+  joinedAt: string;
   limits: UsageLimit[];
-  status: "ok" | "warning" | "exceeded";
 }
 
 interface LimitWithEmail extends UsageLimit {
   user_email: string | null;
+  plan: "free" | "active" | null;
 }
 
-function StatusBadge({ status }: { status: "ok" | "warning" | "exceeded" }) {
+function PlanBadge({ plan }: { plan: string }) {
   const colors: Record<string, { bg: string; text: string }> = {
-    ok: { bg: "var(--accent-positive)", text: "#fff" },
-    warning: { bg: "#f59e0b", text: "#fff" },
-    exceeded: { bg: "#ef4444", text: "#fff" },
+    free: { bg: "var(--bg-elevated)", text: "var(--text-muted)" },
+    active: { bg: "var(--accent-positive)", text: "#fff" },
+    canceled: { bg: "#f59e0b", text: "#fff" },
+    expired: { bg: "#ef4444", text: "#fff" },
   };
-  const c = colors[status];
+  const c = colors[plan] || colors.free;
   return (
     <span
       className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium uppercase"
       style={{ background: c.bg, color: c.text }}
     >
-      {status}
+      {plan}
     </span>
   );
 }
 
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(4)}`;
-}
-
-function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
-  return String(tokens);
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
 }
 
 export default function AdminUsagePage() {
@@ -65,9 +61,10 @@ export default function AdminUsagePage() {
 
   // Form state
   const [formUserId, setFormUserId] = useState<string>("");
+  const [formPlan, setFormPlan] = useState<"" | "free" | "active">("");
   const [formLimitType, setFormLimitType] = useState<"requests" | "ai_suggestions">("requests");
   const [formLimitValue, setFormLimitValue] = useState("");
-  const [formPeriod, setFormPeriod] = useState<"daily" | "monthly">("monthly");
+  const [formPeriod, setFormPeriod] = useState<"daily" | "monthly">("daily");
   const [formMode, setFormMode] = useState<"hard" | "soft">("hard");
 
   const fetchData = useCallback(async () => {
@@ -103,9 +100,10 @@ export default function AdminUsagePage() {
   const openAddModal = () => {
     setEditingLimit(null);
     setFormUserId("");
+    setFormPlan("");
     setFormLimitType("requests");
     setFormLimitValue("");
-    setFormPeriod("monthly");
+    setFormPeriod("daily");
     setFormMode("hard");
     setShowLimitModal(true);
   };
@@ -113,6 +111,7 @@ export default function AdminUsagePage() {
   const openEditModal = (limit: LimitWithEmail) => {
     setEditingLimit(limit);
     setFormUserId(limit.user_id || "");
+    setFormPlan(limit.plan || "");
     setFormLimitType(limit.limit_type);
     setFormLimitValue(String(limit.limit_value));
     setFormPeriod(limit.period);
@@ -140,6 +139,7 @@ export default function AdminUsagePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: formUserId || null,
+            plan: formPlan || null,
             limit_type: formLimitType,
             limit_value: Number(formLimitValue),
             period: formPeriod,
@@ -171,7 +171,7 @@ export default function AdminUsagePage() {
     fetchData();
   };
 
-  const sortedUsers = [...users].sort((a, b) => b.currentMonthCost - a.currentMonthCost);
+  const sortedUsers = [...users].sort((a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime());
 
   const inputStyle = {
     background: "var(--bg-elevated)",
@@ -209,17 +209,17 @@ export default function AdminUsagePage() {
           </div>
         </div>
 
-        {/* Users Usage Table */}
+        {/* Users Table */}
         <section>
           <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--text-primary)" }}>
-            User Usage (Current Month)
+            Users
           </h2>
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-default)" }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: "var(--bg-elevated)" }}>
-                    {["Email", "Cost", "Messages", "Tokens", "Budget", "Status"].map((h) => (
+                    {["Email", "Plan", "Joined", "Limits"].map((h) => (
                       <th
                         key={h}
                         className="px-4 py-3 text-left font-medium"
@@ -241,26 +241,20 @@ export default function AdminUsagePage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
-                        {formatCost(u.currentMonthCost)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
-                        {u.currentMonthMessages}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
-                        {formatTokens(u.currentMonthTokens)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
-                        {u.monthlyBudget ? formatCost(u.monthlyBudget) : "—"}
-                      </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={u.status} />
+                        <PlanBadge plan={u.plan} />
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {new Date(u.joinedAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {u.limits.length > 0 ? `${u.limits.length} active` : "—"}
                       </td>
                     </tr>
                   ))}
                   {sortedUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                      <td colSpan={4} className="px-4 py-8 text-center" style={{ color: "var(--text-muted)" }}>
                         No users found
                       </td>
                     </tr>
@@ -291,7 +285,7 @@ export default function AdminUsagePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: "var(--bg-elevated)" }}>
-                    {["Scope", "Type", "Value", "Period", "Mode", "Active", "Actions"].map((h) => (
+                    {["Scope", "Plan", "Type", "Value", "Period", "Mode", "Active", "Actions"].map((h) => (
                       <th
                         key={h}
                         className="px-4 py-3 text-left font-medium"
@@ -308,11 +302,14 @@ export default function AdminUsagePage() {
                       <td className="px-4 py-3" style={{ color: "var(--text-primary)" }}>
                         {l.user_email || "Global Default"}
                       </td>
+                      <td className="px-4 py-3" style={{ color: "var(--text-primary)" }}>
+                        {l.plan ? <PlanBadge plan={l.plan} /> : <span style={{ color: "var(--text-muted)" }}>All</span>}
+                      </td>
                       <td className="px-4 py-3 capitalize" style={{ color: "var(--text-primary)" }}>
                         {l.limit_type}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
-                        {formatTokens(Number(l.limit_value))}
+                        {formatNumber(Number(l.limit_value))}
                       </td>
                       <td className="px-4 py-3 capitalize" style={{ color: "var(--text-primary)" }}>
                         {l.period}
@@ -362,10 +359,11 @@ export default function AdminUsagePage() {
                   ))}
                   {limits.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                      <td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--text-muted)" }}>
                         No limits configured
                       </td>
                     </tr>
+
                   )}
                 </tbody>
               </table>
@@ -395,6 +393,19 @@ export default function AdminUsagePage() {
                     {allProfiles.map((p) => (
                       <option key={p.id} value={p.id}>{p.email}</option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1" style={labelStyle}>Plan</label>
+                  <select
+                    value={formPlan}
+                    onChange={(e) => setFormPlan(e.target.value as "" | "free" | "active")}
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={inputStyle}
+                  >
+                    <option value="">All Plans</option>
+                    <option value="free">Free</option>
+                    <option value="active">Active (Paid)</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

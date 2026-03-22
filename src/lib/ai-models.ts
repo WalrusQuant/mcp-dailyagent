@@ -1,34 +1,49 @@
-import { getConfig } from "@/lib/app-config";
+import { createClient } from "@/lib/supabase/server";
 
-type AiTask = "briefing" | "insights" | "assist" | "tools";
+type AiTask = "briefing" | "insights" | "assist" | "tools" | "journal_prompts" | "review";
 
 interface ProfileWithConfig {
   ai_model_config?: Record<string, string> | null;
 }
 
-const DEFAULT_FAST_MODEL = process.env.TITLE_MODEL || "google/gemini-flash-2.0";
-const DEFAULT_CHAT_MODEL = process.env.DEFAULT_CHAT_MODEL || "anthropic/claude-sonnet-4.5";
-
 /**
  * Returns the model ID for a given AI task.
- * Priority: user profile config > DB setting > env var > hardcoded default.
- * Fast tasks (briefing, insights, tools) use TITLE_MODEL.
- * Assist uses the default chat model.
+ * Priority: user profile config > default model from app_models table.
  */
 export async function getModelForTask(
   profile: ProfileWithConfig | null | undefined,
   task: AiTask
 ): Promise<string> {
-  // Check profile config first
+  // Check profile config first (per-user override)
   if (profile?.ai_model_config?.[task]) {
     return profile.ai_model_config[task];
   }
 
-  // Fast tasks use the title model (cheap/fast)
-  if (task === "briefing" || task === "insights" || task === "tools") {
-    return (await getConfig("title_model")) || DEFAULT_FAST_MODEL;
+  // Get default model from app_models table
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("app_models")
+    .select("model_id")
+    .eq("is_default", true)
+    .eq("type", "chat")
+    .single();
+
+  if (data?.model_id) {
+    return data.model_id;
   }
 
-  // Assist uses default chat model
-  return (await getConfig("default_chat_model")) || DEFAULT_CHAT_MODEL;
+  // Fallback: get any model from app_models
+  const { data: anyModel } = await supabase
+    .from("app_models")
+    .select("model_id")
+    .eq("type", "chat")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .single();
+
+  if (anyModel?.model_id) {
+    return anyModel.model_id;
+  }
+
+  throw new Error("No AI model configured. Add a model in Admin Settings.");
 }

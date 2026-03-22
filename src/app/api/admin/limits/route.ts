@@ -49,16 +49,19 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return FORBIDDEN;
 
   const body = await request.json();
-  const { user_id, limit_type, limit_value, period, mode } = body;
+  const { user_id, plan, limit_type, limit_value, period, mode } = body;
 
-  if (!limit_type || !["cost", "tokens"].includes(limit_type)) {
-    return NextResponse.json({ error: "limit_type must be 'cost' or 'tokens'" }, { status: 400 });
+  if (!limit_type || !["requests", "ai_suggestions"].includes(limit_type)) {
+    return NextResponse.json({ error: "limit_type must be 'requests' or 'ai_suggestions'" }, { status: 400 });
   }
   if (!period || !["daily", "monthly"].includes(period)) {
     return NextResponse.json({ error: "period must be 'daily' or 'monthly'" }, { status: 400 });
   }
   if (mode && !["hard", "soft"].includes(mode)) {
     return NextResponse.json({ error: "mode must be 'hard' or 'soft'" }, { status: 400 });
+  }
+  if (plan && !["free", "active"].includes(plan)) {
+    return NextResponse.json({ error: "plan must be 'free' or 'active'" }, { status: 400 });
   }
   if (!limit_value || Number(limit_value) <= 0) {
     return NextResponse.json({ error: "limit_value must be greater than 0" }, { status: 400 });
@@ -68,6 +71,7 @@ export async function POST(request: NextRequest) {
     .from("usage_limits")
     .insert({
       user_id: user_id || null,
+      plan: plan || null,
       limit_type,
       limit_value: Number(limit_value),
       period,

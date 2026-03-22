@@ -107,7 +107,7 @@ async function getAdapter(provider: LLMProvider): Promise<LLMAdapter> {
   }
   if (!apiKey) {
     throw new Error(
-      `API key not configured for provider "${provider.name}". Set ${provider.api_key_setting} in Admin Settings or as an environment variable.`
+      `API key not configured for provider "${provider.name}". Add the OpenRouter API key in Admin Settings.`
     );
   }
 
