@@ -36,8 +36,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
-  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -79,8 +79,8 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
   ];
 
   const toolLinks = [
-    { href: "/projects", icon: FolderKanban, label: "Projects", match: "/projects" },
     { href: "/calendar", icon: CalendarDays, label: "Calendar", match: "/calendar" },
+    { href: "/projects", icon: FolderKanban, label: "Projects", match: "/projects" },
     { href: "/tasks", icon: CheckSquare, label: "Tasks", match: "/tasks" },
     { href: "/habits", icon: Target, label: "Habits", match: "/habits" },
     { href: "/workouts", icon: Dumbbell, label: "Workouts", match: "/workouts" },
@@ -122,10 +122,10 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
           borderRight: "1px solid var(--border-default)",
         }}
       >
-        {/* Header: collapse toggle */}
-        <div className="flex items-center gap-1 px-3 pt-3 pb-1">
+        {/* Header */}
+        <div className={collapsed ? "px-2 pt-3 pb-2" : "px-3 pt-4 pb-3"} style={{ borderBottom: "1px solid var(--border-default)" }}>
           {collapsed ? (
-            <div className="flex flex-col items-center w-full gap-1">
+            <div className="flex flex-col items-center">
               <button
                 onClick={onToggleCollapse}
                 className="p-2 rounded-lg transition-colors"
@@ -136,8 +136,15 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
               </button>
             </div>
           ) : (
-            <>
-              <div className="flex-1" />
+            <div className="flex items-center justify-between">
+              <div className="pl-[calc(16px+0.5rem)]">
+                <h1 className="text-base font-bold tracking-tight leading-none" style={{ color: "var(--text-primary)" }}>
+                  Daily Agent
+                </h1>
+                <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "var(--accent-primary)" }}>
+                  Productivity
+                </p>
+              </div>
               <button
                 onClick={onToggleCollapse}
                 className="p-1.5 rounded-lg transition-colors hidden md:block"
@@ -146,7 +153,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
               >
                 <PanelLeftClose className="w-4 h-4" />
               </button>
-            </>
+            </div>
           )}
         </div>
 
