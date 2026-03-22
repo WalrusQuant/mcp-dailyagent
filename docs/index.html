@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Agent</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --bg-secondary: #1a1b23;
+      --bg-card: #1e1f2a;
+      --text: #e8e4e0;
+      --text-secondary: #9a9590;
+      --accent: #d4a574;
+      --accent-dim: rgba(212, 165, 116, 0.15);
+      --border: #2a2b35;
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section {
+      padding: 80px 0;
+    }
+
+    section + section {
+      border-top: 1px solid var(--border);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 100px 0 80px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 24px;
+      letter-spacing: 0.02em;
+    }
+
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      background: var(--accent);
+      color: var(--bg);
+      text-decoration: none;
+      border-radius: 100px;
+      font-weight: 600;
+      font-size: 16px;
+      transition: opacity 0.2s;
+    }
+
+    .hero-cta:hover { opacity: 0.9; }
+
+    .hero-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      background: transparent;
+      color: var(--text);
+      text-decoration: none;
+      border-radius: 100px;
+      font-weight: 500;
+      font-size: 16px;
+      border: 1px solid var(--border);
+      margin-left: 12px;
+      transition: border-color 0.2s;
+    }
+
+    .hero-secondary:hover { border-color: var(--text-secondary); }
+
+    .hero-image {
+      margin-top: 60px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    .hero-image img {
+      width: 100%;
+      display: block;
+    }
+
+    /* Section headers */
+    .section-label {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-desc {
+      color: var(--text-secondary);
+      font-size: 17px;
+      max-width: 600px;
+      line-height: 1.7;
+      margin-bottom: 48px;
+    }
+
+    /* Feature grid */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--accent-dim);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-size: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* Screenshot showcase */
+    .showcase {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 48px;
+    }
+
+    .showcase-item {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .showcase-item img {
+      width: 100%;
+      display: block;
+    }
+
+    .showcase-item-label {
+      padding: 16px 20px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .showcase-item-desc {
+      padding: 0 20px 16px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .showcase-item.full {
+      grid-column: 1 / -1;
+    }
+
+    /* Context story */
+    .story-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      margin-top: 40px;
+    }
+
+    .story-block h3 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .chat-bubble {
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .chat-bubble.user {
+      background: var(--accent-dim);
+      color: var(--text);
+      margin-left: 60px;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-bubble.assistant {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      margin-right: 60px;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-bubble .label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .chat-bubble.assistant .label {
+      color: var(--text-secondary);
+    }
+
+    /* Tech stack */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    .tech-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+
+    .tech-item .tech-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .tech-item .tech-value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    /* Setup section */
+    .setup-steps {
+      counter-reset: step;
+      margin-top: 40px;
+    }
+
+    .setup-step {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 32px;
+      align-items: flex-start;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+      margin-top: 2px;
+    }
+
+    .setup-step h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .setup-step p {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .setup-step code {
+      background: var(--bg-secondary);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      color: var(--accent);
+    }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      section { padding: 60px 0; }
+      .hero { padding: 60px 0 40px; }
+      .showcase { grid-template-columns: 1fr; }
+      .chat-bubble.user { margin-left: 20px; }
+      .chat-bubble.assistant { margin-right: 20px; }
+      .story-block { padding: 24px; }
+      .hero-secondary { margin-left: 0; margin-top: 12px; }
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Daily Agent — Your AI Productivity Agent</div>
+      <h1>Your AI knows your <span>tasks, habits, and goals</span></h1>
+      <p>Not another chatbot wrapper. A personal AI assistant with built-in productivity tools, agent capabilities, and multi-provider AI support. Deploy it yourself, use your own API keys across Anthropic, Google, OpenAI, or OpenRouter, and own your data.</p>
+      <div>
+        <a href="#setup" class="hero-cta">Get Started</a>
+        <a href="#features" class="hero-secondary">See Features</a>
+      </div>
+      <div class="hero-image">
+        <img src="screenshots/dashboard.png" alt="Dashboard with morning briefing, insight cards, and tool widgets">
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Features -->
+  <section id="features">
+    <div class="container">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything in one app</h2>
+      <p class="section-desc">Chat, tasks, habits, journal, workouts, focus timer, and weekly reviews. The AI has context on all of it.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#9993;</div>
+          <h3>Multi-Model Chat</h3>
+          <p>Native support for Anthropic, Google, and OpenAI-compatible providers, plus OpenRouter for any other model. Switch mid-conversation. Agent mode and chat mode toggle. Per-message cost tracking.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9745;</div>
+          <h3>Task Manager</h3>
+          <p>Franklin Covey A/B/C priorities. Drag reorder within groups. Daily rollover. Recurrence. Project linking.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9883;</div>
+          <h3>Habit Tracker</h3>
+          <p>Weekly grid view. Streak tracking with sparklines. Completion rate badges. 30-day heatmap per habit.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9998;</div>
+          <h3>Journal</h3>
+          <p>Auto-saving editor. Mood tracking. AI writing prompts. Full-text search across all entries.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9955;</div>
+          <h3>Workout Logger</h3>
+          <p>Reusable templates. Active workout tracking with sets. Volume stats, personal records, weekly averages.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127919;</div>
+          <h3>Goals</h3>
+          <p>Set goals and link them to tasks and habits. Track progress over time. The AI uses your goals to prioritize briefings and insights.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9201;</div>
+          <h3>Focus Timer</h3>
+          <p>Pomodoro with circular progress. Link sessions to tasks. 7-day chart. Top tasks by focus time.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128270;</div>
+          <h3>Web Search</h3>
+          <p>Tavily-powered search with AI summarization. Toggle per-message. Sources inline with citation linking.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128197;</div>
+          <h3>Calendar View</h3>
+          <p>Monthly calendar with activity dots per day. Click any day for a detail panel showing tasks, habits, journal, workouts, and focus sessions.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128218;</div>
+          <h3>Agent Mode</h3>
+          <p>13 built-in tools the AI can invoke directly from chat. Create tasks, log habits, start focus sessions, search past conversations, and more. Mutation tools require your approval before executing.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128202;</div>
+          <h3>Usage & Budgets</h3>
+          <p>Spending charts by day, week, month. Per-model cost breakdown. Monthly budget with threshold alerts.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127912;</div>
+          <h3>Image Generation</h3>
+          <p>Generate images through any configured image model. Gallery view with full history.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128274;</div>
+          <h3>Admin Panel</h3>
+          <p>Manage API keys and provider configuration from the UI. Set per-user usage limits, encrypted key storage, and model definitions without touching env vars after the initial deploy.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshots -->
+  <section>
+    <div class="container">
+      <div class="section-label">Screenshots</div>
+      <h2 class="section-title">See it in action</h2>
+      <p class="section-desc">Dark and light themes. Responsive design. Installable as a PWA on any device.</p>
+
+      <div class="showcase">
+        <div class="showcase-item full">
+          <img src="screenshots/chat.png" alt="Chat interface with streaming and web search">
+          <div class="showcase-item-label">Multi-Model Chat</div>
+          <div class="showcase-item-desc">Streaming responses, model selector, web search with inline sources, per-message cost tracking.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/tasks.png" alt="Task manager with priorities">
+          <div class="showcase-item-label">Task Manager</div>
+          <div class="showcase-item-desc">A/B/C priorities. Drag to reorder. Daily rollover for incomplete tasks.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/habits.png" alt="Habit tracker weekly view">
+          <div class="showcase-item-label">Habit Tracker</div>
+          <div class="showcase-item-desc">Weekly grid, streaks, sparkline charts, and expandable heatmaps.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/workouts.png" alt="Workout logger">
+          <div class="showcase-item-label">Workout Logger</div>
+          <div class="showcase-item-desc">Templates, active session tracking, volume stats, and PRs.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/journal.png" alt="Journal editor">
+          <div class="showcase-item-label">Journal</div>
+          <div class="showcase-item-desc">Auto-save editor with mood tracking and full-text search.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/focus.png" alt="Focus timer">
+          <div class="showcase-item-label">Focus Timer</div>
+          <div class="showcase-item-desc">Pomodoro timer linked to tasks. 7-day activity chart.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/usage.png" alt="Usage dashboard">
+          <div class="showcase-item-label">Usage Dashboard</div>
+          <div class="showcase-item-desc">Spending trends, per-model breakdown, budget alerts.</div>
+        </div>
+        <div class="showcase-item">
+          <img src="screenshots/settings.png" alt="Settings page">
+          <div class="showcase-item-label">Settings</div>
+          <div class="showcase-item-desc">Theme, system prompt, AI config, model management (admin).</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Context-aware AI -->
+  <section>
+    <div class="container">
+      <div class="section-label">Context-Aware AI</div>
+      <h2 class="section-title">It knows what you're working on</h2>
+      <p class="section-desc">Switch to Agent mode and the AI fetches your productivity data on demand using tools &mdash; tasks, habits, streaks, focus sessions, past conversations. It doesn't just answer questions; it takes action and understands your priorities.</p>
+
+      <div class="story-block">
+        <h3>Real conversation from the app</h3>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px;">The user asked about selling GitHub repo access. The AI searched the web, then connected the results to their existing task list &mdash; without being asked.</p>
+
+        <div class="chat-bubble user">
+          <div class="label">You</div>
+          Are there any services out there that have prebuilt GitHub selling ability &mdash; like you can sell access to a GitHub repo and manage users?
+        </div>
+
+        <div class="chat-bubble assistant">
+          <div class="label">AI</div>
+          Yeah, there are a few solid options. <strong>Polar</strong> is probably the most polished &mdash; it has a dedicated GitHub App that handles payments, granting collaborator access, revoking it when subscriptions lapse. Supports one-time purchases and subscriptions.
+        </div>
+
+        <div class="chat-bubble user">
+          <div class="label">You</div>
+          This Polar looks real interesting.
+        </div>
+
+        <div class="chat-bubble assistant">
+          <div class="label">AI</div>
+          Given you're already building the Reddit bot and thinking about monetization, Polar is probably worth a look first since it's the most feature-complete for subscriptions. <strong>Want me to add a task to research one of these?</strong>
+          <br><br>
+          <span style="color: var(--accent); font-size: 13px;">The AI pulled "finish n8n Reddit bot" from the task list at A1 priority &mdash; the user never mentioned it in this conversation.</span>
+        </div>
+
+        <div class="chat-bubble assistant">
+          <div class="label">AI</div>
+          The pipeline basically writes itself:
+          <br>&bull; Finish the n8n Reddit bot
+          <br>&bull; Do all the compliance/subreddit research (you've got like 4 tasks around that already)
+          <br>&bull; Wrap it up, throw it on Polar, sell access to the repo
+          <br><br>
+          You're already doing the hard work of making it legitimate &mdash; that's actually a selling point. A Reddit bot that was built carefully with rules in mind is way more valuable than some janky scraper.
+        </div>
+      </div>
+
+      <div class="feature-grid" style="margin-top: 32px;">
+        <div class="feature-card">
+          <h3>Tool Calling</h3>
+          <p>Create tasks, log habits, start focus sessions, and more directly from chat. 7 mutation tools with approval UI, 6 read-only tools that auto-execute. 13 tools total.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Daily Briefing</h3>
+          <p>AI-generated daily summary on the dashboard. "Plan my day" mode. Cached per day, regenerate on demand.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Proactive Insights</h3>
+          <p>Cross-tool pattern analysis. Dismissable insight cards: encouragement, warnings, and suggestions based on your data.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech stack -->
+  <section>
+    <div class="container">
+      <div class="section-label">Tech Stack</div>
+      <h2 class="section-title">Built with tools you already know</h2>
+      <p class="section-desc">Modern stack, no lock-in. Deploy on Vercel, self-host with Docker, or run it locally. Use your own API keys for everything.</p>
+
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-label">Framework</div>
+          <div class="tech-value">Next.js 16 (App Router)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">UI</div>
+          <div class="tech-value">React 19 + Tailwind CSS 4</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Language</div>
+          <div class="tech-value">TypeScript 5 (strict)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Database + Auth</div>
+          <div class="tech-value">Supabase (PostgreSQL + RLS)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">AI Models</div>
+          <div class="tech-value">Multi-Provider (Anthropic, Google, OpenAI, OpenRouter)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Web Search</div>
+          <div class="tech-value">Tavily API</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Icons</div>
+          <div class="tech-value">Lucide React</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">PWA</div>
+          <div class="tech-value">Service Worker + Manifest</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Testing</div>
+          <div class="tech-value">Vitest + React Testing Library</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Setup -->
+  <section id="setup">
+    <div class="container">
+      <div class="section-label">Quick Start</div>
+      <h2 class="section-title">Up and running in 5 minutes</h2>
+      <p class="section-desc">Clone the repo, add your API keys, run one SQL file, and start the dev server.</p>
+
+      <div class="setup-steps">
+        <div class="setup-step">
+          <div class="step-number">1</div>
+          <div>
+            <h3>Clone and install</h3>
+            <p><code>git clone</code> the repo and run <code>npm install</code></p>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-number">2</div>
+          <div>
+            <h3>Configure environment</h3>
+            <p>Copy <code>.env.example</code> to <code>.env.local</code> and fill in your Supabase credentials and signup secret. Most configuration — API keys, providers, model definitions — is managed from the admin panel after first deploy.</p>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-number">3</div>
+          <div>
+            <h3>Set up the database</h3>
+            <p>Run <code>supabase/migrations/schema.sql</code> in the Supabase SQL Editor. One file creates all tables, indexes, and RLS policies.</p>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-number">4</div>
+          <div>
+            <h3>Start building</h3>
+            <p>Run <code>npm run dev</code> and sign up with your secret code. Grant yourself admin in Supabase to manage models.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Customization -->
+  <section>
+    <div class="container">
+      <div class="section-label">Customization</div>
+      <h2 class="section-title">Make it yours</h2>
+      <p class="section-desc">White-labeled and ready to rebrand. Swap the name, colors, icons, and models without touching the code.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Branding</h3>
+          <p>Set <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent);">NEXT_PUBLIC_SITE_NAME</code> to change the app name everywhere. Replace the icons in <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent);">/public/</code> to rebrand.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Models</h3>
+          <p>Add models from any supported provider — Anthropic, Google, OpenAI, or OpenRouter — from the admin panel. Set display name, provider, pricing, and sort order. No hardcoded lists. Configure agent mode or chat mode as the default per deployment.</p>
+        </div>
+        <div class="feature-card">
+          <h3>System Prompts</h3>
+          <p>Four levels of customization: default, profile, conversation, and project. Each level overrides the one above it.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Themes</h3>
+          <p>Light, dark, and system themes built in. All colors defined via CSS variables. Swap the accent color in one file.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Documentation -->
+  <section>
+    <div class="container">
+      <div class="section-label">Documentation</div>
+      <h2 class="section-title">Everything you need</h2>
+      <p class="section-desc">Detailed guides for deployment, administration, daily use, and customization.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#128736;</div>
+          <h3><a href="SETUP.md" style="color: var(--accent); text-decoration: none;">Setup Guide</a></h3>
+          <p>Step-by-step deployment: Supabase project creation, database migration, Vercel deployment, first-run configuration, and model recommendations.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9881;</div>
+          <h3><a href="ADMIN.md" style="color: var(--accent); text-decoration: none;">Admin Guide</a></h3>
+          <p>Provider management, model configuration, usage limits, rate limiting, user management, and app configuration.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128100;</div>
+          <h3><a href="USER.md" style="color: var(--accent); text-decoration: none;">User Guide</a></h3>
+          <p>Chat modes, productivity tools, AI features, web search, projects, settings, and PWA installation.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127912;</div>
+          <h3><a href="CUSTOMIZATION.md" style="color: var(--accent); text-decoration: none;">Customization Guide</a></h3>
+          <p>Branding, theming, system prompts, adding custom tools, database schema patterns, and API route patterns.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>Daily Agent &mdash; Built with Next.js, Supabase, and multi-provider AI</p>
+    </div>
+  </footer>
+
+</body>
+</html>
