@@ -127,9 +127,11 @@ The LLM router stays but gets simplified. One provider path: OpenRouter (OpenAI-
 
 ---
 
-## Phase 2: Database Schema (Fresh Design)
+## Phase 2: Database Schema (Fresh Design) ✅
 
 Design the database from scratch. This is a new product — no migrations from the old schema.
+
+**Completed 2026-03-22** — Fresh schema at `supabase/schema.sql`. Added api_keys, billing tables, source tracking on AI content. Renamed projects → spaces. Verified in Supabase.
 
 ### 2.1 — Core Tables
 
