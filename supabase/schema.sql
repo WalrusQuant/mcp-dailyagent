@@ -1,6 +1,6 @@
 -- =============================================================================
--- Full Database Schema
--- Run this entire file in Supabase SQL Editor to set up the database.
+-- Daily Agent — Fresh Database Schema
+-- Run this entire file in Supabase SQL Editor to set up a new instance.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -10,17 +10,17 @@ CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   display_name TEXT,
+  avatar_url TEXT,
+  timezone TEXT DEFAULT 'UTC',
+  plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'active', 'canceled', 'expired')),
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  subscription_status TEXT CHECK (subscription_status IN ('active', 'canceled', 'past_due', NULL)),
   is_admin BOOLEAN NOT NULL DEFAULT false,
-  system_prompt TEXT DEFAULT NULL,
-  search_model TEXT DEFAULT NULL,
-  search_results_basic INTEGER DEFAULT 10,
-  search_results_advanced INTEGER DEFAULT 20,
-  context_injection BOOLEAN NOT NULL DEFAULT true,
   ai_model_config JSONB DEFAULT NULL,
   tool_calling_enabled BOOLEAN NOT NULL DEFAULT true,
   briefing_enabled BOOLEAN NOT NULL DEFAULT true,
-  monthly_budget NUMERIC DEFAULT NULL,
-  memory_notes TEXT,
+  onboarded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -50,85 +50,74 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
+-- Index for Stripe webhook lookups
+CREATE INDEX idx_profiles_stripe_customer ON public.profiles(stripe_customer_id);
+
 -- ---------------------------------------------------------------------------
--- 2. Projects
+-- 2. API Keys (for MCP connections)
 -- ---------------------------------------------------------------------------
-CREATE TABLE public.projects (
+CREATE TABLE public.api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  scopes TEXT[] DEFAULT '{}',
+  last_used_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_api_keys_hash ON public.api_keys(key_hash);
+CREATE INDEX idx_api_keys_user ON public.api_keys(user_id);
+
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own api keys"
+  ON public.api_keys FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own api keys"
+  ON public.api_keys FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own api keys"
+  ON public.api_keys FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own api keys"
+  ON public.api_keys FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- 3. Spaces (groups tasks, goals, habits by area of life)
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.spaces (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
   progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
-  system_prompt TEXT,
   deadline DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_projects_user_id ON public.projects(user_id);
-CREATE INDEX idx_projects_status ON public.projects(user_id, status);
+CREATE INDEX idx_spaces_user ON public.spaces(user_id);
+CREATE INDEX idx_spaces_user_status ON public.spaces(user_id, status);
 
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.spaces ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own projects" ON public.projects
+CREATE POLICY "Users can view own spaces" ON public.spaces
   FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create own projects" ON public.projects
+CREATE POLICY "Users can create own spaces" ON public.spaces
   FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own projects" ON public.projects
+CREATE POLICY "Users can update own spaces" ON public.spaces
   FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own projects" ON public.projects
+CREATE POLICY "Users can delete own spaces" ON public.spaces
   FOR DELETE USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 3. Project Files
--- ---------------------------------------------------------------------------
-CREATE TABLE public.project_files (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  file_name TEXT NOT NULL,
-  storage_path TEXT NOT NULL,
-  file_type TEXT NOT NULL,
-  size_bytes BIGINT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_project_files_project_id ON public.project_files(project_id);
-
-ALTER TABLE public.project_files ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own project files" ON public.project_files
-  FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can upload own project files" ON public.project_files
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own project files" ON public.project_files
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Storage bucket for project files
-INSERT INTO storage.buckets (id, name, public) VALUES ('project-files', 'project-files', false)
-ON CONFLICT (id) DO NOTHING;
-
-CREATE POLICY "Users can upload project files" ON storage.objects
-  FOR INSERT WITH CHECK (
-    bucket_id = 'project-files' AND
-    auth.role() = 'authenticated' AND
-    (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-CREATE POLICY "Users can view own project files storage" ON storage.objects
-  FOR SELECT USING (
-    bucket_id = 'project-files' AND
-    auth.role() = 'authenticated' AND
-    (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-CREATE POLICY "Users can delete own project files storage" ON storage.objects
-  FOR DELETE USING (
-    bucket_id = 'project-files' AND
-    auth.role() = 'authenticated' AND
-    (storage.foldername(name))[1] = auth.uid()::text
-  );
 
 -- ---------------------------------------------------------------------------
 -- 4. Tags
@@ -154,202 +143,7 @@ CREATE POLICY "Users can delete own tags" ON public.tags
   FOR DELETE USING (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- 5. Conversations
--- ---------------------------------------------------------------------------
-CREATE TABLE public.conversations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  title TEXT NOT NULL DEFAULT 'New Chat',
-  model TEXT NOT NULL DEFAULT 'anthropic/claude-sonnet-4.5',
-  project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
-  system_prompt TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_conversations_user_id ON public.conversations(user_id);
-CREATE INDEX idx_conversations_project_id ON public.conversations(project_id);
-
-ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own conversations"
-  ON public.conversations FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can create own conversations"
-  ON public.conversations FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own conversations"
-  ON public.conversations FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own conversations"
-  ON public.conversations FOR DELETE
-  USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 6. Conversation Tags
--- ---------------------------------------------------------------------------
-CREATE TABLE public.conversation_tags (
-  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
-  tag_id UUID NOT NULL REFERENCES public.tags(id) ON DELETE CASCADE,
-  PRIMARY KEY (conversation_id, tag_id)
-);
-
-CREATE INDEX idx_conversation_tags_tag_id ON public.conversation_tags(tag_id);
-
-ALTER TABLE public.conversation_tags ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own conversation tags" ON public.conversation_tags
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.conversations WHERE id = conversation_id AND user_id = auth.uid())
-  );
-CREATE POLICY "Users can add tags to own conversations" ON public.conversation_tags
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.conversations WHERE id = conversation_id AND user_id = auth.uid())
-  );
-CREATE POLICY "Users can remove tags from own conversations" ON public.conversation_tags
-  FOR DELETE USING (
-    EXISTS (SELECT 1 FROM public.conversations WHERE id = conversation_id AND user_id = auth.uid())
-  );
-
--- ---------------------------------------------------------------------------
--- 7. Messages
--- ---------------------------------------------------------------------------
-CREATE TABLE public.messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-  content TEXT NOT NULL,
-  edited_at TIMESTAMPTZ,
-  original_content TEXT,
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  total_cost NUMERIC,
-  sources JSONB DEFAULT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_messages_conversation_id ON public.messages(conversation_id);
-CREATE INDEX idx_messages_search ON public.messages USING gin(to_tsvector('english', content));
-CREATE INDEX idx_messages_created_at ON public.messages(created_at);
-
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view messages in own conversations"
-  ON public.messages FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.conversations
-      WHERE conversations.id = messages.conversation_id
-      AND conversations.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can create messages in own conversations"
-  ON public.messages FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.conversations
-      WHERE conversations.id = messages.conversation_id
-      AND conversations.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can delete messages in own conversations"
-  ON public.messages FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.conversations
-      WHERE conversations.id = messages.conversation_id
-      AND conversations.user_id = auth.uid()
-    )
-  );
-
--- ---------------------------------------------------------------------------
--- 8. Generated Images
--- ---------------------------------------------------------------------------
-CREATE TABLE public.generated_images (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  prompt TEXT NOT NULL,
-  image_url TEXT NOT NULL,
-  model TEXT NOT NULL DEFAULT 'google/gemini-2.5-flash-image',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_generated_images_user_id ON public.generated_images(user_id);
-
-ALTER TABLE public.generated_images ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own images"
-  ON public.generated_images FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can create own images"
-  ON public.generated_images FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own images"
-  ON public.generated_images FOR DELETE
-  USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- Helper: Admin check function
--- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-  SELECT COALESCE(
-    (SELECT is_admin FROM public.profiles WHERE id = auth.uid()),
-    false
-  );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
--- ---------------------------------------------------------------------------
--- 9. App Models
--- ---------------------------------------------------------------------------
-CREATE TABLE public.app_models (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  provider TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  type TEXT NOT NULL CHECK (type IN ('chat', 'image')),
-  context_length INTEGER,
-  pricing_prompt NUMERIC,
-  pricing_completion NUMERIC,
-  is_default BOOLEAN NOT NULL DEFAULT false,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_app_models_type ON public.app_models(type);
-CREATE UNIQUE INDEX idx_app_models_unique_model ON public.app_models(model_id, type);
-
-ALTER TABLE public.app_models ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Anyone can read models"
-  ON public.app_models FOR SELECT
-  USING (true);
-
-CREATE POLICY "Admins can insert models"
-  ON public.app_models FOR INSERT
-  TO authenticated
-  WITH CHECK (public.is_admin());
-
-CREATE POLICY "Admins can update models"
-  ON public.app_models FOR UPDATE
-  TO authenticated
-  USING (public.is_admin());
-
-CREATE POLICY "Admins can delete models"
-  ON public.app_models FOR DELETE
-  TO authenticated
-  USING (public.is_admin());
-
--- ---------------------------------------------------------------------------
--- 10. Tasks
+-- 5. Tasks
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -362,7 +156,8 @@ CREATE TABLE public.tasks (
   done_at TIMESTAMPTZ,
   task_date DATE NOT NULL DEFAULT CURRENT_DATE,
   rolled_from UUID REFERENCES public.tasks(id) ON DELETE SET NULL,
-  project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+  space_id UUID REFERENCES public.spaces(id) ON DELETE SET NULL,
+  goal_id UUID,  -- FK added after goals table
   recurrence JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -370,7 +165,8 @@ CREATE TABLE public.tasks (
 
 CREATE INDEX idx_tasks_user_date ON public.tasks(user_id, task_date);
 CREATE INDEX idx_tasks_user_done ON public.tasks(user_id, done);
-CREATE INDEX idx_tasks_project ON public.tasks(project_id);
+CREATE INDEX idx_tasks_space ON public.tasks(space_id);
+CREATE INDEX idx_tasks_goal ON public.tasks(goal_id);
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
@@ -395,7 +191,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ---------------------------------------------------------------------------
--- 11. Habits
+-- 6. Habits
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.habits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -407,6 +203,7 @@ CREATE TABLE public.habits (
   color TEXT NOT NULL DEFAULT '#d4a574',
   archived BOOLEAN NOT NULL DEFAULT false,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  goal_id UUID,  -- FK added after goals table
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -420,6 +217,7 @@ CREATE TABLE public.habit_logs (
 );
 
 CREATE INDEX idx_habits_user ON public.habits(user_id);
+CREATE INDEX idx_habits_goal ON public.habits(goal_id);
 CREATE INDEX idx_habit_logs_habit_date ON public.habit_logs(habit_id, log_date);
 CREATE INDEX idx_habit_logs_user_date ON public.habit_logs(user_id, log_date);
 
@@ -444,7 +242,7 @@ CREATE POLICY "Users can delete own habit logs" ON public.habit_logs
   FOR DELETE USING (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- 12. Journal
+-- 7. Journal
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.journal_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -471,7 +269,7 @@ CREATE POLICY "Users can delete own journal entries" ON public.journal_entries
   FOR DELETE USING (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- 13. Workouts
+-- 8. Workouts
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.workout_templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -576,7 +374,7 @@ CREATE POLICY "Users can delete own log exercises" ON public.workout_log_exercis
   );
 
 -- ---------------------------------------------------------------------------
--- 14. Focus Sessions
+-- 9. Focus Sessions
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.focus_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -606,66 +404,7 @@ CREATE POLICY "Users can delete own focus sessions" ON public.focus_sessions
   FOR DELETE USING (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- 15. Weekly Reviews
--- ---------------------------------------------------------------------------
-CREATE TABLE public.weekly_reviews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  week_start DATE NOT NULL,
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id, week_start)
-);
-
-CREATE INDEX idx_weekly_reviews_user ON public.weekly_reviews(user_id);
-
-ALTER TABLE public.weekly_reviews ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own weekly reviews" ON public.weekly_reviews
-  FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create own weekly reviews" ON public.weekly_reviews
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own weekly reviews" ON public.weekly_reviews
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own weekly reviews" ON public.weekly_reviews
-  FOR DELETE USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 16. Daily Briefings
--- ---------------------------------------------------------------------------
-CREATE TABLE public.daily_briefings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  briefing_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, briefing_date)
-);
-
-ALTER TABLE public.daily_briefings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users manage own briefings" ON public.daily_briefings
-  FOR ALL USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 17. Insight Cache
--- ---------------------------------------------------------------------------
-CREATE TABLE public.insight_cache (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  cache_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  insights JSONB NOT NULL DEFAULT '[]',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, cache_date)
-);
-
-ALTER TABLE public.insight_cache ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users manage own insights" ON public.insight_cache
-  FOR ALL USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 18. Goals
+-- 10. Goals
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.goals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -696,9 +435,7 @@ CREATE POLICY "Users can update own goals" ON public.goals
 CREATE POLICY "Users can delete own goals" ON public.goals
   FOR DELETE USING (auth.uid() = user_id);
 
--- ---------------------------------------------------------------------------
--- 19. Goal Progress Logs
--- ---------------------------------------------------------------------------
+-- Goal Progress Logs
 CREATE TABLE public.goal_progress_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   goal_id UUID NOT NULL REFERENCES public.goals(id) ON DELETE CASCADE,
@@ -721,20 +458,89 @@ CREATE POLICY "Users can update own goal progress logs" ON public.goal_progress_
 CREATE POLICY "Users can delete own goal progress logs" ON public.goal_progress_logs
   FOR DELETE USING (auth.uid() = user_id);
 
+-- Add goal FKs to tasks and habits (now that goals table exists)
+ALTER TABLE public.tasks ADD CONSTRAINT fk_tasks_goal FOREIGN KEY (goal_id) REFERENCES public.goals(id) ON DELETE SET NULL;
+ALTER TABLE public.habits ADD CONSTRAINT fk_habits_goal FOREIGN KEY (goal_id) REFERENCES public.goals(id) ON DELETE SET NULL;
+
 -- ---------------------------------------------------------------------------
--- 20. Add goal_id to tasks and habits
+-- 11. Weekly Reviews
 -- ---------------------------------------------------------------------------
-ALTER TABLE public.tasks ADD COLUMN goal_id UUID REFERENCES public.goals(id) ON DELETE SET NULL;
-CREATE INDEX idx_tasks_goal ON public.tasks(goal_id);
+CREATE TABLE public.weekly_reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  content TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'dashboard' CHECK (source IN ('dashboard', 'mcp')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, week_start)
+);
 
-ALTER TABLE public.habits ADD COLUMN goal_id UUID REFERENCES public.goals(id) ON DELETE SET NULL;
-CREATE INDEX idx_habits_goal ON public.habits(goal_id);
+CREATE INDEX idx_weekly_reviews_user ON public.weekly_reviews(user_id);
 
--- ===========================================================================
--- 018: App Settings — database-driven configuration
--- ===========================================================================
+ALTER TABLE public.weekly_reviews ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE IF NOT EXISTS public.app_settings (
+CREATE POLICY "Users can view own weekly reviews" ON public.weekly_reviews
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create own weekly reviews" ON public.weekly_reviews
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own weekly reviews" ON public.weekly_reviews
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own weekly reviews" ON public.weekly_reviews
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- 12. Daily Briefings
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.daily_briefings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  briefing_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  content TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'dashboard' CHECK (source IN ('dashboard', 'mcp')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, briefing_date)
+);
+
+ALTER TABLE public.daily_briefings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage own briefings" ON public.daily_briefings
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- 13. Insight Cache
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.insight_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  cache_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  insights JSONB NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL DEFAULT 'dashboard' CHECK (source IN ('dashboard', 'mcp')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, cache_date)
+);
+
+ALTER TABLE public.insight_cache ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage own insights" ON public.insight_cache
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- 14. Admin & Config
+-- ---------------------------------------------------------------------------
+
+-- Helper: Admin check function
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT COALESCE(
+    (SELECT is_admin FROM public.profiles WHERE id = auth.uid()),
+    false
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- App Settings (admin-managed key-value store)
+CREATE TABLE public.app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   is_encrypted BOOLEAN NOT NULL DEFAULT false,
@@ -756,19 +562,15 @@ RETURNS TABLE(value TEXT, is_encrypted BOOLEAN) AS $$
   SELECT value, is_encrypted FROM public.app_settings WHERE key = setting_key;
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
--- ===========================================================================
--- 019: LLM Providers — multi-provider support
--- ===========================================================================
-
-CREATE TABLE IF NOT EXISTS public.llm_providers (
+-- LLM Providers (admin-managed, OpenRouter only for now)
+CREATE TABLE public.llm_providers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('openai-compatible', 'anthropic', 'google')),
+  type TEXT NOT NULL CHECK (type IN ('openai-compatible')),
   base_url TEXT,
   api_key_setting TEXT,
   is_enabled BOOLEAN NOT NULL DEFAULT true,
   supports_tools BOOLEAN NOT NULL DEFAULT true,
-  supports_images BOOLEAN NOT NULL DEFAULT false,
   supports_streaming BOOLEAN NOT NULL DEFAULT true,
   extra_headers JSONB DEFAULT '{}',
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -778,48 +580,30 @@ CREATE TABLE IF NOT EXISTS public.llm_providers (
 ALTER TABLE public.llm_providers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can read providers"
-  ON public.llm_providers FOR SELECT
-  TO authenticated
-  USING (true);
+  ON public.llm_providers FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Admins can manage providers"
-  ON public.llm_providers FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)
-  )
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)
-  );
+  ON public.llm_providers FOR ALL TO authenticated
+  USING (public.is_admin()) WITH CHECK (public.is_admin());
 
-CREATE INDEX IF NOT EXISTS idx_llm_providers_is_enabled ON public.llm_providers(is_enabled);
-
--- Add provider_id and api_model_id to app_models
-ALTER TABLE public.app_models ADD COLUMN IF NOT EXISTS provider_id UUID REFERENCES public.llm_providers(id) ON DELETE SET NULL;
-ALTER TABLE public.app_models ADD COLUMN IF NOT EXISTS api_model_id TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_app_models_provider_id ON public.app_models(provider_id);
+CREATE INDEX idx_llm_providers_enabled ON public.llm_providers(is_enabled);
 
 -- Seed default OpenRouter provider
-INSERT INTO public.llm_providers (id, name, type, base_url, api_key_setting, is_enabled, supports_tools, supports_images, supports_streaming, extra_headers, sort_order)
+INSERT INTO public.llm_providers (id, name, type, base_url, api_key_setting, is_enabled, supports_tools, supports_streaming, extra_headers, sort_order)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'OpenRouter',
   'openai-compatible',
   'https://openrouter.ai/api/v1',
   'openrouter_api_key',
-  true, true, true, true, '{}', 0
+  true, true, true, '{}', 0
 ) ON CONFLICT (id) DO NOTHING;
 
--- Backfill existing models to point at OpenRouter
-UPDATE public.app_models SET provider_id = '00000000-0000-0000-0000-000000000001' WHERE provider_id IS NULL;
-
--- ── Usage Limits ────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS public.usage_limits (
+-- Usage Limits (admin-managed per-user limits)
+CREATE TABLE public.usage_limits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  limit_type TEXT NOT NULL CHECK (limit_type IN ('cost', 'tokens')),
+  limit_type TEXT NOT NULL CHECK (limit_type IN ('requests', 'ai_suggestions')),
   limit_value NUMERIC NOT NULL CHECK (limit_value > 0),
   period TEXT NOT NULL CHECK (period IN ('daily', 'monthly')),
   mode TEXT NOT NULL DEFAULT 'hard' CHECK (mode IN ('hard', 'soft')),
@@ -828,14 +612,43 @@ CREATE TABLE IF NOT EXISTS public.usage_limits (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_usage_limits_user ON public.usage_limits(user_id);
+CREATE INDEX idx_usage_limits_user ON public.usage_limits(user_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_limits_unique
+CREATE UNIQUE INDEX idx_usage_limits_unique
   ON public.usage_limits(COALESCE(user_id, '00000000-0000-0000-0000-000000000000'), limit_type, period);
 
 ALTER TABLE public.usage_limits ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Admins can manage usage_limits"
   ON public.usage_limits FOR ALL
-  USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = true))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = true));
+  USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- 15. Billing
+-- ---------------------------------------------------------------------------
+
+-- Idempotent Stripe webhook event log
+CREATE TABLE public.stripe_events (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  processed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- No RLS on stripe_events — server-side only via service role key
+
+-- Subscription history
+CREATE TABLE public.subscription_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('created', 'canceled', 'renewed', 'expired')),
+  stripe_subscription_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_subscription_history_user ON public.subscription_history(user_id);
+
+ALTER TABLE public.subscription_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own subscription history" ON public.subscription_history
+  FOR SELECT USING (auth.uid() = user_id);
