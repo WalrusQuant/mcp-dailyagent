@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useModels } from "@/lib/useModels";
+import { createClient } from "@/lib/supabase/client";
 import {
   Shield, Eye, EyeOff, Loader2, Check, X, ArrowLeft, Trash2,
-  Plus, Star, Pencil, ChevronDown, Power,
+  Plus, Pencil, ChevronDown, Power,
 } from "lucide-react";
 import Link from "next/link";
 import type { LLMProvider } from "@/types/database";
@@ -27,23 +27,6 @@ interface SettingsState {
   settings: SettingRow[];
   envStatus: Record<string, boolean>;
 }
-
-interface DbModel {
-  id: string;
-  model_id: string;
-  name: string;
-  provider: string;
-  description: string;
-  type: "chat" | "image";
-  context_length: number | null;
-  pricing_prompt: number | null;
-  pricing_completion: number | null;
-  is_default: boolean;
-  sort_order: number;
-  provider_id: string | null;
-  api_model_id: string | null;
-}
-
 
 type StatusType = "db" | "env" | "missing";
 
@@ -206,7 +189,8 @@ function SettingField({
 
 export default function AdminPage() {
   const router = useRouter();
-  const { isAdmin, chatModels: availableChatModels, refresh } = useModels();
+  const supabase = createClient();
+  const [isAdmin, setIsAdmin] = useState<boolean | undefined>(undefined);
 
   // App settings state
   const [state, setState] = useState<SettingsState | null>(null);
@@ -224,22 +208,6 @@ export default function AdminPage() {
     supports_tools: true, supports_images: false, supports_streaming: true,
   });
   const [isSavingProvider, setIsSavingProvider] = useState(false);
-
-  // Model management state
-  const [models, setModels] = useState<DbModel[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
-  const [showModelForm, setShowModelForm] = useState(false);
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
-  const [addType, setAddType] = useState<"chat" | "image">("chat");
-  const [isSaving, setIsSaving] = useState(false);
-  const [formModelId, setFormModelId] = useState("");
-  const [formName, setFormName] = useState("");
-  const [formProvider, setFormProvider] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formPricingPrompt, setFormPricingPrompt] = useState("");
-  const [formPricingCompletion, setFormPricingCompletion] = useState("");
-  const [formProviderId, setFormProviderId] = useState("");
-  const [formApiModelId, setFormApiModelId] = useState("");
 
   // Search settings state
   const [searchModel, setSearchModel] = useState("");
@@ -259,10 +227,18 @@ export default function AdminPage() {
     searchResultsBasic !== savedSearchResultsBasic ||
     searchResultsAdvanced !== savedSearchResultsAdvanced;
 
-  // Redirect non-admins
+  // Check admin status and redirect non-admins
   useEffect(() => {
-    if (isAdmin === false) router.push("/settings");
-  }, [isAdmin, router]);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { router.push("/login"); return; }
+      supabase.from("profiles").select("is_admin").eq("id", user.id).single().then(({ data }) => {
+        const admin = data?.is_admin === true;
+        setIsAdmin(admin);
+        if (!admin) router.push("/dashboard");
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close search model dropdown on outside click
   useEffect(() => {
@@ -304,18 +280,6 @@ export default function AdminPage() {
     }
   }, []);
 
-  const loadModels = useCallback(async () => {
-    setIsLoadingModels(true);
-    try {
-      const rawRes = await fetch("/api/models/raw");
-      if (rawRes.ok) setModels(await rawRes.json());
-    } catch (err) {
-      console.error("Failed to load models:", err);
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, []);
-
   const loadSearchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/profile");
@@ -336,9 +300,8 @@ export default function AdminPage() {
   useEffect(() => {
     loadSettings();
     loadProviders();
-    loadModels();
     loadSearchSettings();
-  }, [loadSettings, loadProviders, loadModels, loadSearchSettings]);
+  }, [loadSettings, loadProviders, loadSearchSettings]);
 
   // ── App settings handlers ──
 
@@ -425,87 +388,6 @@ export default function AdminPage() {
     } catch (err) { console.error("Failed to toggle provider:", err); }
   };
 
-  // ── Model handlers ──
-
-  const resetForm = () => {
-    setFormModelId(""); setFormName(""); setFormProvider(""); setFormDescription("");
-    setFormPricingPrompt(""); setFormPricingCompletion(""); setFormProviderId(""); setFormApiModelId("");
-    setShowModelForm(false); setEditingModelId(null);
-  };
-
-  const startEditing = (model: DbModel) => {
-    setEditingModelId(model.id);
-    setAddType(model.type);
-    setFormModelId(model.model_id);
-    setFormName(model.name);
-    setFormProvider(model.provider);
-    setFormDescription(model.description || "");
-    setFormPricingPrompt(model.pricing_prompt != null ? String(model.pricing_prompt) : "");
-    setFormPricingCompletion(model.pricing_completion != null ? String(model.pricing_completion) : "");
-    setFormProviderId(model.provider_id || "");
-    setFormApiModelId(model.api_model_id || "");
-    setShowModelForm(true);
-  };
-
-  const handleSaveModel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formModelId || !formName || !formProvider) return;
-    setIsSaving(true);
-    try {
-      if (editingModelId) {
-        const res = await fetch("/api/models", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editingModelId, model_id: formModelId, name: formName, provider: formProvider,
-            description: formDescription,
-            pricing_prompt: formPricingPrompt ? parseFloat(formPricingPrompt) : null,
-            pricing_completion: formPricingCompletion ? parseFloat(formPricingCompletion) : null,
-            provider_id: formProviderId || null,
-            api_model_id: formApiModelId || null,
-          }),
-        });
-        if (res.ok) { resetForm(); await loadModels(); await refresh(); }
-      } else {
-        const res = await fetch("/api/models", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            modelId: formModelId, name: formName, provider: formProvider,
-            description: formDescription, type: addType,
-            pricingPrompt: formPricingPrompt ? parseFloat(formPricingPrompt) : null,
-            pricingCompletion: formPricingCompletion ? parseFloat(formPricingCompletion) : null,
-            providerId: formProviderId || null,
-            apiModelId: formApiModelId || null,
-          }),
-        });
-        if (res.ok) { resetForm(); await loadModels(); await refresh(); }
-      }
-    } catch (err) {
-      console.error("Failed to save model:", err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDeleteModel = async (id: string) => {
-    try {
-      const res = await fetch(`/api/models?id=${id}`, { method: "DELETE" });
-      if (res.ok) { setModels((prev) => prev.filter((m) => m.id !== id)); await refresh(); }
-    } catch (err) { console.error("Failed to delete model:", err); }
-  };
-
-  const handleSetDefault = async (id: string) => {
-    try {
-      const res = await fetch("/api/models", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, setDefault: true }),
-      });
-      if (res.ok) { await loadModels(); await refresh(); }
-    } catch (err) { console.error("Failed to set default:", err); }
-  };
-
   // ── Search handlers ──
 
   const handleSaveSearch = async () => {
@@ -528,65 +410,7 @@ export default function AdminPage() {
     finally { setIsSavingSearch(false); }
   };
 
-  const searchModelLabel = searchModel
-    ? availableChatModels.find((m) => m.id === searchModel)?.name || searchModel
-    : "None (use raw search)";
-
-  // ── Derived ──
-
-  const chatModelsList = models.filter((m) => m.type === "chat");
-  const imageModelsList = models.filter((m) => m.type === "image");
-
-  const getProviderName = (providerId: string | null) => {
-    if (!providerId) return null;
-    return providers.find((p) => p.id === providerId)?.name || null;
-  };
-
-  const renderModelList = (modelList: DbModel[], type: "chat" | "image") => (
-    <div className="space-y-2">
-      {modelList.map((model) => (
-        <div key={model.id} className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{model.name}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>{model.provider}</span>
-              {model.is_default && (
-                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}>Default</span>
-              )}
-              {getProviderName(model.provider_id) && (
-                <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-base)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }}>
-                  {getProviderName(model.provider_id)}
-                </span>
-              )}
-            </div>
-            <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
-              {model.api_model_id ? `${model.api_model_id} (${model.model_id})` : model.model_id}
-            </p>
-          </div>
-          <div className="flex items-center gap-1 ml-3">
-            {!model.is_default && (
-              <button onClick={() => handleSetDefault(model.id)} className="p-2 rounded-lg transition-colors" style={{ color: "var(--text-muted)" }} title="Set as default">
-                <Star className="w-4 h-4" />
-              </button>
-            )}
-            <button onClick={() => startEditing(model)} className="p-2 rounded-lg transition-colors" style={{ color: "var(--text-muted)" }} title="Edit model">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button onClick={() => handleDeleteModel(model.id)} className="p-2 rounded-lg transition-colors" style={{ color: "var(--text-muted)" }} title="Remove model">
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      ))}
-      <button
-        onClick={() => { setAddType(type); setEditingModelId(null); setShowModelForm(true); }}
-        className="flex items-center gap-2 px-4 py-3 rounded-xl w-full transition-colors text-sm"
-        style={{ border: "1px dashed var(--border-default)", color: "var(--text-muted)" }}
-      >
-        <Plus className="w-4 h-4" /> Add {type === "chat" ? "chat" : "image"} model
-      </button>
-    </div>
-  );
+  const searchModelLabel = searchModel || "None (use raw search)";
 
   // ── Loading / error states ──
 
@@ -692,22 +516,6 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Chat Models */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Chat Models</h2>
-        {isLoadingModels ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--text-muted)" }} /></div>
-        ) : renderModelList(chatModelsList, "chat")}
-      </section>
-
-      {/* Image Models */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Image Models</h2>
-        {isLoadingModels ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--text-muted)" }} /></div>
-        ) : renderModelList(imageModelsList, "image")}
-      </section>
-
       {/* Search */}
       <section className="rounded-xl p-5 space-y-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
         <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Search</h2>
@@ -727,12 +535,6 @@ export default function AdminPage() {
                   className="w-full px-4 py-2.5 text-sm text-left transition-colors"
                   style={{ color: searchModel === "" ? "var(--accent-primary)" : "var(--text-primary)", background: searchModel === "" ? "var(--bg-elevated)" : undefined }}
                 >None (use raw search)</button>
-                {availableChatModels.map((m) => (
-                  <button key={m.id} type="button" onClick={() => { setSearchModel(m.id); setSearchModelOpen(false); }}
-                    className="w-full px-4 py-2.5 text-sm text-left transition-colors"
-                    style={{ color: searchModel === m.id ? "var(--accent-primary)" : "var(--text-primary)", background: searchModel === m.id ? "var(--bg-elevated)" : undefined }}
-                  >{m.name}</button>
-                ))}
               </div>
             )}
           </div>
@@ -848,77 +650,6 @@ export default function AdminPage() {
       </div>
     )}
 
-    {/* Add/Edit Model Modal */}
-    {showModelForm && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-        <div className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-              {editingModelId ? "Edit" : "Add"} {addType === "chat" ? "Chat" : "Image"} Model
-            </h3>
-            <button onClick={resetForm} className="p-1" style={{ color: "var(--text-muted)" }}><X className="w-5 h-5" /></button>
-          </div>
-          <form onSubmit={handleSaveModel} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Model ID</label>
-              <input type="text" value={formModelId} onChange={(e) => setFormModelId(e.target.value)} placeholder="anthropic/claude-sonnet-4.5" required className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                Internal identifier used in the app (e.g., anthropic/claude-sonnet-4.5)
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Display Name</label>
-              <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Claude Sonnet 4.5" required className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Provider Label</label>
-              <input type="text" value={formProvider} onChange={(e) => setFormProvider(e.target.value)} placeholder="Anthropic" required className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>LLM Provider</label>
-              <select value={formProviderId} onChange={(e) => setFormProviderId(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}>
-                <option value="">Default (first enabled provider)</option>
-                {providers.filter((p) => p.is_enabled).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
-                ))}
-              </select>
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                Which provider routes API calls for this model
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>API Model ID (optional)</label>
-              <input type="text" value={formApiModelId} onChange={(e) => setFormApiModelId(e.target.value)} placeholder="claude-sonnet-4-5-20250514" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                Override the model ID sent to the provider API. Leave blank to use Model ID.
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Description</label>
-              <input type="text" value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Brief description of the model" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-            </div>
-            {addType === "chat" && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Prompt $/M tokens</label>
-                  <input type="number" step="0.01" value={formPricingPrompt} onChange={(e) => setFormPricingPrompt(e.target.value)} placeholder="3.00" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Completion $/M tokens</label>
-                  <input type="number" step="0.01" value={formPricingCompletion} onChange={(e) => setFormPricingCompletion(e.target.value)} placeholder="15.00" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
-                </div>
-              </div>
-            )}
-            <button type="submit" disabled={isSaving || !formModelId || !formName || !formProvider}
-              className="w-full py-2.5 rounded-lg font-medium transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-            >
-              {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : editingModelId ? "Save Changes" : "Add Model"}
-            </button>
-          </form>
-        </div>
-      </div>
-    )}
     </div>
   );
 }

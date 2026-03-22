@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, CheckSquare, Loader2, Sparkles } from "lucide-react";
+import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
 import { Task, Project } from "@/types/database";
 import { DateNavigation } from "@/components/shared/DateNavigation";
@@ -107,9 +107,6 @@ export function TaskList() {
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [breakdownTaskId, setBreakdownTaskId] = useState<string | null>(null);
-  const [subtasks, setSubtasks] = useState<string[]>([]);
-  const [loadingBreakdown, setLoadingBreakdown] = useState(false);
 
   const loadTasks = useCallback(async (d: string) => {
     setIsLoading(true);
@@ -178,55 +175,6 @@ export function TaskList() {
     setEditingTask(null);
   };
 
-  const handleBreakdown = async (task: Task) => {
-    setBreakdownTaskId(task.id);
-    setSubtasks([]);
-    setLoadingBreakdown(true);
-    try {
-      const response = await fetch("/api/ai-assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "task_breakdown",
-          context: { title: task.title, notes: task.notes, priority: task.priority },
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        try {
-          const jsonMatch = data.content.match(/\[[\s\S]*\]/);
-          if (jsonMatch) setSubtasks(JSON.parse(jsonMatch[0]));
-        } catch { /* ignore */ }
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingBreakdown(false);
-    }
-  };
-
-  const handleApproveSubtasks = async () => {
-    if (!breakdownTaskId) return;
-    const parentTask = tasks.find((t) => t.id === breakdownTaskId);
-    const priority = parentTask?.priority || "B1";
-
-    for (const title of subtasks) {
-      try {
-        const response = await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, priority, task_date: date }),
-        });
-        if (response.ok) {
-          const newTask = await response.json();
-          setTasks((prev) => [...prev, newTask]);
-        }
-      } catch { /* continue */ }
-    }
-    setBreakdownTaskId(null);
-    setSubtasks([]);
-  };
-
   const { addToast } = useToast();
   const drag = useDragReorder(tasks, setTasks);
   const priorityGroups = groupByPriority(tasks);
@@ -283,13 +231,12 @@ export function TaskList() {
               </div>
               <div className="space-y-0.5">
                 {group.tasks.map((task) => (
-                  <div key={task.id}>
                   <TaskItem
+                    key={task.id}
                     task={task}
                     onToggle={handleToggle}
                     onEdit={(t) => { setEditingTask(t); setShowForm(true); }}
                     onDelete={handleDelete}
-                    onBreakdown={handleBreakdown}
                     isDragging={drag.dragTaskId === task.id}
                     isDragOver={drag.dragOverTaskId === task.id}
                     onDragStart={drag.handleDragStart(task.id)}
@@ -298,53 +245,6 @@ export function TaskList() {
                     onDrop={drag.handleDrop(task.id)}
                     onDragEnd={drag.handleDragEnd}
                   />
-                  {breakdownTaskId === task.id && (
-                    <div
-                      className="ml-8 mt-1 mb-2 rounded-lg p-3"
-                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)" }}
-                    >
-                      {loadingBreakdown ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="w-3 h-3 animate-spin" style={{ color: "var(--accent-primary)" }} />
-                          <span className="text-xs" style={{ color: "var(--text-muted)" }}>Breaking down...</span>
-                        </div>
-                      ) : subtasks.length > 0 ? (
-                        <>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium" style={{ color: "var(--accent-primary)" }}>
-                              <Sparkles className="w-3 h-3 inline mr-1" />Suggested Subtasks
-                            </span>
-                          </div>
-                          <ul className="space-y-1 mb-2">
-                            {subtasks.map((st, i) => (
-                              <li key={i} className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                                {st}
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleApproveSubtasks}
-                              className="px-3 py-1 rounded-lg text-xs font-medium"
-                              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-                            >
-                              Add All
-                            </button>
-                            <button
-                              onClick={() => { setBreakdownTaskId(null); setSubtasks([]); }}
-                              className="px-3 py-1 rounded-lg text-xs"
-                              style={{ color: "var(--text-muted)" }}
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>No subtasks generated</span>
-                      )}
-                    </div>
-                  )}
-                  </div>
                 ))}
               </div>
             </div>

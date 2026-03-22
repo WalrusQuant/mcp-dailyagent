@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Dumbbell, Loader2, Play, FileText, Sparkles } from "lucide-react";
+import { Plus, Dumbbell, Play, FileText } from "lucide-react";
 import { CardSkeleton } from "@/components/shared/Skeleton";
-import ReactMarkdown from "react-markdown";
 import { WorkoutTemplate, WorkoutExercise, WorkoutLog, WorkoutLogExercise } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useToast } from "@/lib/toast-context";
@@ -22,8 +21,6 @@ export function WorkoutDashboard() {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateWithExercises | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<TemplateWithExercises | null | "quick">(null);
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const { addToast } = useToast();
 
   const loadData = useCallback(async () => {
@@ -106,57 +103,6 @@ export function WorkoutDashboard() {
           </button>
         </div>
       </div>
-
-      <div className="mb-4 flex items-center gap-2">
-        <button
-          onClick={async () => {
-            setLoadingSuggestion(true);
-            try {
-              const response = await fetch("/api/ai-assist", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  type: "workout_suggestion",
-                  context: {
-                    recentWorkouts: logs.slice(0, 5).map((l) => ({
-                      name: l.name,
-                      date: l.log_date,
-                      exercises: l.workout_log_exercises?.map((e) => e.exercise_name) ?? [],
-                    })),
-                    templates: templates.map((t) => t.name),
-                  },
-                }),
-              });
-              if (response.ok) {
-                const data = await response.json();
-                setSuggestion(data.content);
-              }
-            } catch { /* ignore */ }
-            finally { setLoadingSuggestion(false); }
-          }}
-          disabled={loadingSuggestion}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
-        >
-          {loadingSuggestion ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-          Suggest Workout
-        </button>
-      </div>
-
-      {suggestion && (
-        <div
-          className="rounded-lg p-4 mb-4"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium" style={{ color: "var(--accent-primary)" }}>AI Suggestion</span>
-            <button onClick={() => setSuggestion(null)} className="text-xs" style={{ color: "var(--text-muted)" }}>Hide</button>
-          </div>
-          <div className="prose prose-sm max-w-none text-sm" style={{ color: "var(--text-secondary)" }}>
-            <ReactMarkdown>{suggestion}</ReactMarkdown>
-          </div>
-        </div>
-      )}
 
       <WorkoutStats />
 

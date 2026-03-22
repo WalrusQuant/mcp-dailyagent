@@ -1,4 +1,3 @@
-import { getTitleModel } from "@/lib/models";
 import { getConfig } from "@/lib/app-config";
 
 type AiTask = "briefing" | "insights" | "assist" | "tools";
@@ -6,6 +5,9 @@ type AiTask = "briefing" | "insights" | "assist" | "tools";
 interface ProfileWithConfig {
   ai_model_config?: Record<string, string> | null;
 }
+
+const DEFAULT_FAST_MODEL = process.env.TITLE_MODEL || "google/gemini-flash-2.0";
+const DEFAULT_CHAT_MODEL = process.env.DEFAULT_CHAT_MODEL || "anthropic/claude-sonnet-4.5";
 
 /**
  * Returns the model ID for a given AI task.
@@ -24,9 +26,9 @@ export async function getModelForTask(
 
   // Fast tasks use the title model (cheap/fast)
   if (task === "briefing" || task === "insights" || task === "tools") {
-    return getTitleModel();
+    return (await getConfig("title_model")) || DEFAULT_FAST_MODEL;
   }
 
   // Assist uses default chat model
-  return (await getConfig("default_chat_model")) || "anthropic/claude-sonnet-4.5";
+  return (await getConfig("default_chat_model")) || DEFAULT_CHAT_MODEL;
 }

@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { complete } from "@/lib/llm";
 import { NextResponse } from "next/server";
-import { getTitleModel } from "@/lib/models";
+import { getModelForTask } from "@/lib/ai-models";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { checkUsageLimits, usageLimitResponse } from "@/lib/usage-limits";
 
 const FALLBACK_PROMPTS = [
   "What am I grateful for today?",
@@ -28,11 +27,14 @@ export async function GET() {
   const rateLimited = checkRateLimit(user.id, "ai", isAdmin);
   if (rateLimited) return rateLimited;
 
-  const limits = await checkUsageLimits(supabase, user.id, isAdmin);
-  if (limits.blocked) return usageLimitResponse(limits.reason!);
-
   try {
-    const promptModel = await getTitleModel();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("ai_model_config")
+      .eq("id", user.id)
+      .single();
+
+    const promptModel = await getModelForTask(profile, "briefing");
     const today = new Date().toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",

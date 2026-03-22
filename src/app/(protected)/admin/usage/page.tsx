@@ -79,7 +79,7 @@ export default function AdminUsagePage() {
       ]);
 
       if (usageRes.status === 403 || limitsRes.status === 403) {
-        router.push("/chat");
+        router.push("/dashboard");
         return;
       }
 

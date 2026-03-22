@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { complete } from "@/lib/llm";
 import { getModelForTask } from "@/lib/ai-models";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { checkUsageLimits, usageLimitResponse } from "@/lib/usage-limits";
 
 interface InsightItem {
   emoji: string;
@@ -27,9 +26,6 @@ export async function GET() {
 
   const rateLimited = checkRateLimit(user.id, "ai", isAdmin);
   if (rateLimited) return rateLimited;
-
-  const limits = await checkUsageLimits(supabase, user.id, isAdmin);
-  if (limits.blocked) return usageLimitResponse(limits.reason!);
 
   const today = new Date().toISOString().slice(0, 10);
 

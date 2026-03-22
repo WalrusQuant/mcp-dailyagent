@@ -4,37 +4,29 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  MessageSquare,
   CheckSquare,
   LayoutDashboard,
   MoreHorizontal,
   X,
-  Image as ImageIcon,
   FolderKanban,
   CalendarDays,
-  BarChart3,
   Target,
   BookOpen,
   Dumbbell,
   Timer,
   FileText,
   Settings,
-  History,
   Crosshair,
 } from "lucide-react";
 
 const TABS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: "/dashboard" },
-  { href: "/chat", icon: MessageSquare, label: "Chat", match: "/chat" },
   { href: "/tasks", icon: CheckSquare, label: "Tasks", match: "/tasks" },
 ];
 
 const MORE_ITEMS = [
-  { href: "/history", icon: History, label: "History" },
-  { href: "/image", icon: ImageIcon, label: "Images" },
   { href: "/projects", icon: FolderKanban, label: "Projects" },
   { href: "/calendar", icon: CalendarDays, label: "Calendar" },
-  { href: "/usage", icon: BarChart3, label: "Usage" },
   { href: "/habits", icon: Target, label: "Habits" },
   { href: "/journal", icon: BookOpen, label: "Journal" },
   { href: "/workouts", icon: Dumbbell, label: "Workouts" },

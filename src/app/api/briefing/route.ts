@@ -1,20 +1,80 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getProductivitySnapshot, formatProductivityContext } from "@/lib/productivity-context";
 import { complete } from "@/lib/llm";
 import { getModelForTask } from "@/lib/ai-models";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { checkUsageLimits, usageLimitResponse } from "@/lib/usage-limits";
 
 const BRIEFING_SYSTEM_PROMPT =
   "Generate a warm, concise morning briefing (under 150 words) based on this productivity data. Mention priorities, streaks at risk, and one encouraging observation. Use a friendly, motivating tone. Do not use headers or bullet points — write it as natural paragraphs.";
+
+async function buildDailyContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [tasksResult, habitsResult, habitLogsResult, journalResult, focusResult] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("done, priority, title")
+      .eq("user_id", userId)
+      .eq("task_date", today),
+    supabase
+      .from("habits")
+      .select("id, name")
+      .eq("user_id", userId)
+      .eq("archived", false),
+    supabase
+      .from("habit_logs")
+      .select("habit_id")
+      .eq("user_id", userId)
+      .eq("log_date", today),
+    supabase
+      .from("journal_entries")
+      .select("mood")
+      .eq("user_id", userId)
+      .eq("entry_date", today)
+      .maybeSingle(),
+    supabase
+      .from("focus_sessions")
+      .select("duration_minutes")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .gte("started_at", `${today}T00:00:00.000Z`),
+  ]);
+
+  const tasks = tasksResult.data ?? [];
+  const doneTasks = tasks.filter((t) => t.done).length;
+  const totalTasks = tasks.length;
+  const topPriority = tasks.filter((t) => !t.done && t.priority?.startsWith("A")).map((t) => t.title).slice(0, 3);
+
+  const habits = habitsResult.data ?? [];
+  const completedHabitIds = new Set((habitLogsResult.data ?? []).map((l) => l.habit_id));
+  const completedHabits = habits.filter((h) => completedHabitIds.has(h.id)).length;
+
+  const focusSessions = focusResult.data ?? [];
+  const focusMinutes = focusSessions.reduce((s, f) => s + (f.duration_minutes ?? 0), 0);
+
+  const mood = journalResult.data?.mood;
+
+  const lines = [
+    `Today (${today}):`,
+    `- Tasks: ${doneTasks}/${totalTasks} done`,
+    topPriority.length > 0 ? `- Top priorities: ${topPriority.join(", ")}` : null,
+    `- Habits: ${completedHabits}/${habits.length} completed`,
+    focusMinutes > 0 ? `- Focus: ${focusMinutes} minutes` : null,
+    mood != null ? `- Mood: ${mood}/5` : null,
+    journalResult.data ? "- Journal entry written today" : "- No journal entry yet",
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
 
 async function generateBriefingContent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<string> {
-  const snapshot = await getProductivitySnapshot(supabase, userId);
-  const context = formatProductivityContext(snapshot);
+  const context = await buildDailyContext(supabase, userId);
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -55,9 +115,6 @@ async function authenticateAndCheck() {
 
   const rateLimited = checkRateLimit(user.id, "ai", isAdmin);
   if (rateLimited) return { error: rateLimited };
-
-  const limits = await checkUsageLimits(supabase, user.id, isAdmin);
-  if (limits.blocked) return { error: usageLimitResponse(limits.reason!) };
 
   return { supabase, user, profileCheck };
 }

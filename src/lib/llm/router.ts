@@ -10,8 +10,6 @@ import type {
   LLMToolDefinition,
 } from "./types";
 import { OpenAICompatibleAdapter } from "./adapters/openai-compatible";
-import { AnthropicAdapter } from "./adapters/anthropic";
-import { GoogleAdapter } from "./adapters/google";
 import type { LLMProvider } from "@/types/database";
 
 // Adapter cache keyed by provider ID
@@ -140,14 +138,6 @@ async function getAdapter(provider: LLMProvider): Promise<LLMAdapter> {
       });
       break;
     }
-
-    case "anthropic":
-      adapter = new AnthropicAdapter({ apiKey, capabilities });
-      break;
-
-    case "google":
-      adapter = new GoogleAdapter({ apiKey, capabilities });
-      break;
 
     default:
       throw new Error(`Unknown provider type: ${provider.type}`);

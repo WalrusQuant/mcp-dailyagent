@@ -77,7 +77,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         if (signInError) throw signInError;
 
-        router.push("/chat");
+        router.push("/dashboard");
         router.refresh();
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -90,7 +90,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         } else {
           localStorage.removeItem(REMEMBERED_EMAIL_KEY);
         }
-        router.push("/chat");
+        router.push("/dashboard");
         router.refresh();
       }
     } catch (err) {

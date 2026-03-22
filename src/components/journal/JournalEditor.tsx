@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Sparkles, MessageSquare, Trash2 } from "lucide-react";
+import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { JournalEntry } from "@/types/database";
 import ReactMarkdown from "react-markdown";
 
@@ -22,9 +22,6 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
   const [isSaving, setIsSaving] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(false);
-  const [reflection, setReflection] = useState<string | null>(null);
-  const [loadingReflection, setLoadingReflection] = useState(false);
-  const [showReflection, setShowReflection] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef(initialContent);
@@ -81,30 +78,6 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
     }
   };
 
-  const loadReflection = async () => {
-    if (!content.trim()) return;
-    setLoadingReflection(true);
-    try {
-      const response = await fetch("/api/ai-assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "journal_reflection",
-          context: { content, mood, date },
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setReflection(data.content);
-        setShowReflection(true);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingReflection(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -153,17 +126,6 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
             {loadingPrompts ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
             Get Prompts
           </button>
-          {content.trim() && (
-            <button
-              onClick={loadReflection}
-              disabled={loadingReflection}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
-              style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
-            >
-              {loadingReflection ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageSquare className="w-3 h-3" />}
-              Reflect
-            </button>
-          )}
         </div>
         <div className="flex items-center gap-2 justify-end">
           {isSaving && (
@@ -203,29 +165,6 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
           </button>
         </div>
       </div>
-
-      {showReflection && reflection && (
-        <div
-          className="rounded-lg p-4"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)" }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium" style={{ color: "var(--accent-primary)" }}>
-              AI Reflection
-            </span>
-            <button
-              onClick={() => setShowReflection(false)}
-              className="text-xs"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Hide
-            </button>
-          </div>
-          <div className="prose prose-sm max-w-none text-sm" style={{ color: "var(--text-secondary)" }}>
-            <ReactMarkdown>{reflection}</ReactMarkdown>
-          </div>
-        </div>
-      )}
 
       {prompts.length > 0 && (
         <div className="space-y-2">

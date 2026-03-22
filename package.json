@@ -12,12 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/generative-ai": "^0.24.1",
     "@openrouter/sdk": "^0.3.14",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
-    "highlight.js": "^11.11.1",
     "lucide-react": "^0.562.0",
     "next": "^16.1.6",
     "openai": "^6.16.0",
@@ -25,7 +22,6 @@
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
-    "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {

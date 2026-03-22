@@ -2,7 +2,7 @@ import type OpenAI from "openai";
 
 export const TOOL_SYSTEM_INSTRUCTIONS = `You have access to the user's productivity tools. Use them when asked to create tasks, log habits, record journal entries, start focus sessions, create goals, or update goal progress. You can also read tasks, habits, workouts, focus stats, journal entries, and goals. For read-only queries, call the tool directly. For actions that create or modify data, describe what you'll do before calling the tool.`;
 
-export const READ_ONLY_TOOLS = new Set(["get_tasks", "get_habits", "get_workouts", "get_focus_stats", "get_journal_entries", "get_goals", "search_conversations"]);
+export const READ_ONLY_TOOLS = new Set(["get_tasks", "get_habits", "get_workouts", "get_focus_stats", "get_journal_entries", "get_goals"]);
 
 export const PRODUCTIVITY_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -205,24 +205,3 @@ export const PRODUCTIVITY_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = 
   },
 ];
 
-export const SEARCH_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "search_conversations",
-      description: "Search the user's past chat conversations by keyword. Use when the user asks about something discussed previously, wants to find an old conversation, or references past discussions.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search terms to find in past conversations" },
-          date_start: { type: "string", description: "YYYY-MM-DD — only search messages after this date" },
-          date_end: { type: "string", description: "YYYY-MM-DD — only search messages before this date" },
-          limit: { type: "number", description: "Max results to return (default 10, max 20)" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-];
-
-export const SEARCH_TOOL_INSTRUCTIONS = `You can search the user's past chat conversations using the search_conversations tool. Use it when the user asks about something discussed before, wants to recall a previous conversation, or references past discussions.`;

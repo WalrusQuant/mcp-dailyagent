@@ -9,10 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
-  MessageSquare,
-  Image as ImageIcon,
   FolderKanban,
-  BarChart3,
   LayoutDashboard,
   CheckSquare,
   Target,
@@ -23,10 +20,8 @@ import {
   Settings,
   Plus,
   Search,
-  Cpu,
 } from "lucide-react";
 import { useCommandPalette } from "@/lib/command-palette-context";
-import { useModelContext } from "@/lib/model-context";
 
 interface Command {
   id: string;
@@ -62,7 +57,6 @@ const ICON_SIZE = "w-4 h-4";
 
 export function CommandPalette() {
   const { isOpen, close } = useCommandPalette();
-  const { chatModels, setSelectedModel } = useModelContext();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -79,14 +73,6 @@ export function CommandPalette() {
 
   const allCommands = useMemo<Command[]>(() => {
     const actions: Command[] = [
-      {
-        id: "new-chat",
-        label: "New Chat",
-        category: "Actions",
-        icon: <Plus className={ICON_SIZE} />,
-        keywords: ["create", "start", "message"],
-        handler: () => navigate("/chat"),
-      },
       {
         id: "new-task",
         label: "New Task",
@@ -107,44 +93,20 @@ export function CommandPalette() {
 
     const navigation: Command[] = [
       {
-        id: "nav-chat",
-        label: "Chat",
-        category: "Navigation",
-        icon: <MessageSquare className={ICON_SIZE} />,
-        keywords: ["ai", "assistant", "messages"],
-        handler: () => navigate("/chat"),
-      },
-      {
-        id: "nav-images",
-        label: "Image Generation",
-        category: "Navigation",
-        icon: <ImageIcon className={ICON_SIZE} />,
-        keywords: ["generate", "picture", "photo", "dall-e", "stable diffusion"],
-        handler: () => navigate("/image"),
-      },
-      {
-        id: "nav-projects",
-        label: "Projects",
-        category: "Navigation",
-        icon: <FolderKanban className={ICON_SIZE} />,
-        keywords: ["folder", "organize", "conversations"],
-        handler: () => navigate("/projects"),
-      },
-      {
-        id: "nav-usage",
-        label: "Usage & Cost",
-        category: "Navigation",
-        icon: <BarChart3 className={ICON_SIZE} />,
-        keywords: ["tokens", "spending", "analytics", "billing"],
-        handler: () => navigate("/usage"),
-      },
-      {
         id: "nav-dashboard",
         label: "Dashboard",
         category: "Navigation",
         icon: <LayoutDashboard className={ICON_SIZE} />,
         keywords: ["home", "overview", "summary"],
         handler: () => navigate("/dashboard"),
+      },
+      {
+        id: "nav-projects",
+        label: "Projects",
+        category: "Navigation",
+        icon: <FolderKanban className={ICON_SIZE} />,
+        keywords: ["folder", "organize"],
+        handler: () => navigate("/projects"),
       },
       {
         id: "nav-tasks",
@@ -204,21 +166,8 @@ export function CommandPalette() {
       },
     ];
 
-    const models: Command[] = chatModels.map((model) => ({
-      id: `model-${model.id}`,
-      label: model.name,
-      category: "Models",
-      icon: <Cpu className={ICON_SIZE} />,
-      keywords: [model.id, model.provider ?? "", "switch", "select", "use"],
-      shortcut: undefined,
-      handler: () => {
-        setSelectedModel(model.id);
-        close();
-      },
-    }));
-
-    return [...actions, ...navigation, ...models];
-  }, [chatModels, navigate, setSelectedModel, close]);
+    return [...actions, ...navigation];
+  }, [navigate]);
 
   const filteredCommands = useMemo(() => {
     if (!query.trim()) return allCommands;
@@ -323,7 +272,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search commands, pages, models..."
+            placeholder="Search commands and pages..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}

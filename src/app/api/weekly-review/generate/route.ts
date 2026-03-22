@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { complete } from "@/lib/llm";
 import { getModelForTask } from "@/lib/ai-models";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { checkUsageLimits, usageLimitResponse } from "@/lib/usage-limits";
 
 // POST generate an AI weekly review summary
 export async function POST(request: NextRequest) {
@@ -21,9 +20,6 @@ export async function POST(request: NextRequest) {
 
   const rateLimited = checkRateLimit(user.id, "ai", isAdmin);
   if (rateLimited) return rateLimited;
-
-  const limits = await checkUsageLimits(supabase, user.id, isAdmin);
-  if (limits.blocked) return usageLimitResponse(limits.reason!);
 
   const body = await request.json();
   const { week_start } = body;

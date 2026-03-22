@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  MessageSquare,
   Plus,
   Trash2,
   Download,
@@ -14,10 +13,8 @@ import {
   Calendar,
   Save,
   Pencil,
-  X,
-  Link2,
 } from "lucide-react";
-import { Project, ProjectFile, Conversation, Task } from "@/types/database";
+import { Project, ProjectFile, Task } from "@/types/database";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { ProjectFileUpload } from "./ProjectFileUpload";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
@@ -46,7 +43,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 export function ProjectDashboard({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectWithCount | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -54,8 +50,6 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
   const [promptDirty, setPromptDirty] = useState(false);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [showAssignPicker, setShowAssignPicker] = useState(false);
-  const [unlinkedConversations, setUnlinkedConversations] = useState<Conversation[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const router = useRouter();
@@ -63,9 +57,8 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [projRes, convRes, filesRes, tasksRes] = await Promise.all([
+      const [projRes, filesRes, tasksRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
-        fetch(`/api/projects/${projectId}/conversations`),
         fetch(`/api/projects/${projectId}/files`),
         fetch(`/api/tasks?project_id=${projectId}`),
       ]);
@@ -76,7 +69,6 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
         setSystemPrompt(p.system_prompt || "");
         setProgress(p.progress || 0);
       }
-      if (convRes.ok) setConversations(await convRes.json());
       if (filesRes.ok) setFiles(await filesRes.json());
       if (tasksRes.ok) setTasks(await tasksRes.json());
     } catch (error) {
@@ -116,25 +108,9 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this project? Conversations will be unlinked, files will be deleted.")) return;
+    if (!confirm("Delete this project? Files will be deleted.")) return;
     await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
     router.push("/projects");
-  };
-
-  const handleNewChat = async () => {
-    try {
-      const response = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId }),
-      });
-      if (response.ok) {
-        const conv = await response.json();
-        router.push(`/chat/${conv.id}`);
-      }
-    } catch (error) {
-      console.error("Failed to create conversation:", error);
-    }
   };
 
   const handleFileUploaded = (file: ProjectFile) => {
@@ -152,34 +128,6 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
       const { url } = await response.json();
       window.open(url, "_blank");
     }
-  };
-
-  const handleAssignConversation = async (convId: string) => {
-    await fetch(`/api/conversations/${convId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId }),
-    });
-    setShowAssignPicker(false);
-    loadAll();
-  };
-
-  const loadUnlinkedConversations = async () => {
-    const response = await fetch("/api/conversations?limit=50");
-    if (response.ok) {
-      const all = await response.json();
-      setUnlinkedConversations(all.filter((c: Conversation) => !c.project_id));
-    }
-    setShowAssignPicker(true);
-  };
-
-  const handleUnlinkConversation = async (convId: string) => {
-    await fetch(`/api/conversations/${convId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: null }),
-    });
-    setConversations((prev) => prev.filter((c) => c.id !== convId));
   };
 
   const handleToggleTask = async (task: Task) => {
@@ -371,109 +319,6 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
           )}
         </section>
 
-        {/* Conversations Section */}
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              Conversations
-            </h2>
-            <div className="flex gap-2">
-              <button
-                onClick={loadUnlinkedConversations}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-                style={{
-                  border: "1px solid var(--border-default)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                <Link2 className="w-3 h-3" />
-                Assign Existing
-              </button>
-              <button
-                onClick={handleNewChat}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-90"
-                style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-              >
-                <Plus className="w-3 h-3" />
-                New Chat
-              </button>
-            </div>
-          </div>
-
-          {/* Assign picker */}
-          {showAssignPicker && (
-            <div
-              className="rounded-lg p-3 mb-3 max-h-48 overflow-y-auto"
-              style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                  Select a conversation to assign
-                </span>
-                <button onClick={() => setShowAssignPicker(false)} style={{ color: "var(--text-muted)" }}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              {unlinkedConversations.length === 0 ? (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>No unlinked conversations</p>
-              ) : (
-                <div className="space-y-1">
-                  {unlinkedConversations.map((conv) => (
-                    <button
-                      key={conv.id}
-                      onClick={() => handleAssignConversation(conv.id)}
-                      className="w-full text-left px-2 py-1.5 rounded text-xs transition-colors"
-                      style={{ color: "var(--text-primary)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-                    >
-                      {conv.title}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {conversations.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: "var(--text-muted)" }}>
-              No conversations linked to this project yet.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  className="group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors cursor-pointer"
-                  style={{ border: "1px solid var(--border-default)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-                  onClick={() => router.push(`/chat/${conv.id}`)}
-                >
-                  <MessageSquare className="w-4 h-4 shrink-0" style={{ color: "var(--text-muted)" }} />
-                  <span className="flex-1 text-sm truncate" style={{ color: "var(--text-primary)" }}>
-                    {conv.title}
-                  </span>
-                  <span className="text-xs shrink-0" style={{ color: "var(--text-muted)" }}>
-                    {new Date(conv.updated_at).toLocaleDateString()}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUnlinkConversation(conv.id);
-                    }}
-                    className="hidden group-hover:block p-1 rounded"
-                    style={{ color: "var(--text-muted)" }}
-                    title="Unlink from project"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Files Section */}
         <section className="mb-8">
           <h2 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
@@ -542,7 +387,7 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
               border: "1px solid var(--border-default)",
             }}
             rows={6}
-            placeholder="Custom instructions for all conversations in this project..."
+            placeholder="Custom instructions for this project..."
           />
           {promptDirty && (
             <div className="flex justify-end mt-2">

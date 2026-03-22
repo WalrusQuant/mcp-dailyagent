@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
 
 function makeRequest(url: string, options?: RequestInit) {
-  return new NextRequest(new URL(url, "http://localhost:3000"), options);
+  return new NextRequest(new URL(url, "http://localhost:3000"), options as never);
 }
 
 function mockAdmin(isAdmin: boolean, userId = "u1") {

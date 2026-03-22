@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
 import { createClient } from "@/lib/supabase/server";
 
 function makeRequest(url: string, options?: RequestInit) {
-  return new NextRequest(new URL(url, "http://localhost:3000"), options);
+  return new NextRequest(new URL(url, "http://localhost:3000"), options as never);
 }
 
 describe("GET /api/tasks", () => {

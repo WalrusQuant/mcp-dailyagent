@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ModelProvider } from "@/lib/model-context";
 import { FocusTimerProvider } from "@/lib/focus-timer-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { CommandPaletteProvider, useCommandPalette } from "@/lib/command-palette-context";
@@ -58,7 +57,6 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
   useKeyboardShortcuts([
     { key: "k", metaKey: true, allowInInput: true, handler: toggleCommandPalette },
-    { key: "/", metaKey: true, handler: () => window.dispatchEvent(new Event("toggle-model-selector")) },
     { key: "s", metaKey: true, shiftKey: true, handler: focusSidebarSearch },
     {
       key: "Escape",
@@ -97,14 +95,12 @@ export function ProtectedLayoutClient({
   children: React.ReactNode;
 }) {
   return (
-    <ModelProvider>
-      <FocusTimerProvider>
-        <ToastProvider>
-          <CommandPaletteProvider>
-            <LayoutInner>{children}</LayoutInner>
-          </CommandPaletteProvider>
-        </ToastProvider>
-      </FocusTimerProvider>
-    </ModelProvider>
+    <FocusTimerProvider>
+      <ToastProvider>
+        <CommandPaletteProvider>
+          <LayoutInner>{children}</LayoutInner>
+        </CommandPaletteProvider>
+      </ToastProvider>
+    </FocusTimerProvider>
   );
 }

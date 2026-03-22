@@ -34,8 +34,6 @@ export async function middleware(request: NextRequest) {
 
   // Protected routes - redirect to login if not authenticated
   const protectedPrefixes = [
-    "/chat",
-    "/image",
     "/settings",
     "/tasks",
     "/habits",
@@ -45,6 +43,9 @@ export async function middleware(request: NextRequest) {
     "/dashboard",
     "/review",
     "/admin",
+    "/projects",
+    "/calendar",
+    "/goals",
   ];
 
   if (!user && protectedPrefixes.some((p) => pathname.startsWith(p))) {
@@ -63,8 +64,6 @@ export const config = {
   matcher: [
     "/login",
     "/signup",
-    "/chat/:path*",
-    "/image/:path*",
     "/settings/:path*",
     "/tasks/:path*",
     "/habits/:path*",
@@ -74,5 +73,8 @@ export const config = {
     "/dashboard/:path*",
     "/review/:path*",
     "/admin/:path*",
+    "/projects/:path*",
+    "/calendar/:path*",
+    "/goals/:path*",
   ],
 };
