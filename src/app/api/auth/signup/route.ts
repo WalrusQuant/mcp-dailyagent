@@ -1,26 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getConfig } from "@/lib/app-config";
 
 export async function POST(request: NextRequest) {
-  const { email, password, secretCode } = await request.json();
-
-  // Validate secret code
-  const validSecret = await getConfig("signup_secret");
-
-  if (!validSecret) {
-    return NextResponse.json(
-      { error: "Signup is disabled" },
-      { status: 403 }
-    );
-  }
-
-  if (secretCode !== validSecret) {
-    return NextResponse.json(
-      { error: "Invalid access code" },
-      { status: 403 }
-    );
-  }
+  const { email, password } = await request.json();
 
   // Validate inputs
   const trimmedEmail = typeof email === "string" ? email.trim() : "";
@@ -49,7 +31,6 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error("Signup error:", error.message);
-    // Surface safe error messages; avoid leaking user-enumeration details
     const safeMessage = error.message.includes("already registered")
       ? "An account with this email already exists"
       : "Signup failed. Please check your email and password.";

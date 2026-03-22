@@ -23,7 +23,6 @@ export function AuthForm({ mode }: AuthFormProps) {
       setRememberEmail(true);
     }
   }, []);
-  const [secretCode, setSecretCode] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -61,7 +60,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         const response = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, secretCode }),
+          body: JSON.stringify({ email, password }),
         });
 
         const data = await response.json();
@@ -235,34 +234,6 @@ export function AuthForm({ mode }: AuthFormProps) {
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {mode === "signup" && (
-        <div>
-          <label
-            htmlFor="secretCode"
-            className="block text-xs font-medium mb-1.5 uppercase tracking-wider"
-            style={{ color: "var(--accent-warning)" }}
-          >
-            Access Code
-          </label>
-          <input
-            id="secretCode"
-            type="password"
-            value={secretCode}
-            onChange={(e) => setSecretCode(e.target.value)}
-            required
-            className="w-full rounded-lg px-4 py-3 focus:outline-none transition-colors"
-            style={{
-              background: "var(--bg-input)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-default)",
-            }}
-            onFocus={(e) => (e.target.style.borderColor = "var(--accent-warning)")}
-            onBlur={(e) => (e.target.style.borderColor = "var(--border-default)")}
-            placeholder="Enter access code"
-          />
         </div>
       )}
 
