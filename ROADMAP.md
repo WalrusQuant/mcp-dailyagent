@@ -433,9 +433,11 @@ Hydra is purely the OAuth token issuer; Supabase remains the source of truth for
 
 ---
 
-## Phase 6: MCP Server Implementation
+## Phase 6: MCP Server Implementation ✅
 
 Build the MCP server that exposes productivity data as tools and resources. Same data layer the dashboard uses — two interfaces, one source of truth.
+
+**Completed 2026-03-23** — Full MCP server at `/api/mcp` with Streamable HTTP transport. 15 resources, 31 tools, 13 prompt templates. Dual auth (OAuth + API key), scope enforcement, plan gating (read=free, write=paid), daily rate limits (500 free / 10k paid). 57 tests added (167 total). E2e testing pending Vercel deploy.
 
 ### 6.1 — MCP Server Framework
 
