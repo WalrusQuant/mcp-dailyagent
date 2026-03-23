@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@openrouter/sdk": "^0.3.14",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
@@ -23,7 +24,8 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
-    "resend": "^6.9.4"
+    "resend": "^6.9.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

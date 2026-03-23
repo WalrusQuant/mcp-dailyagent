@@ -603,7 +603,7 @@ Logic: Try API key first (check prefix), fall back to OAuth token validation.
 - 1 API key
 - 500 MCP requests/day
 
-**Paid Plan — $20/month ($16/month billed annually):**
+**Paid Plan — $10/month ($8/month billed annually):**
 - Everything in Free
 - Full MCP write access (create, update, delete, rollover, reorder)
 - All MCP prompt templates (daily planning, weekly review, habit analysis, etc.)
@@ -611,7 +611,7 @@ Logic: Try API key first (check prefix), fall back to OAuth token validation.
 - Unlimited API keys
 - 10,000 MCP requests/day
 - Data export (JSON/CSV)
-**Annual plan: $192/year ($16/month):**
+**Annual plan: $96/year ($8/month):**
 - 2 months free vs monthly
 
 **Why this works:**

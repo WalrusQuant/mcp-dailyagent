@@ -105,7 +105,7 @@ describe("POST /api/admin/limits", () => {
     const res = await POST(
       makeRequest("/api/admin/limits", {
         method: "POST",
-        body: JSON.stringify({ limit_type: "cost", period: "invalid", limit_value: 10 }),
+        body: JSON.stringify({ limit_type: "requests", period: "invalid", limit_value: 10 }),
       })
     );
     expect(res.status).toBe(400);
@@ -118,7 +118,7 @@ describe("POST /api/admin/limits", () => {
     const res = await POST(
       makeRequest("/api/admin/limits", {
         method: "POST",
-        body: JSON.stringify({ limit_type: "cost", period: "daily", mode: "invalid", limit_value: 10 }),
+        body: JSON.stringify({ limit_type: "requests", period: "daily", mode: "invalid", limit_value: 10 }),
       })
     );
     expect(res.status).toBe(400);
@@ -130,7 +130,7 @@ describe("POST /api/admin/limits", () => {
     const res = await POST(
       makeRequest("/api/admin/limits", {
         method: "POST",
-        body: JSON.stringify({ limit_type: "cost", period: "daily", limit_value: 0 }),
+        body: JSON.stringify({ limit_type: "requests", period: "daily", limit_value: 0 }),
       })
     );
     expect(res.status).toBe(400);
@@ -140,7 +140,7 @@ describe("POST /api/admin/limits", () => {
   it("creates limit with valid input", async () => {
     const client = mockAdmin(true);
     // Override to return created data
-    const mockData = { id: "l1", limit_type: "cost", period: "daily", limit_value: 50 };
+    const mockData = { id: "l1", limit_type: "requests", period: "daily", limit_value: 50 };
     client.from.mockImplementation(() => {
       const builder = {
         select: vi.fn().mockReturnThis(),
@@ -160,7 +160,7 @@ describe("POST /api/admin/limits", () => {
     const res = await POST(
       makeRequest("/api/admin/limits", {
         method: "POST",
-        body: JSON.stringify({ limit_type: "cost", period: "daily", limit_value: 50 }),
+        body: JSON.stringify({ limit_type: "requests", period: "daily", limit_value: 50 }),
       })
     );
     expect(res.status).toBe(200);
