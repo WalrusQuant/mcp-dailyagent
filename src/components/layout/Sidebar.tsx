@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -45,24 +45,27 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
   const { theme, setTheme } = useTheme();
 
-  const loadUser = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name, is_admin")
-        .eq("id", user.id)
-        .single();
-      setUserDisplayName(profile?.display_name || user.email || null);
-      setIsAdmin(profile?.is_admin === true);
-    }
-  }, [supabase]);
-
   useEffect(() => {
+    let cancelled = false;
+    async function loadUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name, is_admin")
+          .eq("id", user.id)
+          .single();
+        if (cancelled) return;
+        setUserDisplayName(profile?.display_name || user.email || null);
+        setIsAdmin(profile?.is_admin === true);
+      }
+    }
     loadUser();
-  }, [loadUser]);
+    return () => { cancelled = true; };
+  }, [supabase]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
