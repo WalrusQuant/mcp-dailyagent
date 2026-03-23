@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { QueryResult } from "@/lib/mcp/types";
-import { startOfWeek, getToday } from "@/lib/dates";
+
 
 export interface WeeklyReview {
   id: string;

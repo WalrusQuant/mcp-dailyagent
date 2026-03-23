@@ -37,9 +37,7 @@ export async function getTodayBriefing(
  * Briefing generation requires AI model resolution which is not available in the MCP query layer.
  * Use the /api/briefing endpoint directly for generation.
  */
-export async function generateBriefing(
-  _supabase: SupabaseClient,
-  _userId: string
-): Promise<QueryResult<never>> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function generateBriefing(supabase: SupabaseClient, userId: string): Promise<QueryResult<never>> {
   return { data: null, error: "Briefing generation via MCP coming soon" };
 }
