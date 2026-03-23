@@ -12,7 +12,8 @@ export async function executeTool(
   userId: string,
   toolName: string,
   args: Record<string, unknown>,
-  context?: { searchModel?: string }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _context?: { searchModel?: string }
 ): Promise<ToolResult> {
   const today = new Date().toISOString().slice(0, 10);
 

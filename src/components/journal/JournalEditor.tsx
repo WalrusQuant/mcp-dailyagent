@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { JournalEntry } from "@/types/database";
-import ReactMarkdown from "react-markdown";
+
 
 interface JournalEditorProps {
   entryId?: string;
