@@ -1,0 +1,85 @@
+# Ory Hydra v2 Configuration
+# Deploy on Railway with the official Docker image: oryd/hydra:v2.2
+#
+# Railway setup:
+#   1. Create a new Railway project
+#   2. Add a Postgres database (Railway managed)
+#   3. Add a Docker service using image: oryd/hydra:v2.2
+#   4. Set the environment variables listed below
+#   5. Set the start command: hydra serve all --config /etc/config/hydra.yml
+#   6. Mount this file at /etc/config/hydra.yml (or configure via env vars only)
+#
+# Required Railway environment variables:
+#   DSN=postgres://... (from Railway Postgres)
+#   SECRETS_SYSTEM=<generate with: openssl rand -hex 32>
+#   URLS_SELF_ISSUER=https://<your-hydra-domain>.railway.app
+#   URLS_LOGIN=https://<your-app-domain>/oauth/login
+#   URLS_CONSENT=https://<your-app-domain>/oauth/consent
+#   URLS_ERROR=https://<your-app-domain>/oauth/error
+#
+# Required app environment variables (in your Next.js .env.local):
+#   HYDRA_ADMIN_URL=https://<hydra-internal-url>:4445  (Railway internal networking)
+#   NEXT_PUBLIC_HYDRA_PUBLIC_URL=https://<your-hydra-domain>.railway.app
+#   NEXT_PUBLIC_APP_URL=https://<your-app-domain>
+
+serve:
+  public:
+    port: 4444
+    cors:
+      enabled: true
+      allowed_origins:
+        - https://claude.ai
+        - https://cdn.claude.ai
+        - http://localhost:3000
+      allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowed_headers:
+        - Authorization
+        - Content-Type
+        - Accept
+      exposed_headers:
+        - Content-Type
+      allow_credentials: true
+  admin:
+    port: 4445
+  cookies:
+    same_site_mode: None
+    secure: true
+
+urls:
+  self:
+    issuer: https://REPLACE_ME.railway.app
+  login: https://REPLACE_ME/oauth/login
+  consent: https://REPLACE_ME/oauth/consent
+  error: https://REPLACE_ME/oauth/error
+
+strategies:
+  access_token: opaque
+
+oidc:
+  dynamic_client_registration:
+    enabled: true
+  subject_identifiers:
+    supported_types:
+      - public
+
+oauth2:
+  pkce:
+    enforced: true
+  # Allow Claude's callback URLs
+  # Claude registers dynamically via DCR, so no static client config needed
+
+ttl:
+  access_token: 1h
+  refresh_token: 720h     # 30 days
+  authorize_code: 10m
+  id_token: 1h
+  login_consent_request: 15m
+
+# Hydra auto-runs migrations on startup
+dsn: memory
+# Override with DSN env var pointing to Railway Postgres

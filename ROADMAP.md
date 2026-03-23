@@ -331,9 +331,11 @@ Users generate API keys from the dashboard to authenticate MCP connections.
 
 ---
 
-## Phase 5: Ory Hydra Integration (OAuth 2.1)
+## Phase 5: Ory Hydra Integration (OAuth 2.1) ✅ (pending e2e test)
 
 Set up Ory Hydra as the OAuth 2.1 authorization server for MCP spec compliance. This enables Claude Desktop, Claude Code, and Cowork to authenticate via the standard MCP OAuth flow.
+
+**Completed 2026-03-23** — Hydra v2.3.0 deployed on Railway with Postgres. Login/consent UI, OAuth scopes, token validation, discovery endpoints, and Hydra admin client all implemented. DCR enabled. Admin API exposed via `hydra-admin.dailyagent.dev`. End-to-end OAuth flow testing blocked until Next.js app is deployed to Vercel (Hydra CSRF cookies require HTTPS + same production context).
 
 ### 5.1 — Hydra Infrastructure
 

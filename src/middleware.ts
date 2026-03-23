@@ -32,6 +32,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // OAuth routes — never redirect, Hydra manages the flow
+  if (pathname.startsWith("/oauth/")) {
+    return supabaseResponse;
+  }
+
   // Protected routes - redirect to login if not authenticated
   const protectedPrefixes = [
     "/settings",
@@ -64,6 +69,7 @@ export const config = {
   matcher: [
     "/login",
     "/signup",
+    "/oauth/:path*",
     "/settings/:path*",
     "/tasks/:path*",
     "/habits/:path*",
