@@ -254,4 +254,4 @@ docker compose up -d --build app
 
 ## License
 
-Personal use. Modify and self-host freely. No redistribution of source.
+AGPL-3.0. See [LICENSE](LICENSE).
