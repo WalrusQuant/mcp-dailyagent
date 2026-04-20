@@ -3,7 +3,7 @@ name: dailyagent
 description: Productivity data layer. Call the dailyagent MCP server to read and write tasks, habits, journal entries, workouts, focus sessions, goals, spaces, weekly reviews, daily briefings, and insights. Use this any time the user mentions any of those.
 ---
 
-# Daily Agent — MCP Skill
+# Daily Agent MCP — OpenClaw Skill
 
 ## What this is
 

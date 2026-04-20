@@ -123,7 +123,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
             <div className="flex items-center justify-between">
               <div className="pl-[calc(16px+0.5rem)]">
                 <h1 className="text-base font-bold tracking-tight leading-none" style={{ color: "var(--text-primary)" }}>
-                  Daily Agent
+                  Daily Agent MCP
                 </h1>
                 <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "var(--accent-primary)" }}>
                   Productivity

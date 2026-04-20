@@ -867,7 +867,7 @@ ${JSON.stringify(goal, null, 2)}
 
 Please provide:
 1. **Milestone breakdown** — 3-5 major milestones to reach this goal
-2. **Weekly task plan** — Specific tasks for the first 2 weeks (formatted as a task list I can add to Daily Agent)
+2. **Weekly task plan** — Specific tasks for the first 2 weeks (formatted as a task list I can add to Daily Agent MCP)
 3. **Daily habits to support it** — 1-2 daily habits that would accelerate progress
 4. **Potential blockers** — What might get in the way and how to pre-empt them
 5. **Success metrics** — How will I know I'm making real progress?

@@ -27,7 +27,7 @@ import { registerPrompts } from "./prompts";
 export function createMcpServer(): McpServer {
   const server = new McpServer(
     {
-      name: "Daily Agent",
+      name: "Daily Agent MCP",
       version: "1.0.0",
     },
     {

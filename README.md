@@ -1,4 +1,4 @@
-# Daily Agent
+# Daily Agent MCP
 
 > 📖 **Full documentation:** <https://dailyagent.dev/>
 

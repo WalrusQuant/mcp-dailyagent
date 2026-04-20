@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daily Agent">
-  <title>Daily Agent</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daily Agent MCP">
+  <title>Daily Agent MCP</title>
   <g fill="none" stroke="#d4a574" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
     <!-- Agent (top-left rectangle) -->
     <rect x="26" y="36" width="72" height="56" rx="10"/>
