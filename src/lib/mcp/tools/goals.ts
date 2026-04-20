@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { goals } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,18 +10,23 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getGoals(userId: string, status?: string) {
-  const supabase = getServiceClient();
+  try {
+    const rows = status
+      ? await db
+          .select()
+          .from(goals)
+          .where(and(eq(goals.userId, userId), eq(goals.status, status as "active" | "completed" | "abandoned")))
+          .orderBy(desc(goals.createdAt))
+      : await db
+          .select()
+          .from(goals)
+          .where(eq(goals.userId, userId))
+          .orderBy(desc(goals.createdAt));
 
-  let query = supabase
-    .from("goals")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (status) query = query.eq("status", status as "active" | "completed" | "abandoned");
-
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function createGoal(
@@ -31,25 +38,23 @@ async function createGoal(
     target_date?: string;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("goals")
-    .insert({
-      user_id: userId,
-      title: args.title,
-      description: args.description ?? null,
-      ...(args.category
-        ? { category: args.category as "health" | "career" | "personal" | "financial" | "learning" | "relationships" | "other" }
-        : {}),
-      target_date: args.target_date ?? null,
-      status: "active" as const,
-      progress: 0,
-    })
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .insert(goals)
+      .values({
+        userId,
+        title: args.title,
+        description: args.description ?? null,
+        ...(args.category ? { category: args.category as "health" | "career" | "personal" | "financial" | "learning" | "relationships" | "other" } : {}),
+        targetDate: args.target_date ?? null,
+        status: "active" as const,
+        progress: 0,
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function updateGoal(
@@ -62,38 +67,36 @@ async function updateGoal(
     progress?: number;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const updates: Record<string, unknown> = {};
+  const updates: Partial<typeof goals.$inferInsert> = {};
   if (args.title !== undefined) updates.title = args.title;
   if (args.description !== undefined) updates.description = args.description;
-  if (args.status !== undefined) updates.status = args.status;
+  if (args.status !== undefined) updates.status = args.status as "active" | "completed" | "abandoned";
   if (args.progress !== undefined) updates.progress = args.progress;
+  updates.updatedAt = new Date();
 
-  const { data, error } = await supabase
-    .from("goals")
-    .update(updates)
-    .eq("id", args.goal_id)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(goals)
+      .set(updates)
+      .where(and(eq(goals.id, args.goal_id), eq(goals.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Goal not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function logGoalProgress(userId: string, goalId: string, progress: number) {
-  const supabase = getServiceClient();
-
-  // Verify ownership then update progress
-  const { data, error } = await supabase
-    .from("goals")
-    .update({ progress })
-    .eq("id", goalId)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(goals)
+      .set({ progress, updatedAt: new Date() })
+      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Goal not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------

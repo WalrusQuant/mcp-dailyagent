@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getWorkoutLogs } from "@/lib/mcp/queries/workouts";
 import { getToday, addDays } from "@/lib/dates";
@@ -21,10 +21,9 @@ export function registerWorkoutResources(server: McpServer) {
         };
       }
 
-      const supabase = getServiceClient();
       const today = getToday();
       const from = addDays(today, -7);
-      const result = await getWorkoutLogs(supabase, auth.userId, { from, to: today });
+      const result = await getWorkoutLogs(db, auth.userId, { from, to: today });
 
       return {
         contents: [

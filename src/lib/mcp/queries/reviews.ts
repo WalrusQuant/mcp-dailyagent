@@ -1,6 +1,7 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { weeklyReviews } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-
 
 export interface WeeklyReview {
   id: string;
@@ -11,22 +12,31 @@ export interface WeeklyReview {
   updated_at: string;
 }
 
+function rowToReview(row: typeof weeklyReviews.$inferSelect): WeeklyReview {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    week_start: row.weekStart,
+    content: row.content,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
+}
+
 /** Get the most recent weekly review */
 export async function getLatestReview(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string
 ): Promise<QueryResult<WeeklyReview | null>> {
   try {
-    const { data, error } = await supabase
-      .from("weekly_reviews")
-      .select("*")
-      .eq("user_id", userId)
-      .order("week_start", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const rows = await db
+      .select()
+      .from(weeklyReviews)
+      .where(eq(weeklyReviews.userId, userId))
+      .orderBy(desc(weeklyReviews.weekStart))
+      .limit(1);
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as WeeklyReview | null, error: null };
+    return { data: rows.length > 0 ? rowToReview(rows[0]) : null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -34,20 +44,17 @@ export async function getLatestReview(
 
 /** Get the weekly review for a specific week */
 export async function getReviewForWeek(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   weekStart: string
 ): Promise<QueryResult<WeeklyReview | null>> {
   try {
-    const { data, error } = await supabase
-      .from("weekly_reviews")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("week_start", weekStart)
-      .maybeSingle();
+    const rows = await db
+      .select()
+      .from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, weekStart)));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as WeeklyReview | null, error: null };
+    return { data: rows.length > 0 ? rowToReview(rows[0]) : null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -60,27 +67,30 @@ export interface SaveReviewInput {
 
 /** Upsert a weekly review, tagged as source='mcp' */
 export async function saveReview(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: SaveReviewInput
 ): Promise<QueryResult<WeeklyReview>> {
   try {
-    const { data, error } = await supabase
-      .from("weekly_reviews")
-      .upsert(
-        {
-          user_id: userId,
-          week_start: input.week_start,
+    const [row] = await db
+      .insert(weeklyReviews)
+      .values({
+        userId,
+        weekStart: input.week_start,
+        content: input.content,
+        source: "mcp",
+      })
+      .onConflictDoUpdate({
+        target: [weeklyReviews.userId, weeklyReviews.weekStart],
+        set: {
           content: input.content,
           source: "mcp",
+          updatedAt: new Date(),
         },
-        { onConflict: "user_id,week_start" }
-      )
-      .select()
-      .single();
+      })
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as WeeklyReview, error: null };
+    return { data: rowToReview(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }

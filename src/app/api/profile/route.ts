@@ -1,117 +1,96 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { profiles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const userId = getUserId();
+    const [profile] = await db
+      .select({
+        displayName: profiles.displayName,
+        avatarUrl: profiles.avatarUrl,
+        timezone: profiles.timezone,
+        toolCallingEnabled: profiles.toolCallingEnabled,
+        briefingEnabled: profiles.briefingEnabled,
+        aiModelConfig: profiles.aiModelConfig,
+      })
+      .from(profiles)
+      .where(eq(profiles.id, userId));
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      displayName: profile.displayName ?? null,
+      avatarUrl: profile.avatarUrl ?? null,
+      timezone: profile.timezone ?? "UTC",
+      toolCallingEnabled: profile.toolCallingEnabled ?? true,
+      briefingEnabled: profile.briefingEnabled ?? true,
+      aiModelConfig: profile.aiModelConfig ?? null,
+    });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
-
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("display_name, avatar_url, timezone, ai_model_config, tool_calling_enabled, briefing_enabled")
-    .eq("id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    displayName: profile?.display_name ?? null,
-    avatarUrl: profile?.avatar_url ?? null,
-    timezone: profile?.timezone ?? "UTC",
-    toolCallingEnabled: profile?.tool_calling_enabled ?? true,
-    briefingEnabled: profile?.briefing_enabled ?? true,
-    aiModelConfig: profile?.ai_model_config ?? null,
-  });
 }
 
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const userId = getUserId();
+    const body = await request.json();
+    const allowed: Partial<typeof profiles.$inferInsert> = {};
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const allowed: Record<string, unknown> = {};
-
-  if (typeof body.displayName === "string" || body.displayName === null) {
-    allowed.display_name = body.displayName || null;
-  }
-
-  if (typeof body.avatarUrl === "string" || body.avatarUrl === null) {
-    allowed.avatar_url = body.avatarUrl || null;
-  }
-
-  if (typeof body.timezone === "string") {
-    allowed.timezone = body.timezone;
-  }
-
-  if (typeof body.toolCallingEnabled === "boolean") {
-    allowed.tool_calling_enabled = body.toolCallingEnabled;
-  }
-
-  if (typeof body.briefingEnabled === "boolean") {
-    allowed.briefing_enabled = body.briefingEnabled;
-  }
-
-  if (body.aiModelConfig !== undefined) {
-    if (body.aiModelConfig === null || typeof body.aiModelConfig === "object") {
-      allowed.ai_model_config = body.aiModelConfig;
+    if (typeof body.displayName === "string" || body.displayName === null) {
+      allowed.displayName = body.displayName || null;
     }
+
+    if (typeof body.avatarUrl === "string" || body.avatarUrl === null) {
+      allowed.avatarUrl = body.avatarUrl || null;
+    }
+
+    if (typeof body.timezone === "string") {
+      allowed.timezone = body.timezone;
+    }
+
+    if (typeof body.toolCallingEnabled === "boolean") {
+      allowed.toolCallingEnabled = body.toolCallingEnabled;
+    }
+
+    if (typeof body.briefingEnabled === "boolean") {
+      allowed.briefingEnabled = body.briefingEnabled;
+    }
+
+    if (body.aiModelConfig !== undefined) {
+      if (body.aiModelConfig === null || typeof body.aiModelConfig === "object") {
+        allowed.aiModelConfig = body.aiModelConfig;
+      }
+    }
+
+    if (Object.keys(allowed).length === 0) {
+      return NextResponse.json({ error: "No valid fields" }, { status: 400 });
+    }
+
+    allowed.updatedAt = new Date();
+
+    await db.update(profiles).set(allowed).where(eq(profiles.id, userId));
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
-
-  if (Object.keys(allowed).length === 0) {
-    return NextResponse.json({ error: "No valid fields" }, { status: 400 });
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update(allowed)
-    .eq("id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }
 
 export async function DELETE() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    // Clear profile data (keep row for auth integrity)
-    await supabase
-      .from("profiles")
-      .update({
-        display_name: null,
-        avatar_url: null,
-      })
-      .eq("id", user.id);
-
+    const userId = getUserId();
+    await db
+      .update(profiles)
+      .set({ displayName: null, avatarUrl: null, updatedAt: new Date() })
+      .where(eq(profiles.id, userId));
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Account deletion error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete account data" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } from "@/lib/db/schema";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,36 +10,84 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getWorkoutLogs(userId: string, date?: string, from?: string, to?: string) {
-  const supabase = getServiceClient();
+  try {
+    const conditions =
+      date
+        ? and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, date))
+        : from && to
+        ? and(eq(workoutLogs.userId, userId), gte(workoutLogs.logDate, from), lte(workoutLogs.logDate, to))
+        : from
+        ? and(eq(workoutLogs.userId, userId), gte(workoutLogs.logDate, from))
+        : to
+        ? and(eq(workoutLogs.userId, userId), lte(workoutLogs.logDate, to))
+        : eq(workoutLogs.userId, userId);
 
-  let query = supabase
-    .from("workout_logs")
-    .select("*, workout_log_exercises(*)")
-    .eq("user_id", userId)
-    .order("log_date", { ascending: false });
+    const logsQuery = db
+      .select()
+      .from(workoutLogs)
+      .where(conditions)
+      .orderBy(desc(workoutLogs.logDate));
 
-  if (date) {
-    query = query.eq("log_date", date);
-  } else {
-    if (from) query = query.gte("log_date", from);
-    if (to) query = query.lte("log_date", to);
-    if (!from && !to) query = query.limit(20);
+    const logs = !date && !from && !to
+      ? await logsQuery.limit(20)
+      : await logsQuery;
+
+    if (logs.length === 0) return { data: [], error: null };
+
+    const logIds = logs.map((l) => l.id);
+    const exercises = await db
+      .select()
+      .from(workoutLogExercises)
+      .where(logIds.length === 1 ? eq(workoutLogExercises.logId, logIds[0]) : inArray(workoutLogExercises.logId, logIds));
+
+    const exercisesByLog = new Map<string, typeof exercises>();
+    for (const ex of exercises) {
+      if (!exercisesByLog.has(ex.logId)) exercisesByLog.set(ex.logId, []);
+      exercisesByLog.get(ex.logId)!.push(ex);
+    }
+
+    const data = logs.map((log) => ({
+      ...log,
+      workout_log_exercises: exercisesByLog.get(log.id) ?? [],
+    }));
+
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
-
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
 }
 
 async function getWorkoutTemplates(userId: string) {
-  const supabase = getServiceClient();
+  try {
+    const templates = await db
+      .select()
+      .from(workoutTemplates)
+      .where(eq(workoutTemplates.userId, userId))
+      .orderBy(desc(workoutTemplates.createdAt));
 
-  const { data, error } = await supabase
-    .from("workout_templates")
-    .select("*, workout_exercises(*)")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    if (templates.length === 0) return { data: [], error: null };
 
-  return { data, error: error?.message ?? null };
+    const templateIds = templates.map((t) => t.id);
+    const exercises = await db
+      .select()
+      .from(workoutExercises)
+      .where(templateIds.length === 1 ? eq(workoutExercises.templateId, templateIds[0]) : inArray(workoutExercises.templateId, templateIds));
+
+    const exercisesByTemplate = new Map<string, typeof exercises>();
+    for (const ex of exercises) {
+      if (!exercisesByTemplate.has(ex.templateId)) exercisesByTemplate.set(ex.templateId, []);
+      exercisesByTemplate.get(ex.templateId)!.push(ex);
+    }
+
+    const data = templates.map((t) => ({
+      ...t,
+      workout_exercises: exercisesByTemplate.get(t.id) ?? [],
+    }));
+
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 interface ExerciseEntry {
@@ -59,8 +109,6 @@ async function logWorkout(
     exercises?: string;
   }
 ) {
-  const supabase = getServiceClient();
-
   // Parse exercises JSON if provided
   let exercises: ExerciseEntry[] = [];
   if (args.exercises) {
@@ -71,44 +119,40 @@ async function logWorkout(
     }
   }
 
-  const { data: log, error: logError } = await supabase
-    .from("workout_logs")
-    .insert({
-      user_id: userId,
-      name: args.name,
-      log_date: args.log_date,
-      duration_minutes: args.duration_minutes ?? null,
-      notes: args.notes ?? null,
-    })
-    .select()
-    .single();
+  try {
+    const [log] = await db
+      .insert(workoutLogs)
+      .values({
+        userId,
+        name: args.name,
+        logDate: args.log_date,
+        durationMinutes: args.duration_minutes ?? null,
+        notes: args.notes ?? null,
+      })
+      .returning();
 
-  if (logError || !log) {
-    return { data: null, error: logError?.message ?? "Failed to create workout log" };
-  }
+    if (exercises.length > 0) {
+      const exerciseRows = exercises.map((ex) => ({
+        logId: log.id,
+        exerciseName: ex.name,
+        exerciseType: "strength" as const,
+        sets:
+          ex.sets != null
+            ? Array.from({ length: ex.sets }, () => ({
+                reps: ex.reps,
+                weight: ex.weight,
+                duration: ex.duration_seconds,
+              }))
+            : [],
+      }));
 
-  // Insert exercises if provided
-  if (exercises.length > 0) {
-    // Pack individual set fields into the sets JSONB array format the DB uses
-    const exerciseRows = exercises.map((ex) => ({
-      log_id: log.id,
-      exercise_name: ex.name,
-      sets: ex.sets != null
-        ? Array.from({ length: ex.sets }, () => ({
-            reps: ex.reps,
-            weight: ex.weight,
-            duration: ex.duration_seconds,
-          }))
-        : [],
-    }));
-
-    const { error: exError } = await supabase.from("workout_log_exercises").insert(exerciseRows);
-    if (exError) {
-      return { data: log, error: `Workout created but exercises failed: ${exError.message}` };
+      await db.insert(workoutLogExercises).values(exerciseRows);
     }
-  }
 
-  return { data: { ...log, exercises }, error: null };
+    return { data: { ...log, exercises }, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +212,7 @@ export function registerWorkoutTools(server: McpServer) {
       duration_minutes: z.number().optional().describe("Duration in minutes"),
       notes: z.string().optional().describe("Workout notes"),
       exercises: z.string().optional().describe(
-        "JSON string array of exercises, e.g. [{\"name\":\"Squat\",\"sets\":3,\"reps\":10,\"weight\":100}]"
+        'JSON string array of exercises, e.g. [{"name":"Squat","sets":3,"reps":10,"weight":100}]'
       ),
     },
     async (args, extra: Extra) => {

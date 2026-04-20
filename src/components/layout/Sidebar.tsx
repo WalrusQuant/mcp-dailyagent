@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
 import {
-  LogOut,
   Sun,
   Moon,
   Monitor,
@@ -23,7 +21,6 @@ import {
   FileText,
   CalendarDays,
   Crosshair,
-  Shield,
 } from "lucide-react";
 import { FocusTimerBadge } from "@/components/focus/FocusTimerBadge";
 import { useTheme } from "@/lib/theme";
@@ -36,42 +33,26 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
-  const [isAdmin, setIsAdmin] = useState(false);
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
 
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
-
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
-    async function loadUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (cancelled) return;
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("display_name, is_admin")
-          .eq("id", user.id)
-          .single();
-        if (cancelled) return;
-        setUserDisplayName(profile?.display_name || user.email || null);
-        setIsAdmin(profile?.is_admin === true);
+    async function loadProfile() {
+      try {
+        const res = await fetch("/api/profile");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setUserDisplayName(data.displayName || null);
+      } catch {
+        // non-fatal — sidebar works without a display name
       }
     }
-    loadUser();
+    loadProfile();
     return () => { cancelled = true; };
-  }, [supabase]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  };
+  }, []);
 
   const handleNavClick = () => {
     if (window.innerWidth < 768) onClose();
@@ -228,20 +209,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
               >
                 <Settings className="w-4 h-4" />
               </Link>
-
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  onClick={handleNavClick}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{
-                    color: pathname === "/admin" ? "var(--accent-primary)" : "var(--text-secondary)",
-                  }}
-                  title="Admin"
-                >
-                  <Shield className="w-4 h-4" />
-                </Link>
-              )}
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -290,20 +257,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
                 <Settings className="w-4 h-4" />
                 Settings
               </Link>
-
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  onClick={handleNavClick}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                  style={{
-                    color: pathname === "/admin" ? "var(--accent-primary)" : "var(--text-secondary)",
-                  }}
-                >
-                  <Shield className="w-4 h-4" />
-                  Admin
-                </Link>
-              )}
             </div>
           )}
         </div>
@@ -311,7 +264,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
         {/* Footer */}
         <div className={`${collapsed ? "p-2" : "p-4"} space-y-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]`} style={{ borderTop: "1px solid var(--border-default)" }}>
           <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "justify-between"}`}>
-            {!collapsed && (
+            {!collapsed && userDisplayName && (
               <span
                 className="text-sm truncate max-w-[150px]"
                 style={{ color: "var(--text-secondary)" }}
@@ -327,14 +280,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
                 title={`Theme: ${theme}`}
               >
                 <ThemeIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-lg transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                title="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>

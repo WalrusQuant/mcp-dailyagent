@@ -1,107 +1,123 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { tasks, habitLogs, habits, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import type { DayDetail } from "@/components/calendar/types";
+import { getUserId } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const date = request.nextUrl.searchParams.get("date");
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "Invalid date parameter (YYYY-MM-DD)" }, { status: 400 });
   }
 
-  const [tasksResult, habitLogsResult, journalResult, workoutsResult, focusResult] =
-    await Promise.all([
-      supabase
-        .from("tasks")
-        .select("id, title, priority, done")
-        .eq("user_id", user.id)
-        .eq("task_date", date)
-        .order("sort_order", { ascending: true }),
-      supabase
-        .from("habit_logs")
-        .select("habit_id, habits(name, color)")
-        .eq("user_id", user.id)
-        .eq("log_date", date),
-      supabase
-        .from("journal_entries")
-        .select("id, mood, content")
-        .eq("user_id", user.id)
-        .eq("entry_date", date)
-        .maybeSingle(),
-      supabase
-        .from("workout_logs")
-        .select("id, name, duration_minutes")
-        .eq("user_id", user.id)
-        .eq("log_date", date)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("focus_sessions")
-        .select("id, duration_minutes, task_id, status, tasks(title)")
-        .eq("user_id", user.id)
-        .gte("started_at", `${date}T00:00:00`)
-        .lte("started_at", `${date}T23:59:59`)
-        .in("status", ["completed", "active"])
-        .order("started_at", { ascending: false }),
-    ]);
+  try {
+    const [taskRows, habitLogRows, journalRow, workoutRows, focusRows, allHabitRows] =
+      await Promise.all([
+        db
+          .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done })
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, date)))
+          .orderBy(tasks.sortOrder),
+        db
+          .select({ habitId: habitLogs.habitId })
+          .from(habitLogs)
+          .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, date))),
+        db
+          .select({ id: journalEntries.id, mood: journalEntries.mood, content: journalEntries.content })
+          .from(journalEntries)
+          .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date)))
+          .limit(1),
+        db
+          .select({ id: workoutLogs.id, name: workoutLogs.name, durationMinutes: workoutLogs.durationMinutes })
+          .from(workoutLogs)
+          .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, date)))
+          .orderBy(workoutLogs.createdAt),
+        db
+          .select({
+            id: focusSessions.id,
+            durationMinutes: focusSessions.durationMinutes,
+            taskId: focusSessions.taskId,
+            status: focusSessions.status,
+          })
+          .from(focusSessions)
+          .where(
+            and(
+              eq(focusSessions.userId, userId),
+              gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
+              lte(focusSessions.startedAt, new Date(`${date}T23:59:59`)),
+              inArray(focusSessions.status, ["completed", "active"])
+            )
+          )
+          .orderBy(focusSessions.startedAt),
+        db
+          .select({ id: habits.id, name: habits.name, color: habits.color, targetDays: habits.targetDays })
+          .from(habits)
+          .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
+      ]);
 
-  // Get all active habits to show which ones are expected but not completed
-  const habitsResult = await supabase
-    .from("habits")
-    .select("id, name, color, target_days")
-    .eq("user_id", user.id)
-    .eq("archived", false);
+    const d = new Date(date + "T00:00:00");
+    const dow = d.getDay() === 0 ? 7 : d.getDay();
 
-  const d = new Date(date + "T00:00:00");
-  const dow = d.getDay() === 0 ? 7 : d.getDay();
+    const completedHabitIds = new Set(habitLogRows.map((hl) => hl.habitId));
 
-  const completedHabitIds = new Set(
-    (habitLogsResult.data ?? []).map((hl: Record<string, unknown>) => hl.habit_id as string)
-  );
+    const habitsSummary = allHabitRows
+      .filter((h) => (h.targetDays ?? []).includes(dow))
+      .map((h) => ({
+        name: h.name,
+        color: h.color,
+        completed: completedHabitIds.has(h.id),
+      }));
 
-  const habits = (habitsResult.data ?? [])
-    .filter((h) => h.target_days.includes(dow))
-    .map((h) => ({
-      name: h.name,
-      color: h.color,
-      completed: completedHabitIds.has(h.id),
-    }));
+    // Get task titles for focus sessions that have a task_id
+    const focusTaskIds = focusRows
+      .filter((f) => f.taskId)
+      .map((f) => f.taskId as string);
 
-  const detail: DayDetail = {
-    date,
-    tasks: (tasksResult.data ?? []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      priority: t.priority,
-      done: t.done,
-    })),
-    habits,
-    journal: journalResult.data
-      ? {
-          id: journalResult.data.id,
-          mood: journalResult.data.mood,
-          content: journalResult.data.content,
-        }
-      : null,
-    workouts: (workoutsResult.data ?? []).map((w) => ({
-      id: w.id,
-      name: w.name,
-      duration_minutes: w.duration_minutes,
-    })),
-    focus: (focusResult.data ?? []).map((f: Record<string, unknown>) => ({
-      id: f.id as string,
-      duration_minutes: f.duration_minutes as number,
-      task_title: (f.tasks as { title: string } | null)?.title ?? null,
-      status: f.status as string,
-    })),
-  };
+    const focusTaskMap = new Map<string, string>();
+    if (focusTaskIds.length > 0) {
+      const focusTaskRows = await db
+        .select({ id: tasks.id, title: tasks.title })
+        .from(tasks)
+        .where(inArray(tasks.id, focusTaskIds));
+      for (const t of focusTaskRows) {
+        focusTaskMap.set(t.id, t.title);
+      }
+    }
 
-  return NextResponse.json(detail);
+    const detail: DayDetail = {
+      date,
+      tasks: taskRows.map((t) => ({
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        done: t.done,
+      })),
+      habits: habitsSummary,
+      journal: journalRow[0]
+        ? {
+            id: journalRow[0].id,
+            mood: journalRow[0].mood,
+            content: journalRow[0].content,
+          }
+        : null,
+      workouts: workoutRows.map((w) => ({
+        id: w.id,
+        name: w.name,
+        duration_minutes: w.durationMinutes,
+      })),
+      focus: focusRows.map((f) => ({
+        id: f.id,
+        duration_minutes: f.durationMinutes,
+        task_title: f.taskId ? (focusTaskMap.get(f.taskId) ?? null) : null,
+        status: f.status,
+      })),
+    };
+
+    return NextResponse.json(detail);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+  }
 }

@@ -1,22 +1,28 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { tags } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
+
+function serializeTag(t: typeof tags.$inferSelect) {
+  return {
+    id: t.id,
+    user_id: t.userId,
+    name: t.name,
+    color: t.color,
+    created_at: t.createdAt,
+  };
+}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof tags.$inferInsert> = {};
   if (typeof body.name === "string") allowedFields.name = body.name.trim();
   if (typeof body.color === "string") allowedFields.color = body.color;
 
@@ -24,47 +30,37 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("tags")
-    .update(allowedFields)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .update(tags)
+      .set(allowedFields)
+      .where(and(eq(tags.id, id), eq(tags.userId, userId)))
+      .returning();
 
-  if (error) {
-    if (error.code === "23505") {
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeTag(row));
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("unique")) {
       return NextResponse.json({ error: "Tag name already exists" }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db.delete(tags).where(and(eq(tags.id, id), eq(tags.userId, userId)));
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("tags")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

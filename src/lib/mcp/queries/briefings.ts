@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { dailyBriefings } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -12,32 +14,32 @@ export interface DailyBriefing {
 
 /** Get today's cached daily briefing, if it exists */
 export async function getTodayBriefing(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string
 ): Promise<QueryResult<DailyBriefing | null>> {
   try {
     const today = getToday();
 
-    const { data, error } = await supabase
-      .from("daily_briefings")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("briefing_date", today)
-      .maybeSingle();
+    const rows = await db
+      .select()
+      .from(dailyBriefings)
+      .where(and(eq(dailyBriefings.userId, userId), eq(dailyBriefings.briefingDate, today)));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as DailyBriefing | null, error: null };
+    if (rows.length === 0) return { data: null, error: null };
+
+    const row = rows[0];
+    return {
+      data: {
+        id: row.id,
+        user_id: row.userId,
+        briefing_date: row.briefingDate,
+        content: row.content,
+        created_at: row.createdAt ? row.createdAt.toISOString() : new Date().toISOString(),
+      },
+      error: null,
+    };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
-/**
- * Generate a new daily briefing via MCP.
- * Briefing generation requires AI model resolution which is not available in the MCP query layer.
- * Use the /api/briefing endpoint directly for generation.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function generateBriefing(supabase: SupabaseClient, userId: string): Promise<QueryResult<never>> {
-  return { data: null, error: "Briefing generation via MCP coming soon" };
-}

@@ -1,16 +1,23 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { weeklyReviews } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET weekly review for a given week
+function serializeReview(r: typeof weeklyReviews.$inferSelect) {
+  return {
+    id: r.id,
+    user_id: r.userId,
+    week_start: r.weekStart,
+    content: r.content,
+    source: r.source,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
+  };
+}
+
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
   const week = searchParams.get("week");
@@ -22,34 +29,25 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
-    .from("weekly_reviews")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("week_start", week)
-    .maybeSingle();
+  try {
+    const rows = await db
+      .select()
+      .from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week)))
+      .limit(1);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (rows.length === 0) {
+      return NextResponse.json(null, { status: 200 });
+    }
+
+    return NextResponse.json(serializeReview(rows[0]));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  if (!data) {
-    return NextResponse.json(null, { status: 200 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// POST create or update a weekly review
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { week_start, content } = body;
@@ -62,28 +60,35 @@ export async function POST(request: NextRequest) {
   }
 
   if (typeof content !== "string" || content.trim().length === 0) {
-    return NextResponse.json(
-      { error: "content is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("weekly_reviews")
-    .upsert(
-      {
-        user_id: user.id,
-        week_start,
-        content,
-      },
-      { onConflict: "user_id,week_start" }
-    )
-    .select()
-    .single();
+  try {
+    // Upsert: check existing first
+    const existing = await db
+      .select()
+      .from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week_start)))
+      .limit(1);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    let row;
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(weeklyReviews)
+        .set({ content, updatedAt: new Date() })
+        .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week_start)))
+        .returning();
+      row = updated;
+    } else {
+      const [inserted] = await db
+        .insert(weeklyReviews)
+        .values({ userId, weekStart: week_start, content })
+        .returning();
+      row = inserted;
+    }
+
+    return NextResponse.json(serializeReview(row), { status: 200 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data, { status: 200 });
 }

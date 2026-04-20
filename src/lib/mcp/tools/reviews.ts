@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { weeklyReviews } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,50 +10,54 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getReviewForWeek(userId: string, weekStart: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("weekly_reviews")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("week_start", weekStart)
-    .single();
-
-  return { data, error: error?.code === "PGRST116" ? null : (error?.message ?? null) };
+  try {
+    const rows = await db
+      .select()
+      .from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, weekStart)));
+    return { data: rows.length > 0 ? rows[0] : null, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function getLatestReview(userId: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("weekly_reviews")
-    .select("*")
-    .eq("user_id", userId)
-    .order("week_start", { ascending: false })
-    .limit(1)
-    .single();
-
-  return { data, error: error?.code === "PGRST116" ? null : (error?.message ?? null) };
+  try {
+    const rows = await db
+      .select()
+      .from(weeklyReviews)
+      .where(eq(weeklyReviews.userId, userId))
+      .orderBy(desc(weeklyReviews.weekStart))
+      .limit(1);
+    return { data: rows.length > 0 ? rows[0] : null, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function saveReview(userId: string, weekStart: string, content: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("weekly_reviews")
-    .upsert(
-      {
-        user_id: userId,
-        week_start: weekStart,
+  try {
+    const [row] = await db
+      .insert(weeklyReviews)
+      .values({
+        userId,
+        weekStart,
         content,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,week_start" }
-    )
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+        source: "mcp",
+      })
+      .onConflictDoUpdate({
+        target: [weeklyReviews.userId, weeklyReviews.weekStart],
+        set: {
+          content,
+          source: "mcp",
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------
