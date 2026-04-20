@@ -1,6 +1,6 @@
 site_name: Daily Agent
-site_description: Hardened productivity data layer for OpenClaw — MCP server + dashboard, self-hosted, single-user.
-site_url: https://walrusquant.github.io/mcp-dailyagent/
+site_description: Hardened productivity data layer for OpenClaw — typed MCP server + Next.js dashboard over a single self-hosted Postgres.
+site_url: https://dailyagent.dev/docs/
 repo_url: https://github.com/WalrusQuant/mcp-dailyagent
 repo_name: WalrusQuant/mcp-dailyagent
 edit_uri: edit/main/docs/
@@ -14,6 +14,7 @@ exclude_docs: |
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.png
   favicon: assets/logo.png
   icon:

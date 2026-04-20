@@ -1,6 +1,6 @@
 # Daily Agent
 
-> 📖 **Full documentation:** <https://walrusquant.github.io/mcp-dailyagent/>
+> 📖 **Full documentation:** <https://dailyagent.dev/>
 
 **Hardened productivity data layer for [OpenClaw](https://openclaw.ai).** Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.
 

@@ -5,30 +5,11 @@
 Two front doors, one database, no app-level auth.
 
 ```mermaid
-flowchart TB
-    subgraph Tailnet["Your tailnet"]
-        direction LR
-        Browser[Browser]
-        OC[OpenClaw agent]
-        Laptop[Your laptop / phone]
-    end
-
-    subgraph VPS["VPS (behind Tailscale, port 3000 firewalled)"]
-        direction TB
-        subgraph App["Next.js container"]
-            direction LR
-            Pages["(protected) pages<br/>— /dashboard, /tasks, ..."]
-            APIv1["/api/* routes<br/>— CRUD for UI"]
-            MCPRoute["/api/mcp<br/>— Streamable HTTP, Bearer auth"]
-        end
-        DB[(Postgres 16<br/>dailyagent_pgdata volume)]
-    end
-
-    Browser --> Pages
-    Pages --> APIv1
-    OC -->|Bearer MCP_API_KEY| MCPRoute
-    Laptop --> Browser
-    APIv1 --> DB
+flowchart TD
+    Browser[Browser] --> Pages["(protected) pages"]
+    OC[OpenClaw agent] -->|Bearer MCP_API_KEY| MCPRoute["/api/mcp"]
+    Pages --> APIv1["/api/* routes"]
+    APIv1 --> DB[(Postgres 16)]
     MCPRoute --> DB
 ```
 
@@ -134,20 +115,11 @@ docs/                         # This documentation
 ## Deployment topology
 
 ```mermaid
-flowchart LR
-    subgraph VPS
-        subgraph Compose["docker compose"]
-            PGC["postgres container<br/>dailyagent-postgres<br/>127.0.0.1:5432"]
-            APPC["app container<br/>dailyagent-app<br/>127.0.0.1:3000"]
-        end
-        Volume[(dailyagent_pgdata)]
-        Firewall{{ufw: 3000 denied publicly}}
-        TS[Tailscale wireguard iface]
-    end
-    APPC --> PGC
-    PGC --> Volume
-    TS -- allows --> APPC
-    Firewall -. does not block .-> TS
+flowchart TD
+    TS[Tailscale wireguard iface] --> APPC["app container<br/>127.0.0.1:3000"]
+    APPC --> PGC["postgres container<br/>127.0.0.1:5432"]
+    PGC --> Volume[(dailyagent_pgdata)]
+    Firewall{{ufw: 3000 denied publicly}} -.-> TS
 ```
 
 The `depends_on: postgres service_healthy` clause in `docker-compose.yml` makes the app wait for Postgres to pass its `pg_isready` healthcheck before starting. Data survives container restarts via the named `dailyagent_pgdata` volume.

@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f1115">
+
+  <title>Daily Agent — Productivity data layer for OpenClaw</title>
+  <meta name="description" content="Hardened productivity data layer for OpenClaw. Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.">
+  <meta name="author" content="WalrusQuant">
+
+  <link rel="canonical" href="https://dailyagent.dev/">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://dailyagent.dev/">
+  <meta property="og:title" content="Daily Agent — Productivity data layer for OpenClaw">
+  <meta property="og:description" content="Postgres + typed MCP for your OpenClaw agent. Self-hosted, single-user, Tailscale-gated. No AI in the dashboard — that's the point.">
+  <meta property="og:image" content="https://dailyagent.dev/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Daily Agent — MCP data layer. Your productivity data. Your agent. Your rules.">
+  <meta property="og:site_name" content="Daily Agent">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Daily Agent — Productivity data layer for OpenClaw">
+  <meta name="twitter:description" content="Postgres + typed MCP for your OpenClaw agent. Self-hosted, single-user, Tailscale-gated.">
+  <meta name="twitter:image" content="https://dailyagent.dev/og-image.png">
+  <meta name="twitter:image:alt" content="Daily Agent — MCP data layer. Your productivity data. Your agent. Your rules.">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Daily Agent",
+    "description": "Hardened productivity data layer for OpenClaw. Postgres + typed MCP server + Next.js dashboard. Self-hosted, single-user, Tailscale-gated.",
+    "url": "https://dailyagent.dev/",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, any Docker-capable host",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "WalrusQuant",
+      "url": "https://github.com/WalrusQuant"
+    },
+    "codeRepository": "https://github.com/WalrusQuant/mcp-dailyagent",
+    "programmingLanguage": ["TypeScript", "SQL"]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --bg-secondary: #14161d;
+      --bg-card: #1a1b23;
+      --bg-elevated: #1e1f2a;
+      --text: #e8e4e0;
+      --text-secondary: #9a9590;
+      --text-muted: #6b6862;
+      --accent: #d4a574;
+      --accent-hover: #e8bd8a;
+      --accent-dim: rgba(212, 165, 116, 0.12);
+      --accent-dim-strong: rgba(212, 165, 116, 0.22);
+      --border: #262731;
+      --border-strong: #363743;
+      --radius: 12px;
+      --radius-lg: 18px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.9em;
+    }
+    code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav.top {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(15, 17, 21, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav.top .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+    .brand img { width: 32px; height: 32px; }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .nav-links a {
+      color: var(--text-secondary);
+      font-size: 15px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links .github {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 96px 0 72px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 50% 0%, var(--accent-dim) 0%, transparent 45%),
+        radial-gradient(circle at 10% 100%, rgba(212, 165, 116, 0.04) 0%, transparent 40%);
+      pointer-events: none;
+    }
+    .hero-content { position: relative; }
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent-dim-strong);
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 28px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(40px, 6.5vw, 68px);
+      font-weight: 800;
+      line-height: 1.05;
+      margin-bottom: 24px;
+      letter-spacing: -0.025em;
+    }
+    .hero h1 .accent { color: var(--accent); }
+    .hero p.tagline {
+      font-size: clamp(17px, 2vw, 20px);
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto 48px;
+      line-height: 1.6;
+    }
+    .cta-group {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .cta-primary, .cta-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 100px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: transform 0.15s, background 0.2s, border-color 0.2s, opacity 0.2s;
+    }
+    .cta-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .cta-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    .cta-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+    }
+    .cta-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Diagram */
+    .shape-section {
+      padding: 40px 0 80px;
+    }
+    .shape-card {
+      background: linear-gradient(180deg, var(--bg-card), var(--bg-secondary));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 48px 32px;
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .shape-card .label {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .shape-card h2 {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin-bottom: 16px;
+    }
+    .shape-card p {
+      color: var(--text-secondary);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    .shape-card p + p { margin-top: 14px; }
+
+    .flow-diagram {
+      width: 100%;
+      height: auto;
+    }
+    .flow-diagram .node rect {
+      fill: var(--bg-elevated);
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+    .flow-diagram .node text {
+      fill: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .flow-diagram .node .sub {
+      fill: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 400;
+    }
+    .flow-diagram .arrow {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .flow-diagram .arrow-label {
+      fill: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+    .flow-diagram .db ellipse,
+    .flow-diagram .db path {
+      fill: var(--bg-elevated);
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+
+    @media (max-width: 768px) {
+      .shape-card {
+        grid-template-columns: 1fr;
+        gap: 32px;
+        padding: 36px 24px;
+      }
+    }
+
+    /* Features */
+    .features { padding: 80px 0; border-top: 1px solid var(--border); }
+    .features-header {
+      text-align: center;
+      max-width: 680px;
+      margin: 0 auto 56px;
+    }
+    .features-header .label {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .features-header h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin-bottom: 14px;
+    }
+    .features-header p {
+      color: var(--text-secondary);
+      font-size: 17px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .feature {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .feature:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .feature h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.005em;
+    }
+    .feature p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    @media (max-width: 900px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Stack */
+    .stack {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .stack h2 {
+      font-size: clamp(28px, 4vw, 36px);
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+    .stack p.lead {
+      color: var(--text-secondary);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 0 auto 40px;
+    }
+    .stack-chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+    .chip {
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* CTA */
+    .cta-section {
+      padding: 100px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, var(--accent-dim) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    .cta-section > * { position: relative; }
+    .cta-section h2 {
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .cta-section p {
+      color: var(--text-secondary);
+      font-size: 18px;
+      max-width: 520px;
+      margin: 0 auto 40px;
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    footer .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    footer .links {
+      display: flex;
+      gap: 24px;
+    }
+    footer a { transition: color 0.2s; }
+    footer a:hover { color: var(--accent); }
+
+    /* Mobile */
+    @media (max-width: 640px) {
+      .nav-links a:not(.github) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="top">
+    <div class="container">
+      <a href="/" class="brand">
+        <img src="/logo.svg" alt="">
+        Daily Agent
+      </a>
+      <div class="nav-links">
+        <a href="/docs/">Docs</a>
+        <a href="/docs/quick-start/">Quick start</a>
+        <a href="/docs/mcp-reference/">MCP reference</a>
+        <a href="https://github.com/WalrusQuant/mcp-dailyagent" class="github" aria-label="GitHub repository">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 007.86 10.92c.57.1.78-.25.78-.55 0-.27-.01-.98-.02-1.93-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.74.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18A11.1 11.1 0 0112 6.8c.98 0 1.97.13 2.89.39 2.2-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.12 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.06.78 2.14 0 1.54-.01 2.78-.01 3.16 0 .31.2.67.79.55A11.5 11.5 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container hero-content">
+      <span class="hero-badge">MCP Data Layer</span>
+      <h1>Your productivity data.<br><span class="accent">Your agent. Your rules.</span></h1>
+      <p class="tagline">
+        A typed MCP server and a clean dashboard over a single self-hosted Postgres.
+        Your OpenClaw agent writes. Your browser reads. No SaaS. No AI in the dashboard — that's the point.
+      </p>
+      <div class="cta-group">
+        <a href="/docs/quick-start/" class="cta-primary">
+          Get started
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </a>
+        <a href="/docs/" class="cta-secondary">View docs</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="shape-section">
+    <div class="container">
+      <div class="shape-card">
+        <div>
+          <div class="label">The shape</div>
+          <h2>Two front doors.<br>One database.</h2>
+          <p>
+            The <strong>MCP server</strong> at <code>/api/mcp</code> is the agent's interface —
+            34 typed tools, 13 prompt templates, bearer-token auth.
+          </p>
+          <p>
+            The <strong>dashboard</strong> is a plain Next.js UI for the same Postgres. No AI,
+            no chatbot, no generate buttons. If you want generated content, you talk to OpenClaw.
+          </p>
+          <p>
+            Tailscale is the perimeter. If you can reach the URL, you're in.
+          </p>
+        </div>
+
+        <svg class="flow-diagram" viewBox="0 0 520 360" role="img" aria-label="Architecture diagram">
+          <!-- Agent node -->
+          <g class="node" transform="translate(20, 40)">
+            <rect width="170" height="72" rx="10"/>
+            <text x="85" y="32" text-anchor="middle">OpenClaw agent</text>
+            <text class="sub" x="85" y="52" text-anchor="middle">MCP client</text>
+          </g>
+          <!-- Browser node -->
+          <g class="node" transform="translate(20, 248)">
+            <rect width="170" height="72" rx="10"/>
+            <text x="85" y="32" text-anchor="middle">Browser dashboard</text>
+            <text class="sub" x="85" y="52" text-anchor="middle">Next.js UI</text>
+          </g>
+
+          <!-- MCP server node -->
+          <g class="node" transform="translate(230, 40)">
+            <rect width="130" height="72" rx="10"/>
+            <text x="65" y="32" text-anchor="middle">/api/mcp</text>
+            <text class="sub" x="65" y="52" text-anchor="middle">Bearer auth</text>
+          </g>
+          <!-- API routes node -->
+          <g class="node" transform="translate(230, 248)">
+            <rect width="130" height="72" rx="10"/>
+            <text x="65" y="32" text-anchor="middle">/api routes</text>
+            <text class="sub" x="65" y="52" text-anchor="middle">CRUD</text>
+          </g>
+
+          <!-- Postgres (cylinder) -->
+          <g class="db" transform="translate(400, 130)">
+            <path d="M 0 16 L 0 88 A 50 16 0 0 0 100 88 L 100 16" fill="none"/>
+            <ellipse cx="50" cy="16" rx="50" ry="16"/>
+            <path d="M 0 16 A 50 16 0 0 0 100 16" fill="none"/>
+            <text x="50" y="60" text-anchor="middle" fill="#e8e4e0" font-size="13" font-weight="600">Postgres</text>
+          </g>
+
+          <!-- Arrows -->
+          <path class="arrow" d="M 190 76 L 228 76" marker-end="url(#arrowhead)"/>
+          <path class="arrow" d="M 190 284 L 228 284" marker-end="url(#arrowhead)"/>
+          <path class="arrow" d="M 360 76 Q 400 76 420 140" marker-end="url(#arrowhead)"/>
+          <path class="arrow" d="M 360 284 Q 400 284 420 230" marker-end="url(#arrowhead)"/>
+
+          <!-- Arrow labels -->
+          <text class="arrow-label" x="209" y="70" text-anchor="middle">/api/mcp</text>
+          <text class="arrow-label" x="209" y="278" text-anchor="middle">/api/*</text>
+
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M 0 0 L 8 4 L 0 8 z" fill="#d4a574"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="container">
+      <div class="features-header">
+        <div class="label">What's in it</div>
+        <h2>A durable store for the life stuff you already track</h2>
+        <p>Tasks, habits, journal, workouts, focus sessions, goals. All in Postgres, all behind one typed API.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="feature-icon">✓</div>
+          <h3>Tasks</h3>
+          <p>Franklin Covey <code>A1</code>–<code>C9</code> priority, rollover, recurrence, space + goal linking.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">∴</div>
+          <h3>Habits</h3>
+          <p>Daily or weekly, ISO-weekday target days, streak tracking via a dead-simple log table.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📓</div>
+          <h3>Journal</h3>
+          <p>One entry per day, mood 1–5, full-text search across everything you've ever written.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⟳</div>
+          <h3>Workouts</h3>
+          <p>Templates and logged sessions. Strength, timed, or cardio. Per-exercise sets, reps, weight.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">◷</div>
+          <h3>Focus sessions</h3>
+          <p>Pomodoro timer data, optionally linked to a task. 1–480 min duration, 0–120 min break.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">★</div>
+          <h3>Goals</h3>
+          <p>Categories, progress %, target dates, a progress log table for trend lines.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">□</div>
+          <h3>Spaces</h3>
+          <p>Projects / areas of life that group tasks, habits, and goals under a single umbrella.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">☰</div>
+          <h3>Daily briefings</h3>
+          <p>Written by OpenClaw via <code>save_daily_briefing</code>. Displayed read-only on the dashboard.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">§</div>
+          <h3>Weekly reviews</h3>
+          <p>Write one manually in the UI, or let OpenClaw generate and persist via MCP. Last write wins.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="container">
+      <div class="features-header" style="margin-bottom: 32px;">
+        <div class="label">Under the hood</div>
+        <h2>Built with boring, battle-tested pieces</h2>
+        <p class="lead">No framework-of-the-week. Nothing you haven't seen before.</p>
+      </div>
+      <div class="stack-chips">
+        <span class="chip">Next.js 16</span>
+        <span class="chip">React 19</span>
+        <span class="chip">TypeScript 5</span>
+        <span class="chip">Tailwind CSS 4</span>
+        <span class="chip">Drizzle ORM</span>
+        <span class="chip">Postgres 16</span>
+        <span class="chip">@modelcontextprotocol/sdk</span>
+        <span class="chip">Docker Compose</span>
+        <span class="chip">Tailscale</span>
+        <span class="chip">Vitest</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <h2>Deploy it yourself.<br>Own the data.</h2>
+      <p>Docker + Compose + Tailscale on any VPS. Five-minute happy path, fully documented.</p>
+      <div class="cta-group">
+        <a href="/docs/quick-start/" class="cta-primary">
+          Read the quick start
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </a>
+        <a href="https://github.com/WalrusQuant/mcp-dailyagent" class="cta-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 007.86 10.92c.57.1.78-.25.78-.55 0-.27-.01-.98-.02-1.93-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.74.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18A11.1 11.1 0 0112 6.8c.98 0 1.97.13 2.89.39 2.2-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.12 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.06.78 2.14 0 1.54-.01 2.78-.01 3.16 0 .31.2.67.79.55A11.5 11.5 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/>
+          </svg>
+          Source on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div>
+        © <span id="year">2026</span> WalrusQuant · Personal use license
+      </div>
+      <div class="links">
+        <a href="/docs/">Documentation</a>
+        <a href="/docs/architecture/">Architecture</a>
+        <a href="https://github.com/WalrusQuant/mcp-dailyagent">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

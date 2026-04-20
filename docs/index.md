@@ -13,14 +13,11 @@ Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and e
 Two front doors, one database.
 
 ```mermaid
-flowchart LR
-    OC[OpenClaw agent] -->|/api/mcp + Bearer| MCP
-    UI[Browser dashboard] -->|/tasks, /habits, ...| API[Next.js API routes]
+flowchart TD
+    OC[OpenClaw agent] -->|/api/mcp + Bearer| MCP["/api/mcp<br/>MCP server"]
+    UI[Browser dashboard] -->|"/tasks, /habits, ..."| API[Next.js API routes]
     MCP -->|Drizzle| DB[(Postgres)]
     API -->|Drizzle| DB
-    OC -. save_daily_briefing .-> MCP
-    MCP -. reads briefings .-> API
-    API -. renders .-> UI
 ```
 
 - **MCP server** (`/api/mcp`) — the agent's interface. 34 typed tools for reading and writing every piece of productivity data, 13 prompt templates, plus read-only resources. Bearer-token authenticated.
