@@ -19,6 +19,7 @@ import { registerGoalTools } from "./tools/goals";
 import { registerSpaceTools } from "./tools/spaces";
 import { registerCalendarTools } from "./tools/calendar";
 import { registerBriefingTools } from "./tools/briefings";
+import { registerInsightTools } from "./tools/insights";
 import { registerReviewTools } from "./tools/reviews";
 import { registerPrompts } from "./prompts";
 
@@ -61,6 +62,7 @@ export function createMcpServer(): McpServer {
   registerSpaceTools(server);
   registerCalendarTools(server);
   registerBriefingTools(server);
+  registerInsightTools(server);
   registerReviewTools(server);
 
   // Register prompts

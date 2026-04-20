@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, or, lt } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday, startOfWeek, endOfWeek, getCalendarGridDates } from "@/lib/dates";
 
@@ -59,92 +61,82 @@ export interface WeekSummary {
 
 /** Get detailed data for a single day */
 export async function getDaySummary(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   date: string
 ): Promise<QueryResult<DayDetail>> {
   try {
-    const [tasksResult, habitLogsResult, journalResult, workoutsResult, focusResult] =
+    const [tasksRows, habitLogsRows, journalRows, workoutsRows, focusRows, habitsRows] =
       await Promise.all([
-        supabase
-          .from("tasks")
-          .select("id, title, priority, done")
-          .eq("user_id", userId)
-          .eq("task_date", date)
-          .order("sort_order", { ascending: true }),
-        supabase
-          .from("habit_logs")
-          .select("habit_id")
-          .eq("user_id", userId)
-          .eq("log_date", date),
-        supabase
-          .from("journal_entries")
-          .select("id, mood, content")
-          .eq("user_id", userId)
-          .eq("entry_date", date)
-          .maybeSingle(),
-        supabase
-          .from("workout_logs")
-          .select("id, name, duration_minutes")
-          .eq("user_id", userId)
-          .eq("log_date", date)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("focus_sessions")
-          .select("id, duration_minutes, task_id, status")
-          .eq("user_id", userId)
-          .gte("started_at", `${date}T00:00:00`)
-          .lte("started_at", `${date}T23:59:59`)
-          .in("status", ["completed", "active"])
-          .order("started_at", { ascending: false }),
+        db
+          .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done })
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, date))),
+        db
+          .select({ habitId: habitLogs.habitId })
+          .from(habitLogs)
+          .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, date))),
+        db
+          .select({ id: journalEntries.id, mood: journalEntries.mood, content: journalEntries.content })
+          .from(journalEntries)
+          .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date))),
+        db
+          .select({ id: workoutLogs.id, name: workoutLogs.name, durationMinutes: workoutLogs.durationMinutes })
+          .from(workoutLogs)
+          .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, date))),
+        db
+          .select({ id: focusSessions.id, durationMinutes: focusSessions.durationMinutes, status: focusSessions.status })
+          .from(focusSessions)
+          .where(
+            and(
+              eq(focusSessions.userId, userId),
+              gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
+              lte(focusSessions.startedAt, new Date(`${date}T23:59:59`))
+            )
+          ),
+        db
+          .select({ id: habits.id, name: habits.name, color: habits.color, targetDays: habits.targetDays })
+          .from(habits)
+          .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
       ]);
-
-    const habitsResult = await supabase
-      .from("habits")
-      .select("id, name, color, target_days")
-      .eq("user_id", userId)
-      .eq("archived", false);
 
     const d = new Date(date + "T00:00:00");
     const dow = d.getDay() === 0 ? 7 : d.getDay();
-    const completedHabitIds = new Set(
-      (habitLogsResult.data ?? []).map((hl: { habit_id: string }) => hl.habit_id)
-    );
+    const completedHabitIds = new Set(habitLogsRows.map((hl) => hl.habitId));
 
-    const habits: DayHabit[] = (habitsResult.data ?? [])
-      .filter((h: { target_days: number[] }) => h.target_days?.includes(dow))
-      .map((h: { name: string; color: string | null; id: string }) => ({
+    const habitsDetail: DayHabit[] = habitsRows
+      .filter((h) => h.targetDays?.includes(dow))
+      .map((h) => ({
         name: h.name,
-        color: h.color,
+        color: h.color ?? null,
         completed: completedHabitIds.has(h.id),
       }));
 
-    if (tasksResult.error) return { data: null, error: tasksResult.error.message };
-
     const detail: DayDetail = {
       date,
-      tasks: (tasksResult.data ?? []).map((t: { id: string; title: string; priority: string; done: boolean }) => ({
+      tasks: tasksRows.map((t) => ({
         id: t.id,
         title: t.title,
         priority: t.priority,
         done: t.done,
       })),
-      habits,
-      journal: journalResult.data
-        ? {
-            id: journalResult.data.id as string,
-            mood: journalResult.data.mood as number | null,
-            content: journalResult.data.content as string,
-          }
-        : null,
-      workouts: (workoutsResult.data ?? []).map((w: { id: string; name: string; duration_minutes: number | null }) => ({
+      habits: habitsDetail,
+      journal:
+        journalRows.length > 0
+          ? {
+              id: journalRows[0].id,
+              mood: journalRows[0].mood ?? null,
+              content: journalRows[0].content,
+            }
+          : null,
+      workouts: workoutsRows.map((w) => ({
         id: w.id,
         name: w.name,
-        duration_minutes: w.duration_minutes,
+        duration_minutes: w.durationMinutes ?? null,
       })),
-      focus: (focusResult.data ?? []).map((f: { id: string; duration_minutes: number; status: string }) => ({
+      focus: focusRows.map((f) => ({
         id: f.id,
-        duration_minutes: f.duration_minutes,
+        duration_minutes: f.durationMinutes,
         task_title: null,
         status: f.status,
       })),
@@ -158,7 +150,7 @@ export async function getDaySummary(
 
 /** Get aggregated summary for a week (defaults to the current week) */
 export async function getWeekSummary(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   weekStartParam?: string
 ): Promise<QueryResult<WeekSummary>> {
@@ -168,54 +160,64 @@ export async function getWeekSummary(
     const weekEnd = endOfWeek(weekStart);
 
     const gridDates = getCalendarGridDates(today.slice(0, 7));
-    const startDate = weekStart;
-    const endDate = weekEnd;
 
-    const [tasksResult, habitLogsResult, habitsResult, journalResult, workoutsResult, focusResult] =
+    const [tasksRows, habitLogsRows, habitsRows, journalRows, workoutsRows, focusRows] =
       await Promise.all([
-        supabase
-          .from("tasks")
-          .select("task_date, priority, done")
-          .eq("user_id", userId)
-          .gte("task_date", startDate)
-          .lte("task_date", endDate),
-        supabase
-          .from("habit_logs")
-          .select("log_date, habit_id")
-          .eq("user_id", userId)
-          .gte("log_date", startDate)
-          .lte("log_date", endDate),
-        supabase
-          .from("habits")
-          .select("id, color, target_days")
-          .eq("user_id", userId)
-          .eq("archived", false),
-        supabase
-          .from("journal_entries")
-          .select("entry_date, mood")
-          .eq("user_id", userId)
-          .gte("entry_date", startDate)
-          .lte("entry_date", endDate),
-        supabase
-          .from("workout_logs")
-          .select("log_date")
-          .eq("user_id", userId)
-          .gte("log_date", startDate)
-          .lte("log_date", endDate),
-        supabase
-          .from("focus_sessions")
-          .select("started_at, duration_minutes, status")
-          .eq("user_id", userId)
-          .gte("started_at", `${startDate}T00:00:00`)
-          .lte("started_at", `${endDate}T23:59:59`)
-          .in("status", ["completed", "active"]),
+        db
+          .select({ taskDate: tasks.taskDate, priority: tasks.priority, done: tasks.done })
+          .from(tasks)
+          .where(
+            and(eq(tasks.userId, userId), gte(tasks.taskDate, weekStart), lte(tasks.taskDate, weekEnd))
+          ),
+        db
+          .select({ logDate: habitLogs.logDate, habitId: habitLogs.habitId })
+          .from(habitLogs)
+          .where(
+            and(
+              eq(habitLogs.userId, userId),
+              gte(habitLogs.logDate, weekStart),
+              lte(habitLogs.logDate, weekEnd)
+            )
+          ),
+        db
+          .select({ id: habits.id, color: habits.color, targetDays: habits.targetDays })
+          .from(habits)
+          .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
+        db
+          .select({ entryDate: journalEntries.entryDate, mood: journalEntries.mood })
+          .from(journalEntries)
+          .where(
+            and(
+              eq(journalEntries.userId, userId),
+              gte(journalEntries.entryDate, weekStart),
+              lte(journalEntries.entryDate, weekEnd)
+            )
+          ),
+        db
+          .select({ logDate: workoutLogs.logDate })
+          .from(workoutLogs)
+          .where(
+            and(
+              eq(workoutLogs.userId, userId),
+              gte(workoutLogs.logDate, weekStart),
+              lte(workoutLogs.logDate, weekEnd)
+            )
+          ),
+        db
+          .select({ startedAt: focusSessions.startedAt, durationMinutes: focusSessions.durationMinutes, status: focusSessions.status })
+          .from(focusSessions)
+          .where(
+            and(
+              eq(focusSessions.userId, userId),
+              gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00`)),
+              lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59`))
+            )
+          ),
       ]);
 
-    if (tasksResult.error) return { data: null, error: tasksResult.error.message };
-
     const habitMap = new Map<string, { color: string | null; targetDays: number[] }>();
-    for (const h of habitsResult.data ?? []) {
-      habitMap.set(h.id, { color: h.color, targetDays: h.target_days ?? [] });
+    for (const h of habitsRows) {
+      habitMap.set(h.id, { color: h.color ?? null, targetDays: h.targetDays ?? [] });
     }
 
     const summaries: Record<string, DaySummary> = {};
@@ -233,8 +235,8 @@ export async function getWeekSummary(
       return summaries[date];
     };
 
-    for (const t of tasksResult.data ?? []) {
-      const day = ensureDay(t.task_date);
+    for (const t of tasksRows) {
+      const day = ensureDay(t.taskDate);
       day.tasks.total++;
       if (t.done) day.tasks.done++;
       const prio = String(t.priority ?? "")[0];
@@ -243,10 +245,10 @@ export async function getWeekSummary(
       else if (prio === "C") day.tasks.hasC = true;
     }
 
-    for (const hl of habitLogsResult.data ?? []) {
-      const day = ensureDay(hl.log_date);
+    for (const hl of habitLogsRows) {
+      const day = ensureDay(hl.logDate);
       day.habits.completed++;
-      const habit = habitMap.get(hl.habit_id);
+      const habit = habitMap.get(hl.habitId);
       if (habit?.color && !day.habits.colors.includes(habit.color)) {
         day.habits.colors.push(habit.color);
       }
@@ -264,21 +266,21 @@ export async function getWeekSummary(
       }
     }
 
-    for (const j of journalResult.data ?? []) {
-      const day = ensureDay(j.entry_date);
+    for (const j of journalRows) {
+      const day = ensureDay(j.entryDate);
       day.journal.hasEntry = true;
-      day.journal.mood = j.mood;
+      day.journal.mood = j.mood ?? null;
     }
 
-    for (const w of workoutsResult.data ?? []) {
-      ensureDay(w.log_date).workouts.count++;
+    for (const w of workoutsRows) {
+      ensureDay(w.logDate).workouts.count++;
     }
 
-    for (const f of focusResult.data ?? []) {
-      const date = f.started_at.split("T")[0];
+    for (const f of focusRows) {
+      const date = f.startedAt.toISOString().split("T")[0];
       const day = ensureDay(date);
       day.focus.sessions++;
-      day.focus.minutes += f.duration_minutes ?? 0;
+      day.focus.minutes += f.durationMinutes ?? 0;
     }
 
     return { data: { weekStart, weekEnd, days: summaries }, error: null };

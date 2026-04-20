@@ -1,114 +1,107 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { habits } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET single habit
+function serializeHabit(h: typeof habits.$inferSelect) {
+  return {
+    id: h.id,
+    user_id: h.userId,
+    name: h.name,
+    description: h.description,
+    frequency: h.frequency,
+    target_days: h.targetDays,
+    color: h.color,
+    archived: h.archived,
+    sort_order: h.sortOrder,
+    goal_id: h.goalId,
+    created_at: h.createdAt,
+  };
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const rows = await db
+      .select()
+      .from(habits)
+      .where(and(eq(habits.id, id), eq(habits.userId, userId)));
+
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeHabit(rows[0]));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("habits")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// PATCH update habit
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
 
-  // Whitelist allowed fields with type validation
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof habits.$inferInsert> = {};
 
   if (typeof body.name === "string") allowedFields.name = body.name;
   if (typeof body.description === "string" || body.description === null)
     allowedFields.description = body.description;
   if (typeof body.frequency === "string" || body.frequency === null)
-    allowedFields.frequency = body.frequency;
+    allowedFields.frequency = body.frequency ?? undefined;
   if (Array.isArray(body.target_days) || body.target_days === null)
-    allowedFields.target_days = body.target_days;
+    allowedFields.targetDays = body.target_days;
   if (typeof body.color === "string" || body.color === null)
-    allowedFields.color = body.color;
+    allowedFields.color = body.color ?? undefined;
   if (typeof body.archived === "boolean")
     allowedFields.archived = body.archived;
   if (typeof body.sort_order === "number" || body.sort_order === null)
-    allowedFields.sort_order = body.sort_order;
+    allowedFields.sortOrder = body.sort_order ?? undefined;
   if (typeof body.goal_id === "string" || body.goal_id === null)
-    allowedFields.goal_id = body.goal_id;
+    allowedFields.goalId = body.goal_id;
 
   if (Object.keys(allowedFields).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("habits")
-    .update(allowedFields)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .update(habits)
+      .set(allowedFields)
+      .where(and(eq(habits.id, id), eq(habits.userId, userId)))
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeHabit(row));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
-// DELETE habit
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db.delete(habits).where(and(eq(habits.id, id), eq(habits.userId, userId)));
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("habits")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

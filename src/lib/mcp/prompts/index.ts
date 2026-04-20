@@ -1,6 +1,19 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import {
+  tasks as tasksTable,
+  goals as goalsTable,
+  habits as habitsTable,
+  habitLogs,
+  focusSessions,
+  journalEntries,
+  workoutLogs,
+  workoutTemplates,
+  workoutExercises,
+  spaces as spacesTable,
+} from "@/lib/db/schema";
+import { and, eq, gte, lte, lt, or, asc, desc, inArray } from "drizzle-orm";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { ServerRequest, ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 
@@ -20,79 +33,105 @@ function getUserId(extra: Extra): string | null {
 // ---------------------------------------------------------------------------
 
 async function fetchTodayTasks(userId: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
-
-  const { data } = await supabase
-    .from("tasks")
-    .select("id, title, priority, done, task_date")
-    .eq("user_id", userId)
-    .or(`task_date.eq.${today},and(task_date.lt.${today},done.eq.false)`)
-    .order("priority", { ascending: true });
-
-  return data ?? [];
+  const rows = await db
+    .select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      priority: tasksTable.priority,
+      done: tasksTable.done,
+      task_date: tasksTable.taskDate,
+    })
+    .from(tasksTable)
+    .where(
+      and(
+        eq(tasksTable.userId, userId),
+        or(
+          eq(tasksTable.taskDate, today),
+          and(lt(tasksTable.taskDate, today), eq(tasksTable.done, false))
+        )
+      )
+    )
+    .orderBy(asc(tasksTable.priority));
+  return rows;
 }
 
 async function fetchActiveGoals(userId: string) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("goals")
-    .select("id, title, description, category, progress, target_date, status")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-
-  return data ?? [];
+  const rows = await db
+    .select({
+      id: goalsTable.id,
+      title: goalsTable.title,
+      description: goalsTable.description,
+      category: goalsTable.category,
+      progress: goalsTable.progress,
+      target_date: goalsTable.targetDate,
+      status: goalsTable.status,
+    })
+    .from(goalsTable)
+    .where(and(eq(goalsTable.userId, userId), eq(goalsTable.status, "active")))
+    .orderBy(desc(goalsTable.createdAt));
+  return rows;
 }
 
 async function fetchTodayHabits(userId: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
+  const habits = await db
+    .select({ id: habitsTable.id, name: habitsTable.name, description: habitsTable.description })
+    .from(habitsTable)
+    .where(and(eq(habitsTable.userId, userId), eq(habitsTable.archived, false)));
 
-  const { data: habits } = await supabase
-    .from("habits")
-    .select("id, name, description")
-    .eq("user_id", userId)
-    .eq("archived", false);
+  if (habits.length === 0) return [];
 
-  if (!habits) return [];
+  const logs = await db
+    .select({ habitId: habitLogs.habitId })
+    .from(habitLogs)
+    .where(
+      and(
+        inArray(
+          habitLogs.habitId,
+          habits.map((h) => h.id)
+        ),
+        eq(habitLogs.logDate, today)
+      )
+    );
 
-  const { data: logs } = await supabase
-    .from("habit_logs")
-    .select("habit_id")
-    .in("habit_id", habits.map((h) => h.id))
-    .eq("log_date", today);
-
-  const completedIds = new Set((logs ?? []).map((l) => l.habit_id));
-
+  const completedIds = new Set(logs.map((l) => l.habitId));
   return habits.map((h) => ({ ...h, completed_today: completedIds.has(h.id) }));
 }
 
 async function fetchAllHabitsWithStats(userId: string) {
-  const supabase = getServiceClient();
+  const habits = await db
+    .select({
+      id: habitsTable.id,
+      name: habitsTable.name,
+      description: habitsTable.description,
+      frequency: habitsTable.frequency,
+    })
+    .from(habitsTable)
+    .where(and(eq(habitsTable.userId, userId), eq(habitsTable.archived, false)));
 
-  const { data: habits } = await supabase
-    .from("habits")
-    .select("id, name, description, frequency")
-    .eq("user_id", userId)
-    .eq("archived", false);
-
-  if (!habits) return [];
+  if (habits.length === 0) return [];
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const fromDate = thirtyDaysAgo.toISOString().split("T")[0];
 
-  const { data: logs } = await supabase
-    .from("habit_logs")
-    .select("habit_id, log_date")
-    .in("habit_id", habits.map((h) => h.id))
-    .gte("log_date", fromDate);
+  const logs = await db
+    .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
+    .from(habitLogs)
+    .where(
+      and(
+        inArray(
+          habitLogs.habitId,
+          habits.map((h) => h.id)
+        ),
+        gte(habitLogs.logDate, fromDate)
+      )
+    );
 
   const logsByHabit: Record<string, number> = {};
-  for (const log of logs ?? []) {
-    logsByHabit[log.habit_id] = (logsByHabit[log.habit_id] ?? 0) + 1;
+  for (const log of logs) {
+    logsByHabit[log.habitId] = (logsByHabit[log.habitId] ?? 0) + 1;
   }
 
   return habits.map((h) => ({
@@ -103,135 +142,196 @@ async function fetchAllHabitsWithStats(userId: string) {
 }
 
 async function fetchTodayFocusStats(userId: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
+  const rows = await db
+    .select({
+      id: focusSessions.id,
+      duration_minutes: focusSessions.durationMinutes,
+      completed_at: focusSessions.completedAt,
+    })
+    .from(focusSessions)
+    .where(
+      and(
+        eq(focusSessions.userId, userId),
+        gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`)),
+        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999Z`))
+      )
+    );
 
-  const { data } = await supabase
-    .from("focus_sessions")
-    .select("id, duration_minutes, completed_at")
-    .eq("user_id", userId)
-    .gte("started_at", `${today}T00:00:00.000Z`)
-    .lte("started_at", `${today}T23:59:59.999Z`);
-
-  const sessions = data ?? [];
-  const completed = sessions.filter((s) => s.completed_at != null);
+  const completed = rows.filter((s) => s.completed_at != null);
   const totalMinutes = completed.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-
-  return { totalSessions: sessions.length, completedSessions: completed.length, totalFocusMinutes: totalMinutes };
+  return {
+    totalSessions: rows.length,
+    completedSessions: completed.length,
+    totalFocusMinutes: totalMinutes,
+  };
 }
 
 async function fetchRecentJournal(userId: string, limit = 7) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("journal_entries")
-    .select("id, entry_date, content, mood")
-    .eq("user_id", userId)
-    .order("entry_date", { ascending: false })
+  const rows = await db
+    .select({
+      id: journalEntries.id,
+      entry_date: journalEntries.entryDate,
+      content: journalEntries.content,
+      mood: journalEntries.mood,
+    })
+    .from(journalEntries)
+    .where(eq(journalEntries.userId, userId))
+    .orderBy(desc(journalEntries.entryDate))
     .limit(limit);
-
-  return data ?? [];
+  return rows;
 }
 
 async function fetchRecentWorkouts(userId: string, limit = 5) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("workout_logs")
-    .select("id, name, log_date, duration_minutes")
-    .eq("user_id", userId)
-    .order("log_date", { ascending: false })
+  const rows = await db
+    .select({
+      id: workoutLogs.id,
+      name: workoutLogs.name,
+      log_date: workoutLogs.logDate,
+      duration_minutes: workoutLogs.durationMinutes,
+    })
+    .from(workoutLogs)
+    .where(eq(workoutLogs.userId, userId))
+    .orderBy(desc(workoutLogs.logDate))
     .limit(limit);
-
-  return data ?? [];
+  return rows;
 }
 
 async function fetchWorkoutTemplates(userId: string) {
-  const supabase = getServiceClient();
+  const templates = await db
+    .select({ id: workoutTemplates.id, name: workoutTemplates.name })
+    .from(workoutTemplates)
+    .where(eq(workoutTemplates.userId, userId))
+    .orderBy(desc(workoutTemplates.createdAt));
 
-  const { data } = await supabase
-    .from("workout_templates")
-    .select("id, name, workout_exercises(name)")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  if (templates.length === 0) return [];
 
-  return data ?? [];
+  const exercises = await db
+    .select({ templateId: workoutExercises.templateId, name: workoutExercises.name })
+    .from(workoutExercises)
+    .where(
+      inArray(
+        workoutExercises.templateId,
+        templates.map((t) => t.id)
+      )
+    );
+
+  const byTemplate: Record<string, { name: string }[]> = {};
+  for (const ex of exercises) {
+    (byTemplate[ex.templateId] ??= []).push({ name: ex.name });
+  }
+
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    workout_exercises: byTemplate[t.id] ?? [],
+  }));
 }
 
 async function fetchGoalById(userId: string, goalId: string) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("goals")
-    .select("*")
-    .eq("id", goalId)
-    .eq("user_id", userId)
-    .single();
-
-  return data ?? null;
+  const [row] = await db
+    .select()
+    .from(goalsTable)
+    .where(and(eq(goalsTable.id, goalId), eq(goalsTable.userId, userId)));
+  return row ?? null;
 }
 
 async function fetchSpaceTasks(userId: string, spaceId?: string) {
-  const supabase = getServiceClient();
-
-  let query = supabase
-    .from("tasks")
-    .select("id, title, priority, done, task_date, space_id")
-    .eq("user_id", userId)
-    .eq("done", false)
-    .order("priority", { ascending: true });
-
-  if (spaceId) query = query.eq("space_id", spaceId);
-
-  const { data } = await query.limit(50);
-  return data ?? [];
+  const conds = [
+    eq(tasksTable.userId, userId),
+    eq(tasksTable.done, false),
+    ...(spaceId ? [eq(tasksTable.spaceId, spaceId)] : []),
+  ];
+  const rows = await db
+    .select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      priority: tasksTable.priority,
+      done: tasksTable.done,
+      task_date: tasksTable.taskDate,
+      space_id: tasksTable.spaceId,
+    })
+    .from(tasksTable)
+    .where(and(...conds))
+    .orderBy(asc(tasksTable.priority))
+    .limit(50);
+  return rows;
 }
 
 async function fetchFocusSessionsForRange(userId: string, from: string, to: string) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("focus_sessions")
-    .select("id, duration_minutes, completed_at, started_at")
-    .eq("user_id", userId)
-    .gte("started_at", `${from}T00:00:00.000Z`)
-    .lte("started_at", `${to}T23:59:59.999Z`);
-
-  return data ?? [];
+  const rows = await db
+    .select({
+      id: focusSessions.id,
+      duration_minutes: focusSessions.durationMinutes,
+      completed_at: focusSessions.completedAt,
+      started_at: focusSessions.startedAt,
+    })
+    .from(focusSessions)
+    .where(
+      and(
+        eq(focusSessions.userId, userId),
+        gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`)),
+        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+      )
+    );
+  return rows;
 }
 
 async function fetchTasksForRange(userId: string, from: string, to: string) {
-  const supabase = getServiceClient();
-
-  const { data } = await supabase
-    .from("tasks")
-    .select("id, title, priority, done, task_date")
-    .eq("user_id", userId)
-    .gte("task_date", from)
-    .lte("task_date", to);
-
-  return data ?? [];
+  const rows = await db
+    .select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      priority: tasksTable.priority,
+      done: tasksTable.done,
+      task_date: tasksTable.taskDate,
+    })
+    .from(tasksTable)
+    .where(
+      and(eq(tasksTable.userId, userId), gte(tasksTable.taskDate, from), lte(tasksTable.taskDate, to))
+    );
+  return rows;
 }
 
 async function fetchHabitLogsForRange(userId: string, from: string, to: string) {
-  const supabase = getServiceClient();
+  const habits = await db
+    .select({ id: habitsTable.id, name: habitsTable.name })
+    .from(habitsTable)
+    .where(and(eq(habitsTable.userId, userId), eq(habitsTable.archived, false)));
 
-  const { data: habits } = await supabase
-    .from("habits")
-    .select("id, name")
-    .eq("user_id", userId)
-    .eq("archived", false);
+  if (habits.length === 0) return { habits: [], logs: [] };
 
-  if (!habits || habits.length === 0) return { habits: [], logs: [] };
+  const logs = await db
+    .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
+    .from(habitLogs)
+    .where(
+      and(
+        inArray(
+          habitLogs.habitId,
+          habits.map((h) => h.id)
+        ),
+        gte(habitLogs.logDate, from),
+        lte(habitLogs.logDate, to)
+      )
+    );
 
-  const { data: logs } = await supabase
-    .from("habit_logs")
-    .select("habit_id, log_date")
-    .in("habit_id", habits.map((h) => h.id))
-    .gte("log_date", from)
-    .lte("log_date", to);
+  return {
+    habits,
+    logs: logs.map((l) => ({ habit_id: l.habitId, log_date: l.logDate })),
+  };
+}
 
-  return { habits, logs: logs ?? [] };
+async function fetchSpaces(userId: string) {
+  const rows = await db
+    .select({
+      id: spacesTable.id,
+      name: spacesTable.name,
+      description: spacesTable.description,
+      status: spacesTable.status,
+    })
+    .from(spacesTable)
+    .where(eq(spacesTable.userId, userId));
+  return rows;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +402,7 @@ Based on this data, please:
 
       const today = new Date().toISOString().split("T")[0];
       const pendingTasks = tasks.filter((t) => !t.done);
-      const aCount = pendingTasks.filter((t) => t.priority === "A").length;
+      const aCount = pendingTasks.filter((t) => t.priority.startsWith("A")).length;
 
       const userText = `Good morning! Give me a quick, energizing briefing for ${today}.
 
@@ -389,22 +489,26 @@ Please provide:
       const userId = getUserId(extra);
       if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
 
-      const [focusSessions, tasks, habitData] = await Promise.all([
+      const [focusRows, tasks, habitData] = await Promise.all([
         fetchFocusSessionsForRange(userId, args.from, args.to),
         fetchTasksForRange(userId, args.from, args.to),
         fetchHabitLogsForRange(userId, args.from, args.to),
       ]);
 
-      const completedFocus = focusSessions.filter((s) => s.completed_at != null);
+      const completedFocus = focusRows.filter((s) => s.completed_at != null);
       const totalFocusMinutes = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
       const completedTasks = tasks.filter((t) => t.done);
+
+      const aTasks = tasks.filter((t) => t.priority.startsWith("A"));
+      const bTasks = tasks.filter((t) => t.priority.startsWith("B"));
+      const cTasks = tasks.filter((t) => t.priority.startsWith("C"));
 
       const userText = `Generate a productivity report for ${args.from} to ${args.to}.
 
 ## Task Summary
 - Total tasks: ${tasks.length}
 - Completed: ${completedTasks.length} (${tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0}% completion rate)
-- By priority: A=${tasks.filter((t) => t.priority === "A" && t.done).length}/${tasks.filter((t) => t.priority === "A").length}, B=${tasks.filter((t) => t.priority === "B" && t.done).length}/${tasks.filter((t) => t.priority === "B").length}, C=${tasks.filter((t) => t.priority === "C" && t.done).length}/${tasks.filter((t) => t.priority === "C").length}
+- By priority: A=${aTasks.filter((t) => t.done).length}/${aTasks.length}, B=${bTasks.filter((t) => t.done).length}/${bTasks.length}, C=${cTasks.filter((t) => t.done).length}/${cTasks.length}
 
 ## Focus Sessions
 - Total sessions: ${completedFocus.length}
@@ -507,7 +611,6 @@ For each goal, please:
       const userId = getUserId(extra);
       if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
 
-      // Calculate this week and last week ranges
       const now = new Date();
       const dayOfWeek = now.getDay();
       const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -598,7 +701,7 @@ Please:
       weekEndDate.setDate(weekEndDate.getDate() + 6);
       const weekEnd = weekEndDate.toISOString().split("T")[0];
 
-      const [tasks, habitData, focusSessions, journal] = await Promise.all([
+      const [tasks, habitData, focusRows, journal] = await Promise.all([
         fetchTasksForRange(userId, weekStart, weekEnd),
         fetchHabitLogsForRange(userId, weekStart, weekEnd),
         fetchFocusSessionsForRange(userId, weekStart, weekEnd),
@@ -606,9 +709,11 @@ Please:
       ]);
 
       const completedTasks = tasks.filter((t) => t.done);
-      const completedFocus = focusSessions.filter((s) => s.completed_at);
+      const completedFocus = focusRows.filter((s) => s.completed_at);
       const totalFocusMin = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-      const weekJournal = journal.filter((e) => e.entry_date >= weekStart! && e.entry_date <= weekEnd);
+      const weekJournal = journal.filter(
+        (e) => (e.entry_date as string) >= weekStart! && (e.entry_date as string) <= weekEnd
+      );
 
       const userText = `Generate a structured weekly review for the week of ${weekStart}.
 
@@ -666,9 +771,9 @@ Please structure the review with:
       const completedToday = tasks.filter((t) => t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
 
-      const recentMoods = recentJournal.filter((e) => e.mood != null).map((e) => e.mood);
+      const recentMoods = recentJournal.filter((e) => e.mood != null).map((e) => e.mood as number);
       const avgMood = recentMoods.length > 0
-        ? recentMoods.reduce((a: number, b) => a + (b as number), 0) / recentMoods.length
+        ? recentMoods.reduce((a: number, b) => a + b, 0) / recentMoods.length
         : null;
 
       const userText = `Generate a thoughtful, personalized journal prompt for me today (${today}).
@@ -790,14 +895,7 @@ Format tasks as: [PRIORITY: A/B/C] Task title`;
 
       const [tasks, spaces] = await Promise.all([
         fetchSpaceTasks(userId, args.space_id),
-        (async () => {
-          const supabase = getServiceClient();
-          const { data } = await supabase
-            .from("spaces")
-            .select("id, name, description, status")
-            .eq("user_id", userId);
-          return data ?? [];
-        })(),
+        fetchSpaces(userId),
       ]);
 
       const space = args.space_id ? spaces.find((s) => s.id === args.space_id) : null;

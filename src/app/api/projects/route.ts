@@ -1,47 +1,49 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { spaces } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
+
+function serializeSpace(s: typeof spaces.$inferSelect) {
+  return {
+    id: s.id,
+    user_id: s.userId,
+    name: s.name,
+    description: s.description,
+    status: s.status,
+    progress: s.progress,
+    deadline: s.deadline,
+    created_at: s.createdAt,
+    updated_at: s.updatedAt,
+  };
+}
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
-  let query = supabase
-    .from("spaces")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("updated_at", { ascending: false });
+  try {
+    const conditions =
+      status && ["active", "paused", "completed"].includes(status)
+        ? and(eq(spaces.userId, userId), eq(spaces.status, status as "active" | "paused" | "completed"))
+        : eq(spaces.userId, userId);
 
-  if (status && ["active", "paused", "completed"].includes(status)) {
-    query = query.eq("status", status as "active" | "paused" | "completed");
+    const rows = await db
+      .select()
+      .from(spaces)
+      .where(conditions)
+      .orderBy(desc(spaces.updatedAt));
+
+    return NextResponse.json(rows.map(serializeSpace));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data);
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { name, description, status, deadline } = body;
@@ -50,21 +52,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("spaces")
-    .insert({
-      user_id: user.id,
-      name,
-      description: description || null,
-      status: status || "active",
-      deadline: deadline || null,
-    })
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .insert(spaces)
+      .values({
+        userId,
+        name,
+        description: description || null,
+        status: status || "active",
+        deadline: deadline || null,
+      })
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(serializeSpace(row));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }

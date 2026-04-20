@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, or, lt } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,161 +10,155 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getDaySummary(userId: string, date: string) {
-  const supabase = getServiceClient();
+  try {
+    const [tasksRows, habitsRows, journalRows, workoutsRows, focusRows] = await Promise.all([
+      db
+        .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done, taskDate: tasks.taskDate })
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            or(
+              eq(tasks.taskDate, date),
+              and(lt(tasks.taskDate, date), eq(tasks.done, false))
+            )
+          )
+        ),
+      db
+        .select({ id: habits.id, name: habits.name, targetDays: habits.targetDays })
+        .from(habits)
+        .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
+      db
+        .select({ id: journalEntries.id, content: journalEntries.content, mood: journalEntries.mood, entryDate: journalEntries.entryDate })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date))),
+      db
+        .select({ id: workoutLogs.id, name: workoutLogs.name, durationMinutes: workoutLogs.durationMinutes, logDate: workoutLogs.logDate })
+        .from(workoutLogs)
+        .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, date))),
+      db
+        .select({ id: focusSessions.id, durationMinutes: focusSessions.durationMinutes, completedAt: focusSessions.completedAt, startedAt: focusSessions.startedAt })
+        .from(focusSessions)
+        .where(
+          and(
+            eq(focusSessions.userId, userId),
+            gte(focusSessions.startedAt, new Date(`${date}T00:00:00.000Z`)),
+            lte(focusSessions.startedAt, new Date(`${date}T23:59:59.999Z`))
+          )
+        ),
+    ]);
 
-  const [tasksRes, habitsRes, journalRes, workoutsRes, focusRes] = await Promise.all([
-    // Tasks for the day (including rolled-over incomplete)
-    supabase
-      .from("tasks")
-      .select("id, title, priority, done, task_date")
-      .eq("user_id", userId)
-      .or(`task_date.eq.${date},and(task_date.lt.${date},done.eq.false)`)
-      .order("priority", { ascending: true }),
+    // Habit logs for this date
+    const habitLogRows = await db
+      .select({ habitId: habitLogs.habitId })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, date)));
 
-    // Habit completions for the day
-    supabase
-      .from("habits")
-      .select("id, name, habit_logs!inner(log_date)")
-      .eq("user_id", userId)
-      .eq("habit_logs.log_date", date),
+    const completedHabitIds = new Set(habitLogRows.map((hl) => hl.habitId));
 
-    // Journal entry for the day
-    supabase
-      .from("journal_entries")
-      .select("id, content, mood, entry_date")
-      .eq("user_id", userId)
-      .eq("entry_date", date)
-      .single(),
+    const completedTasks = tasksRows.filter((t) => t.done);
+    const completedFocus = focusRows.filter((s) => s.completedAt != null);
+    const totalFocusMinutes = completedFocus.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
 
-    // Workouts for the day
-    supabase
-      .from("workout_logs")
-      .select("id, name, duration_minutes, log_date")
-      .eq("user_id", userId)
-      .eq("log_date", date),
-
-    // Focus sessions for the day
-    supabase
-      .from("focus_sessions")
-      .select("id, duration_minutes, completed_at, started_at")
-      .eq("user_id", userId)
-      .gte("started_at", `${date}T00:00:00.000Z`)
-      .lte("started_at", `${date}T23:59:59.999Z`),
-  ]);
-
-  const tasks = tasksRes.data ?? [];
-  const completedTasks = tasks.filter((t) => t.done);
-
-  const focusSessions = focusRes.data ?? [];
-  const completedFocus = focusSessions.filter((s) => s.completed_at != null);
-  const totalFocusMinutes = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-
-  return {
-    data: {
-      date,
-      tasks: {
-        total: tasks.length,
-        completed: completedTasks.length,
-        items: tasks,
+    return {
+      data: {
+        date,
+        tasks: {
+          total: tasksRows.length,
+          completed: completedTasks.length,
+          items: tasksRows,
+        },
+        habits: {
+          completed: habitLogRows.length,
+          items: habitsRows.filter((h) => completedHabitIds.has(h.id)),
+        },
+        journal: journalRows.length > 0 ? journalRows[0] : null,
+        workouts: workoutsRows,
+        focus: {
+          totalMinutes: totalFocusMinutes,
+          sessionCount: completedFocus.length,
+        },
       },
-      habits: {
-        completed: habitsRes.data?.length ?? 0,
-        items: habitsRes.data ?? [],
-      },
-      journal: journalRes.data ?? null,
-      workouts: workoutsRes.data ?? [],
-      focus: {
-        totalMinutes: totalFocusMinutes,
-        sessionCount: completedFocus.length,
-      },
-    },
-    error: null,
-  };
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function getWeekSummary(userId: string, weekStart: string) {
-  const supabase = getServiceClient();
-
-  // Calculate week end (6 days after start)
   const startDate = new Date(weekStart);
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + 6);
   const weekEnd = endDate.toISOString().split("T")[0];
 
-  const [tasksRes, habitLogsRes, workoutsRes, focusRes, journalRes] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select("id, title, priority, done, task_date")
-      .eq("user_id", userId)
-      .gte("task_date", weekStart)
-      .lte("task_date", weekEnd),
+  try {
+    const [tasksRows, habitLogsRows, workoutsRows, focusRows, journalRows] = await Promise.all([
+      db
+        .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done, taskDate: tasks.taskDate })
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), gte(tasks.taskDate, weekStart), lte(tasks.taskDate, weekEnd))),
+      db
+        .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
+        .from(habitLogs)
+        .where(and(eq(habitLogs.userId, userId), gte(habitLogs.logDate, weekStart), lte(habitLogs.logDate, weekEnd))),
+      db
+        .select({ id: workoutLogs.id, name: workoutLogs.name, durationMinutes: workoutLogs.durationMinutes, logDate: workoutLogs.logDate })
+        .from(workoutLogs)
+        .where(and(eq(workoutLogs.userId, userId), gte(workoutLogs.logDate, weekStart), lte(workoutLogs.logDate, weekEnd))),
+      db
+        .select({ id: focusSessions.id, durationMinutes: focusSessions.durationMinutes, completedAt: focusSessions.completedAt, startedAt: focusSessions.startedAt })
+        .from(focusSessions)
+        .where(
+          and(
+            eq(focusSessions.userId, userId),
+            gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00.000Z`)),
+            lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59.999Z`))
+          )
+        ),
+      db
+        .select({ id: journalEntries.id, entryDate: journalEntries.entryDate, mood: journalEntries.mood })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), gte(journalEntries.entryDate, weekStart), lte(journalEntries.entryDate, weekEnd))),
+    ]);
 
-    supabase
-      .from("habit_logs")
-      .select("habit_id, log_date, habits!inner(name, user_id)")
-      .gte("log_date", weekStart)
-      .lte("log_date", weekEnd)
-      .eq("habits.user_id", userId),
+    const completedTasks = tasksRows.filter((t) => t.done);
+    const completedFocus = focusRows.filter((s) => s.completedAt != null);
+    const totalFocusMinutes = completedFocus.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
 
-    supabase
-      .from("workout_logs")
-      .select("id, name, duration_minutes, log_date")
-      .eq("user_id", userId)
-      .gte("log_date", weekStart)
-      .lte("log_date", weekEnd),
+    const moods = journalRows.filter((j) => j.mood != null).map((j) => j.mood as number);
+    const avgMood = moods.length > 0 ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
 
-    supabase
-      .from("focus_sessions")
-      .select("id, duration_minutes, completed_at, started_at")
-      .eq("user_id", userId)
-      .gte("started_at", `${weekStart}T00:00:00.000Z`)
-      .lte("started_at", `${weekEnd}T23:59:59.999Z`),
-
-    supabase
-      .from("journal_entries")
-      .select("id, entry_date, mood")
-      .eq("user_id", userId)
-      .gte("entry_date", weekStart)
-      .lte("entry_date", weekEnd),
-  ]);
-
-  const tasks = tasksRes.data ?? [];
-  const completedTasks = tasks.filter((t) => t.done);
-
-  const focusSessions = focusRes.data ?? [];
-  const completedFocus = focusSessions.filter((s) => s.completed_at != null);
-  const totalFocusMinutes = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-
-  const moods = (journalRes.data ?? []).filter((j) => j.mood != null).map((j) => j.mood as number);
-  const avgMood = moods.length > 0 ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
-
-  return {
-    data: {
-      weekStart,
-      weekEnd,
-      tasks: {
-        total: tasks.length,
-        completed: completedTasks.length,
-        completionRate: tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0,
+    return {
+      data: {
+        weekStart,
+        weekEnd,
+        tasks: {
+          total: tasksRows.length,
+          completed: completedTasks.length,
+          completionRate: tasksRows.length > 0 ? Math.round((completedTasks.length / tasksRows.length) * 100) : 0,
+        },
+        habits: {
+          totalCompletions: habitLogsRows.length,
+        },
+        workouts: {
+          count: workoutsRows.length,
+          totalMinutes: workoutsRows.reduce((sum, w) => sum + (w.durationMinutes ?? 0), 0),
+        },
+        focus: {
+          totalMinutes: totalFocusMinutes,
+          sessionCount: completedFocus.length,
+        },
+        journal: {
+          entriesWritten: journalRows.length,
+          averageMood: avgMood,
+        },
       },
-      habits: {
-        totalCompletions: habitLogsRes.data?.length ?? 0,
-      },
-      workouts: {
-        count: workoutsRes.data?.length ?? 0,
-        totalMinutes: (workoutsRes.data ?? []).reduce((sum, w) => sum + (w.duration_minutes ?? 0), 0),
-      },
-      focus: {
-        totalMinutes: totalFocusMinutes,
-        sessionCount: completedFocus.length,
-      },
-      journal: {
-        entriesWritten: journalRes.data?.length ?? 0,
-        averageMood: avgMood,
-      },
-    },
-    error: null,
-  };
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +202,11 @@ export function registerCalendarTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "calendar:read");
       if (scopeError) return errorResult(scopeError);
 
-      // Default to the most recent Monday
       let weekStart = args.week_start;
       if (!weekStart) {
         const now = new Date();
         const day = now.getDay();
-        const diff = (day === 0 ? -6 : 1 - day);
+        const diff = day === 0 ? -6 : 1 - day;
         now.setDate(now.getDate() + diff);
         weekStart = now.toISOString().split("T")[0];
       }

@@ -1,30 +1,35 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { goalProgressLogs } from "@/lib/db/schema";
+import { eq, and, asc } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
+
+function serializeLog(l: typeof goalProgressLogs.$inferSelect) {
+  return {
+    id: l.id,
+    goal_id: l.goalId,
+    user_id: l.userId,
+    log_date: l.logDate,
+    progress: l.progress,
+  };
+}
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const rows = await db
+      .select()
+      .from(goalProgressLogs)
+      .where(and(eq(goalProgressLogs.goalId, id), eq(goalProgressLogs.userId, userId)))
+      .orderBy(asc(goalProgressLogs.logDate));
+
+    return NextResponse.json(rows.map(serializeLog));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("goal_progress_logs")
-    .select("*")
-    .eq("goal_id", id)
-    .eq("user_id", user.id)
-    .order("log_date", { ascending: true });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data);
 }

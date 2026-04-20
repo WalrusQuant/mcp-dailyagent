@@ -43,11 +43,13 @@ export const OAUTH_SCOPES: ScopeDefinition[] = [
   // Calendar
   { scope: "calendar:read", label: "Read your calendar", description: "View daily and weekly summaries", category: "Calendar" },
 
-  // Briefings & Reviews
-  { scope: "briefing:read", label: "Read daily briefings", description: "View AI-generated daily briefings", category: "Briefings" },
-  { scope: "briefing:write", label: "Generate daily briefings", description: "Create and overwrite daily briefings", category: "Briefings" },
+  // Briefings & Reviews & Insights
+  { scope: "briefing:read", label: "Read daily briefings", description: "View daily briefings saved by OpenClaw", category: "Briefings" },
+  { scope: "briefing:write", label: "Save daily briefings", description: "Create and overwrite daily briefings", category: "Briefings" },
   { scope: "review:read", label: "Read weekly reviews", description: "View weekly review summaries", category: "Reviews" },
-  { scope: "review:write", label: "Generate weekly reviews", description: "Create and overwrite weekly reviews", category: "Reviews" },
+  { scope: "review:write", label: "Save weekly reviews", description: "Create and overwrite weekly reviews", category: "Reviews" },
+  { scope: "insights:read", label: "Read insights", description: "View cached insights saved by OpenClaw", category: "Insights" },
+  { scope: "insights:write", label: "Save insights", description: "Create and overwrite cached insights", category: "Insights" },
 
   // Convenience
   { scope: "all", label: "Full access", description: "Read and write access to all your data", category: "All" },

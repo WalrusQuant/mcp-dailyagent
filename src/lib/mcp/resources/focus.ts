@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getTodayFocusStats } from "@/lib/mcp/queries/focus";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -20,8 +20,7 @@ export function registerFocusResources(server: McpServer) {
         };
       }
 
-      const supabase = getServiceClient();
-      const result = await getTodayFocusStats(supabase, auth.userId);
+      const result = await getTodayFocusStats(db, auth.userId);
 
       return {
         contents: [

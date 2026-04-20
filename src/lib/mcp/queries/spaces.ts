@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { spaces } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 
 export interface Space {
@@ -24,79 +26,87 @@ export interface UpdateSpaceFields {
   status?: string;
 }
 
+function rowToSpace(row: typeof spaces.$inferSelect): Space {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    name: row.name,
+    description: row.description ?? null,
+    status: row.status as "active" | "paused" | "completed",
+    deadline: row.deadline ?? null,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
+}
+
 export async function getSpaces(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string
 ): Promise<QueryResult<Space[]>> {
   try {
-    const { data, error } = await supabase
-      .from("spaces")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false });
+    const rows = await db
+      .select()
+      .from(spaces)
+      .where(eq(spaces.userId, userId))
+      .orderBy(desc(spaces.updatedAt));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Space[], error: null };
+    return { data: rows.map(rowToSpace), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function createSpace(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: CreateSpaceInput
 ): Promise<QueryResult<Space>> {
   try {
-    const { data, error } = await supabase
-      .from("spaces")
-      .insert({
-        user_id: userId,
+    const [row] = await db
+      .insert(spaces)
+      .values({
+        userId,
         name: input.name,
         description: input.description || null,
-        status: input.status || "active",
+        status: (input.status as "active" | "paused" | "completed") || "active",
       })
-      .select()
-      .single();
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Space, error: null };
+    return { data: rowToSpace(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function updateSpace(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   spaceId: string,
   fields: UpdateSpaceFields
 ): Promise<QueryResult<Space>> {
   try {
-    const allowedFields: Record<string, unknown> = {};
+    const updates: Partial<typeof spaces.$inferInsert> = {};
 
-    if (typeof fields.name === "string") allowedFields.name = fields.name;
+    if (typeof fields.name === "string") updates.name = fields.name;
     if (typeof fields.description === "string" || fields.description === null)
-      allowedFields.description = fields.description;
+      updates.description = fields.description;
     if (
       typeof fields.status === "string" &&
       ["active", "paused", "completed"].includes(fields.status)
     ) {
-      allowedFields.status = fields.status;
+      updates.status = fields.status as "active" | "paused" | "completed";
     }
 
-    allowedFields.updated_at = new Date().toISOString();
+    updates.updatedAt = new Date();
 
-    const { data, error } = await supabase
-      .from("spaces")
-      .update(allowedFields)
-      .eq("id", spaceId)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    const [row] = await db
+      .update(spaces)
+      .set(updates)
+      .where(and(eq(spaces.id, spaceId), eq(spaces.userId, userId)))
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Space, error: null };
+    if (!row) return { data: null, error: "Space not found" };
+    return { data: rowToSpace(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }

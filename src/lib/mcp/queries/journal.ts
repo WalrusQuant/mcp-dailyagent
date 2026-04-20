@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { journalEntries } from "@/lib/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -18,68 +20,79 @@ export interface CreateOrUpdateJournalInput {
   mood?: number | null;
 }
 
+function rowToEntry(row: typeof journalEntries.$inferSelect): JournalEntry {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    content: row.content,
+    entry_date: row.entryDate,
+    mood: row.mood ?? null,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
+}
+
 export async function getJournalEntry(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   date: string
 ): Promise<QueryResult<JournalEntry | null>> {
   try {
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("entry_date", date)
-      .maybeSingle();
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date)));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as JournalEntry | null, error: null };
+    return { data: rows.length > 0 ? rowToEntry(rows[0]) : null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function getRecentJournalEntries(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   limit = 7
 ): Promise<QueryResult<JournalEntry[]>> {
   try {
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("user_id", userId)
-      .order("entry_date", { ascending: false })
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(eq(journalEntries.userId, userId))
+      .orderBy(desc(journalEntries.entryDate))
       .limit(limit);
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as JournalEntry[], error: null };
+    return { data: rows.map(rowToEntry), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function searchJournal(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   query: string
 ): Promise<QueryResult<JournalEntry[]>> {
   try {
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("user_id", userId)
-      .textSearch("content", query, { type: "websearch" })
-      .order("entry_date", { ascending: false });
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.userId, userId),
+          sql`to_tsvector('english', ${journalEntries.content}) @@ plainto_tsquery('english', ${query})`
+        )
+      )
+      .orderBy(desc(journalEntries.entryDate));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as JournalEntry[], error: null };
+    return { data: rows.map(rowToEntry), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function createOrUpdateJournalEntry(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: CreateOrUpdateJournalInput
 ): Promise<QueryResult<JournalEntry>> {
@@ -87,22 +100,25 @@ export async function createOrUpdateJournalEntry(
     const today = getToday();
     const entryDate = input.entry_date || today;
 
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .upsert(
-        {
-          user_id: userId,
+    const [row] = await db
+      .insert(journalEntries)
+      .values({
+        userId,
+        content: input.content.trim(),
+        entryDate,
+        mood: input.mood ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [journalEntries.userId, journalEntries.entryDate],
+        set: {
           content: input.content.trim(),
-          entry_date: entryDate,
           mood: input.mood ?? null,
+          updatedAt: new Date(),
         },
-        { onConflict: "user_id,entry_date" }
-      )
-      .select()
-      .single();
+      })
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as JournalEntry, error: null };
+    return { data: rowToEntry(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }

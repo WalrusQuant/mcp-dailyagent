@@ -2,56 +2,44 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Save } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/toast-context";
 
 export function AccountTab() {
   const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState("UTC");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
-  const supabase = createClient();
 
   useEffect(() => {
     async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      setEmail(user.email || "");
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name, timezone")
-        .eq("id", user.id)
-        .single();
-
-      if (profile) {
-        setDisplayName(profile.display_name || "");
-        setTimezone(profile.timezone || "UTC");
+      try {
+        const res = await fetch("/api/profile");
+        if (!res.ok) return;
+        const data = await res.json();
+        setDisplayName(data.displayName || "");
+        setTimezone(data.timezone || "UTC");
+      } catch {
+        // non-fatal
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
     loadProfile();
-  }, [supabase]);
+  }, []);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          display_name: displayName,
-          timezone,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
-
-      if (error) throw error;
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: displayName || null, timezone }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save");
+      }
       addToast("Profile updated", "success");
     } catch (err) {
       addToast(
@@ -83,26 +71,6 @@ export function AccountTab() {
       </div>
 
       <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            disabled
-            className="w-full rounded-lg px-4 py-3 opacity-60 cursor-not-allowed"
-            style={{
-              background: "var(--bg-input)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-default)",
-            }}
-          />
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            Email changes are managed through Supabase Auth.
-          </p>
-        </div>
-
         <div>
           <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
             Display Name

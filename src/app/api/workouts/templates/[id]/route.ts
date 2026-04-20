@@ -1,54 +1,80 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { workoutTemplates, workoutExercises } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET a single workout template with its exercises
+function serializeExercise(e: typeof workoutExercises.$inferSelect) {
+  return {
+    id: e.id,
+    template_id: e.templateId,
+    name: e.name,
+    exercise_type: e.exerciseType,
+    sort_order: e.sortOrder,
+    default_sets: e.defaultSets,
+    default_reps: e.defaultReps,
+    default_weight: e.defaultWeight,
+    default_duration: e.defaultDuration,
+    notes: e.notes,
+  };
+}
+
+function serializeTemplate(t: typeof workoutTemplates.$inferSelect, exercises: typeof workoutExercises.$inferSelect[]) {
+  return {
+    id: t.id,
+    user_id: t.userId,
+    name: t.name,
+    description: t.description,
+    created_at: t.createdAt,
+    workout_exercises: exercises.map(serializeExercise),
+  };
+}
+
+async function getTemplateWithExercises(id: string, userId: string) {
+  const rows = await db
+    .select()
+    .from(workoutTemplates)
+    .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
+
+  if (rows.length === 0) return null;
+
+  const exercises = await db
+    .select()
+    .from(workoutExercises)
+    .where(eq(workoutExercises.templateId, id))
+    .orderBy(workoutExercises.sortOrder);
+
+  return serializeTemplate(rows[0], exercises);
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const result = await getTemplateWithExercises(id, userId);
+    if (!result) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(result);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("workout_templates")
-    .select("*, workout_exercises(*)")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// PATCH update a workout template; optionally replace exercises
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
 
-  // Whitelist scalar fields
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof workoutTemplates.$inferInsert> = {};
   if (typeof body.name === "string") allowedFields.name = body.name;
   if (typeof body.description === "string" || body.description === null)
     allowedFields.description = body.description;
@@ -57,100 +83,69 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  if (Object.keys(allowedFields).length > 0) {
-    const { error: updateError } = await supabase
-      .from("workout_templates")
-      .update(allowedFields)
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-  }
-
-  if (Array.isArray(body.exercises)) {
-    const { error: deleteError } = await supabase
-      .from("workout_exercises")
-      .delete()
-      .eq("template_id", id);
-
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  try {
+    if (Object.keys(allowedFields).length > 0) {
+      await db
+        .update(workoutTemplates)
+        .set(allowedFields)
+        .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
     }
 
-    if (body.exercises.length > 0) {
-      const exerciseRows = body.exercises.map(
-        (ex: {
-          name: string;
-          exercise_type?: string;
-          sort_order?: number;
-          default_sets?: number;
-          default_reps?: number;
-          default_weight?: number;
-          default_duration?: number;
-          notes?: string;
-        }) => ({
-          template_id: id,
-          name: ex.name,
-          exercise_type: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
-          sort_order: ex.sort_order ?? 0,
-          default_sets: ex.default_sets ?? null,
-          default_reps: ex.default_reps ?? null,
-          default_weight: ex.default_weight ?? null,
-          default_duration: ex.default_duration ?? null,
-          notes: ex.notes ?? null,
-        })
-      );
+    if (Array.isArray(body.exercises)) {
+      await db.delete(workoutExercises).where(eq(workoutExercises.templateId, id));
 
-      const { error: insertError } = await supabase
-        .from("workout_exercises")
-        .insert(exerciseRows);
-
-      if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 500 });
+      if (body.exercises.length > 0) {
+        await db.insert(workoutExercises).values(
+          body.exercises.map(
+            (ex: {
+              name: string;
+              exercise_type?: string;
+              sort_order?: number;
+              default_sets?: number;
+              default_reps?: number;
+              default_weight?: number;
+              default_duration?: number;
+              notes?: string;
+            }) => ({
+              templateId: id,
+              name: ex.name,
+              exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
+              sortOrder: ex.sort_order ?? 0,
+              defaultSets: ex.default_sets ?? null,
+              defaultReps: ex.default_reps ?? null,
+              defaultWeight: ex.default_weight?.toString() ?? null,
+              defaultDuration: ex.default_duration ?? null,
+              notes: ex.notes ?? null,
+            })
+          )
+        );
       }
     }
+
+    const result = await getTemplateWithExercises(id, userId);
+    if (!result) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(result);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("workout_templates")
-    .select("*, workout_exercises(*)")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// DELETE a workout template (exercises cascade via FK)
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db
+      .delete(workoutTemplates)
+      .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("workout_templates")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

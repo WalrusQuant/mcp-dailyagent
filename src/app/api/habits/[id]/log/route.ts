@@ -1,20 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { habits, habitLogs } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// POST toggle habit log for a given date
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { date } = body;
@@ -26,48 +21,33 @@ export async function POST(
     );
   }
 
-  // Verify the habit belongs to the user
-  const { error: habitError } = await supabase
-    .from("habits")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
+  try {
+    // Verify the habit belongs to the user
+    const habitRows = await db
+      .select({ id: habits.id })
+      .from(habits)
+      .where(and(eq(habits.id, id), eq(habits.userId, userId)));
 
-  if (habitError) {
-    return NextResponse.json({ error: "Habit not found" }, { status: 404 });
-  }
-
-  // Check if a log already exists for this habit + date
-  const { data: existingLog } = await supabase
-    .from("habit_logs")
-    .select("id")
-    .eq("habit_id", id)
-    .eq("log_date", date)
-    .single();
-
-  if (existingLog) {
-    // Toggle off — delete the log
-    const { error: deleteError } = await supabase
-      .from("habit_logs")
-      .delete()
-      .eq("id", existingLog.id);
-
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    if (habitRows.length === 0) {
+      return NextResponse.json({ error: "Habit not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ logged: false });
-  } else {
-    // Toggle on — create the log
-    const { error: insertError } = await supabase
-      .from("habit_logs")
-      .insert({ habit_id: id, log_date: date, user_id: user.id });
+    // Check if a log already exists for this habit + date
+    const existingLogs = await db
+      .select({ id: habitLogs.id })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.habitId, id), eq(habitLogs.logDate, date)));
 
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    if (existingLogs.length > 0) {
+      // Toggle off — delete the log
+      await db.delete(habitLogs).where(eq(habitLogs.id, existingLogs[0].id));
+      return NextResponse.json({ logged: false });
+    } else {
+      // Toggle on — create the log
+      await db.insert(habitLogs).values({ habitId: id, logDate: date, userId });
+      return NextResponse.json({ logged: true });
     }
-
-    return NextResponse.json({ logged: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
 }

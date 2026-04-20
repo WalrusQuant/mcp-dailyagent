@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Sparkles, Save, FileText } from "lucide-react";
+import { Loader2, Save, FileText } from "lucide-react";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { startOfWeek, getToday } from "@/lib/dates";
@@ -14,7 +14,6 @@ export function WeeklyReview() {
   const [content, setContent] = useState("");
   const [, setReviewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<{
@@ -61,27 +60,6 @@ export function WeeklyReview() {
       .catch(() => {});
   }, []);
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    try {
-      const response = await fetch("/api/weekly-review/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setContent(data.content);
-        setIsEditing(true);
-      }
-    } catch (error) {
-      console.error("Failed to generate review:", error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!content.trim()) return;
     setIsSaving(true);
@@ -124,8 +102,8 @@ export function WeeklyReview() {
         <EmptyState
           icon={FileText}
           message="No review for this week yet"
-          actionLabel="Generate with AI"
-          onAction={handleGenerate}
+          actionLabel="Write one"
+          onAction={() => setIsEditing(true)}
         />
       ) : isEditing ? (
         <div className="space-y-4">
@@ -139,35 +117,25 @@ export function WeeklyReview() {
               border: "1px solid var(--border-default)",
               lineHeight: "1.6",
             }}
+            placeholder="Write your weekly review..."
           />
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-end gap-2">
             <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
-              style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
+              onClick={() => { setIsEditing(false); loadReview(weekStart); }}
+              className="px-3 py-1.5 rounded-lg text-sm"
+              style={{ color: "var(--text-secondary)" }}
             >
-              {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              Regenerate
+              Cancel
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setIsEditing(false); loadReview(weekStart); }}
-                className="px-3 py-1.5 rounded-lg text-sm"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!content.trim() || isSaving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
-                style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-              >
-                <Save className="w-4 h-4" />
-                {isSaving ? "Saving..." : "Save"}
-              </button>
-            </div>
+            <button
+              onClick={handleSave}
+              disabled={!content.trim() || isSaving}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
+              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? "Saving..." : "Save"}
+            </button>
           </div>
         </div>
       ) : (
@@ -229,23 +197,7 @@ export function WeeklyReview() {
             >
               Edit
             </button>
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm"
-              style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
-            >
-              {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              Regenerate
-            </button>
           </div>
-        </div>
-      )}
-
-      {isGenerating && (
-        <div className="flex items-center justify-center gap-2 py-8">
-          <Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--accent-primary)" }} />
-          <span className="text-sm" style={{ color: "var(--text-muted)" }}>Analyzing your week...</span>
         </div>
       )}
     </div>

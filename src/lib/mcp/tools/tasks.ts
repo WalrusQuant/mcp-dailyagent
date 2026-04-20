@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { tasks } from "@/lib/db/schema";
+import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,37 +10,36 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getTasksForDate(userId: string, date?: string, spaceId?: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
   const taskDate = date ?? today;
 
-  if (taskDate === today) {
-    let query = supabase
-      .from("tasks")
-      .select("*")
-      .eq("user_id", userId)
-      .or(`task_date.eq.${taskDate},and(task_date.lt.${taskDate},done.eq.false)`)
-      .order("priority", { ascending: true })
-      .order("sort_order", { ascending: true });
+  const baseConditions =
+    taskDate === today
+      ? and(
+          eq(tasks.userId, userId),
+          or(
+            eq(tasks.taskDate, taskDate),
+            and(lt(tasks.taskDate, taskDate), eq(tasks.done, false))
+          )
+        )
+      : and(eq(tasks.userId, userId), eq(tasks.taskDate, taskDate));
 
-    if (spaceId) query = query.eq("space_id", spaceId);
+  let query = db.select().from(tasks).where(baseConditions).orderBy(asc(tasks.priority), asc(tasks.sortOrder));
 
-    const { data, error } = await query;
-    return { data, error: error?.message ?? null };
+  if (spaceId) {
+    query = db
+      .select()
+      .from(tasks)
+      .where(and(baseConditions, eq(tasks.spaceId, spaceId)))
+      .orderBy(asc(tasks.priority), asc(tasks.sortOrder));
   }
 
-  let query = supabase
-    .from("tasks")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("task_date", taskDate)
-    .order("priority", { ascending: true })
-    .order("sort_order", { ascending: true });
-
-  if (spaceId) query = query.eq("space_id", spaceId);
-
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
+  try {
+    const rows = await query;
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function createTask(
@@ -52,25 +53,25 @@ async function createTask(
     goal_id?: string;
   }
 ) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .insert({
-      user_id: userId,
-      title: args.title,
-      notes: args.notes ?? null,
-      priority: args.priority ?? "B",
-      task_date: args.task_date ?? today,
-      space_id: args.space_id ?? null,
-      goal_id: args.goal_id ?? null,
-      done: false,
-    })
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .insert(tasks)
+      .values({
+        userId,
+        title: args.title,
+        notes: args.notes ?? null,
+        priority: args.priority ?? "B1",
+        taskDate: args.task_date ?? today,
+        spaceId: args.space_id ?? null,
+        goalId: args.goal_id ?? null,
+        done: false,
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function updateTask(
@@ -84,50 +85,49 @@ async function updateTask(
     done?: boolean;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const updates: Record<string, unknown> = {};
+  const updates: Partial<typeof tasks.$inferInsert> = {};
   if (args.title !== undefined) updates.title = args.title;
   if (args.notes !== undefined) updates.notes = args.notes;
   if (args.priority !== undefined) updates.priority = args.priority;
-  if (args.task_date !== undefined) updates.task_date = args.task_date;
-  if (args.done !== undefined) updates.done = args.done;
+  if (args.task_date !== undefined) updates.taskDate = args.task_date;
+  if (args.done !== undefined) {
+    updates.done = args.done;
+    updates.doneAt = args.done ? new Date() : null;
+  }
+  updates.updatedAt = new Date();
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(updates)
-    .eq("id", args.task_id)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(tasks)
+      .set(updates)
+      .where(and(eq(tasks.id, args.task_id), eq(tasks.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Task not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function completeTask(userId: string, taskId: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ done: true, completed_at: new Date().toISOString() })
-    .eq("id", taskId)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(tasks)
+      .set({ done: true, doneAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Task not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function deleteTask(userId: string, taskId: string) {
-  const supabase = getServiceClient();
-
-  const { error } = await supabase
-    .from("tasks")
-    .delete()
-    .eq("id", taskId)
-    .eq("user_id", userId);
-
-  return { error: error?.message ?? null };
+  try {
+    await db.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,28 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { tasks } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
+
+function serializeTask(t: typeof tasks.$inferSelect) {
+  return {
+    id: t.id,
+    user_id: t.userId,
+    title: t.title,
+    notes: t.notes,
+    priority: t.priority,
+    sort_order: t.sortOrder,
+    done: t.done,
+    done_at: t.doneAt,
+    task_date: t.taskDate,
+    rolled_from: t.rolledFrom,
+    space_id: t.spaceId,
+    goal_id: t.goalId,
+    recurrence: t.recurrence,
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+  };
+}
 
 function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: number[] }): string {
   const d = new Date(taskDate + "T00:00:00");
@@ -23,31 +46,26 @@ function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: 
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const rows = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeTask(rows[0]));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-
-  return NextResponse.json(data);
 }
 
 export async function PATCH(
@@ -55,100 +73,82 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
 
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof tasks.$inferInsert> = {};
 
   if (typeof body.title === "string") allowedFields.title = body.title;
   if (typeof body.notes === "string" || body.notes === null) allowedFields.notes = body.notes;
-  if (typeof body.priority === "number") allowedFields.priority = body.priority;
-  if (typeof body.sort_order === "number") allowedFields.sort_order = body.sort_order;
+  if (typeof body.priority === "string") allowedFields.priority = body.priority;
+  if (typeof body.sort_order === "number") allowedFields.sortOrder = body.sort_order;
   if (typeof body.done === "boolean") allowedFields.done = body.done;
-  if (typeof body.done_at === "string" || body.done_at === null) allowedFields.done_at = body.done_at;
-  if (typeof body.task_date === "string") allowedFields.task_date = body.task_date;
-  if (typeof body.space_id === "string" || body.space_id === null)
-    allowedFields.space_id = body.space_id;
-  if (typeof body.goal_id === "string" || body.goal_id === null)
-    allowedFields.goal_id = body.goal_id;
+  if (typeof body.done_at === "string" || body.done_at === null) allowedFields.doneAt = body.done_at ? new Date(body.done_at) : null;
+  if (typeof body.task_date === "string") allowedFields.taskDate = body.task_date;
+  if (typeof body.space_id === "string" || body.space_id === null) allowedFields.spaceId = body.space_id;
+  if (typeof body.goal_id === "string" || body.goal_id === null) allowedFields.goalId = body.goal_id;
   if (body.recurrence !== undefined) allowedFields.recurrence = body.recurrence;
 
-  // Auto-set done_at when marking done
+  // Auto-set doneAt when marking done
   if (body.done === true && body.done_at === undefined) {
-    allowedFields.done_at = new Date().toISOString();
+    allowedFields.doneAt = new Date();
   }
   if (body.done === false) {
-    allowedFields.done_at = null;
+    allowedFields.doneAt = null;
   }
 
   if (Object.keys(allowedFields).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  allowedFields.updated_at = new Date().toISOString();
+  allowedFields.updatedAt = new Date();
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(allowedFields)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .update(tasks)
+      .set(allowedFields)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // If marking done and task has recurrence, create next occurrence
+    if (body.done === true && row.recurrence && row.taskDate) {
+      const recurrence = row.recurrence as { type: string; days?: number[] };
+      const nextDate = getNextOccurrence(row.taskDate, recurrence);
+
+      await db.insert(tasks).values({
+        userId,
+        title: row.title,
+        notes: row.notes,
+        priority: row.priority,
+        taskDate: nextDate,
+        spaceId: row.spaceId,
+        recurrence: row.recurrence,
+        sortOrder: row.sortOrder,
+      });
+    }
+
+    return NextResponse.json(serializeTask(row));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  // If marking done and task has recurrence, create next occurrence
-  if (body.done === true && data.recurrence && data.task_date) {
-    const nextDate = getNextOccurrence(data.task_date, data.recurrence);
-
-    await supabase.from("tasks").insert({
-      user_id: user.id,
-      title: data.title,
-      notes: data.notes,
-      priority: data.priority,
-      task_date: nextDate,
-      space_id: data.space_id,
-      recurrence: data.recurrence,
-      sort_order: data.sort_order,
-    });
-  }
-
-  return NextResponse.json(data);
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("tasks")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

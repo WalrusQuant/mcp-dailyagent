@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { habits, habitLogs } from "@/lib/db/schema";
+import { eq, and, gte, lte, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -36,6 +38,22 @@ export interface CreateHabitInput {
   target_days?: number[];
   color?: string;
   goal_id?: string;
+}
+
+function rowToHabit(row: typeof habits.$inferSelect): Habit {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    name: row.name,
+    description: row.description ?? null,
+    frequency: row.frequency ?? null,
+    target_days: row.targetDays ?? null,
+    color: row.color ?? null,
+    archived: row.archived,
+    sort_order: row.sortOrder,
+    goal_id: row.goalId ?? null,
+    created_at: row.createdAt.toISOString(),
+  };
 }
 
 function calculateStreak(logs: string[], targetDays: number[]): number {
@@ -82,57 +100,49 @@ function getApplicableDays(startDate: Date, endDate: Date, targetDays: number[])
 }
 
 export async function getHabits(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   includeArchived = false
 ): Promise<QueryResult<Habit[]>> {
   try {
-    let query = supabase
-      .from("habits")
-      .select("*")
-      .eq("user_id", userId)
-      .order("sort_order", { ascending: true });
+    const conditions = includeArchived
+      ? eq(habits.userId, userId)
+      : and(eq(habits.userId, userId), eq(habits.archived, false));
 
-    if (!includeArchived) {
-      query = query.eq("archived", false);
-    }
+    const rows = await db
+      .select()
+      .from(habits)
+      .where(conditions)
+      .orderBy(asc(habits.sortOrder));
 
-    const { data, error } = await query;
-
-    if (error) return { data: null, error: error.message };
-    return { data: data as Habit[], error: null };
+    return { data: rows.map(rowToHabit), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function getHabitsWithTodayStatus(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string
 ): Promise<QueryResult<HabitWithStatus[]>> {
   try {
     const today = getToday();
 
-    const [habitsResult, logsResult] = await Promise.all([
-      supabase
-        .from("habits")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("archived", false)
-        .order("sort_order", { ascending: true }),
-      supabase
-        .from("habit_logs")
-        .select("habit_id")
-        .eq("user_id", userId)
-        .eq("log_date", today),
+    const [habitsRows, logsRows] = await Promise.all([
+      db
+        .select()
+        .from(habits)
+        .where(and(eq(habits.userId, userId), eq(habits.archived, false)))
+        .orderBy(asc(habits.sortOrder)),
+      db
+        .select({ habitId: habitLogs.habitId })
+        .from(habitLogs)
+        .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, today))),
     ]);
 
-    if (habitsResult.error) return { data: null, error: habitsResult.error.message };
-    if (logsResult.error) return { data: null, error: logsResult.error.message };
-
-    const loggedIds = new Set((logsResult.data ?? []).map((l) => l.habit_id));
-    const habitsWithStatus: HabitWithStatus[] = (habitsResult.data as Habit[]).map((h) => ({
-      ...h,
+    const loggedIds = new Set(logsRows.map((l) => l.habitId));
+    const habitsWithStatus: HabitWithStatus[] = habitsRows.map((h) => ({
+      ...rowToHabit(h),
       logged_today: loggedIds.has(h.id),
     }));
 
@@ -143,71 +153,56 @@ export async function getHabitsWithTodayStatus(
 }
 
 export async function createHabit(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: CreateHabitInput
 ): Promise<QueryResult<Habit>> {
   try {
-    const { data, error } = await supabase
-      .from("habits")
-      .insert({
-        user_id: userId,
+    const [row] = await db
+      .insert(habits)
+      .values({
+        userId,
         name: input.name.trim(),
         ...(input.description ? { description: input.description } : {}),
         ...(input.frequency ? { frequency: input.frequency } : {}),
-        ...(input.target_days ? { target_days: input.target_days } : {}),
+        ...(input.target_days ? { targetDays: input.target_days } : {}),
         ...(input.color ? { color: input.color } : {}),
-        ...(input.goal_id !== undefined ? { goal_id: input.goal_id || null } : {}),
+        ...(input.goal_id !== undefined ? { goalId: input.goal_id || null } : {}),
       })
-      .select()
-      .single();
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Habit, error: null };
+    return { data: rowToHabit(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function toggleHabitLog(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   habitId: string,
   date: string
 ): Promise<QueryResult<{ logged: boolean }>> {
   try {
     // Verify the habit belongs to the user
-    const { error: habitError } = await supabase
-      .from("habits")
-      .select("id")
-      .eq("id", habitId)
-      .eq("user_id", userId)
-      .single();
+    const habitRows = await db
+      .select({ id: habits.id })
+      .from(habits)
+      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)));
 
-    if (habitError) return { data: null, error: "Habit not found" };
+    if (habitRows.length === 0) return { data: null, error: "Habit not found" };
 
-    // Check if a log already exists for this habit + date
-    const { data: existingLog } = await supabase
-      .from("habit_logs")
-      .select("id")
-      .eq("habit_id", habitId)
-      .eq("log_date", date)
-      .single();
+    // Check if a log already exists
+    const existingLogs = await db
+      .select({ id: habitLogs.id })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.logDate, date)));
 
-    if (existingLog) {
-      const { error: deleteError } = await supabase
-        .from("habit_logs")
-        .delete()
-        .eq("id", existingLog.id);
-
-      if (deleteError) return { data: null, error: deleteError.message };
+    if (existingLogs.length > 0) {
+      await db.delete(habitLogs).where(eq(habitLogs.id, existingLogs[0].id));
       return { data: { logged: false }, error: null };
     } else {
-      const { error: insertError } = await supabase
-        .from("habit_logs")
-        .insert({ habit_id: habitId, log_date: date, user_id: userId });
-
-      if (insertError) return { data: null, error: insertError.message };
+      await db.insert(habitLogs).values({ habitId, logDate: date, userId });
       return { data: { logged: true }, error: null };
     }
   } catch (err) {
@@ -216,7 +211,7 @@ export async function toggleHabitLog(
 }
 
 export async function getHabitStats(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   habitId: string,
   days = 30
@@ -229,40 +224,41 @@ export async function getHabitStats(
     const startDateStr = startDate.toISOString().split("T")[0];
     const endDateStr = today.toISOString().split("T")[0];
 
-    const { data: habit, error: habitError } = await supabase
-      .from("habits")
-      .select("id, name, color, target_days")
-      .eq("id", habitId)
-      .eq("user_id", userId)
-      .single();
+    const habitRows = await db
+      .select({ id: habits.id, name: habits.name, color: habits.color, targetDays: habits.targetDays })
+      .from(habits)
+      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)));
 
-    if (habitError) return { data: null, error: "Habit not found" };
+    if (habitRows.length === 0) return { data: null, error: "Habit not found" };
+    const habit = habitRows[0];
 
-    const { data: logs, error: logsError } = await supabase
-      .from("habit_logs")
-      .select("log_date")
-      .eq("habit_id", habitId)
-      .gte("log_date", startDateStr)
-      .lte("log_date", endDateStr);
+    const logRows = await db
+      .select({ logDate: habitLogs.logDate })
+      .from(habitLogs)
+      .where(
+        and(
+          eq(habitLogs.habitId, habitId),
+          gte(habitLogs.logDate, startDateStr),
+          lte(habitLogs.logDate, endDateStr)
+        )
+      );
 
-    if (logsError) return { data: null, error: logsError.message };
-
-    const habitLogs = (logs ?? []).map((l) => l.log_date);
+    const habitLogDates = logRows.map((l) => l.logDate);
     const targetDays: number[] =
-      Array.isArray(habit.target_days) && habit.target_days.length > 0
-        ? habit.target_days
+      Array.isArray(habit.targetDays) && habit.targetDays.length > 0
+        ? habit.targetDays
         : [1, 2, 3, 4, 5, 6, 7];
 
-    const streak = calculateStreak(habitLogs, targetDays);
+    const streak = calculateStreak(habitLogDates, targetDays);
     const applicableDays = getApplicableDays(startDate, today, targetDays);
-    const completionRate = applicableDays > 0 ? habitLogs.length / applicableDays : 0;
-    const recentLogs = [...new Set(habitLogs)].sort().reverse();
+    const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
+    const recentLogs = [...new Set(habitLogDates)].sort().reverse();
 
     return {
       data: {
         id: habit.id,
         name: habit.name,
-        color: habit.color,
+        color: habit.color ?? null,
         streak,
         completionRate: Math.min(1, completionRate),
         recentLogs,

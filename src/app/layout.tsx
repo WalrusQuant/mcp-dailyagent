@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme";
-import { getConfig } from "@/lib/app-config";
 import "./globals.css";
 
 const inter = Inter({
@@ -14,21 +13,19 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-export async function generateMetadata(): Promise<Metadata> {
-  const siteName = (await getConfig("site_name")) || "Daily Agent";
-  const siteDescription = (await getConfig("site_description")) || "Your AI productivity agent";
+const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Daily Agent";
+const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "Your productivity dashboard";
 
-  return {
+export const metadata: Metadata = {
+  title: siteName,
+  description: siteDescription,
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
     title: siteName,
-    description: siteDescription,
-    manifest: "/manifest.json",
-    appleWebApp: {
-      capable: true,
-      statusBarStyle: "black-translucent",
-      title: siteName,
-    },
-  };
-}
+  },
+};
 
 export const viewport: Viewport = {
   themeColor: "#d4a574",

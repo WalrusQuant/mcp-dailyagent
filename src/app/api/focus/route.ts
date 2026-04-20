@@ -1,16 +1,25 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET focus sessions with optional date range filter
+function serializeSession(s: typeof focusSessions.$inferSelect) {
+  return {
+    id: s.id,
+    user_id: s.userId,
+    task_id: s.taskId,
+    duration_minutes: s.durationMinutes,
+    break_minutes: s.breakMinutes,
+    started_at: s.startedAt,
+    completed_at: s.completedAt,
+    status: s.status,
+    notes: s.notes,
+  };
+}
+
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
 
@@ -20,31 +29,27 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from") || defaultFrom.toISOString();
   const to = searchParams.get("to") || new Date().toISOString();
 
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("started_at", from)
-    .lte("started_at", to)
-    .order("started_at", { ascending: false });
+  try {
+    const rows = await db
+      .select()
+      .from(focusSessions)
+      .where(
+        and(
+          eq(focusSessions.userId, userId),
+          gte(focusSessions.startedAt, new Date(from)),
+          lte(focusSessions.startedAt, new Date(to))
+        )
+      )
+      .orderBy(desc(focusSessions.startedAt));
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(rows.map(serializeSession));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
-// POST create a new focus session
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { task_id, duration_minutes, break_minutes, notes } = body;
@@ -56,23 +61,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .insert({
-      user_id: user.id,
-      task_id: task_id ?? null,
-      duration_minutes,
-      break_minutes: typeof break_minutes === "number" ? break_minutes : 0,
-      notes: notes ?? null,
-      started_at: new Date().toISOString(),
-      status: "active",
-    })
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .insert(focusSessions)
+      .values({
+        userId,
+        taskId: task_id ?? null,
+        durationMinutes: duration_minutes,
+        breakMinutes: typeof break_minutes === "number" ? break_minutes : 0,
+        notes: notes ?? null,
+        startedAt: new Date(),
+        status: "active",
+      })
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(serializeSession(row), { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data, { status: 201 });
 }

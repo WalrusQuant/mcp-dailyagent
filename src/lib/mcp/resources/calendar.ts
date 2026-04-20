@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getDaySummary, getWeekSummary } from "@/lib/mcp/queries/calendar";
 import { getToday } from "@/lib/dates";
@@ -21,8 +21,7 @@ export function registerCalendarResources(server: McpServer) {
         };
       }
 
-      const supabase = getServiceClient();
-      const result = await getDaySummary(supabase, auth.userId, getToday());
+      const result = await getDaySummary(db, auth.userId, getToday());
 
       return {
         contents: [
@@ -51,8 +50,7 @@ export function registerCalendarResources(server: McpServer) {
         };
       }
 
-      const supabase = getServiceClient();
-      const result = await getWeekSummary(supabase, auth.userId);
+      const result = await getWeekSummary(db, auth.userId);
 
       return {
         contents: [

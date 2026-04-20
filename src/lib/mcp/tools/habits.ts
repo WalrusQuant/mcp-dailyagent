@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { habits, habitLogs } from "@/lib/db/schema";
+import { eq, and, gte, asc, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,65 +10,56 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getHabits(userId: string, includeArchived = false) {
-  const supabase = getServiceClient();
+  try {
+    const conditions = includeArchived
+      ? eq(habits.userId, userId)
+      : and(eq(habits.userId, userId), eq(habits.archived, false));
 
-  let query = supabase
-    .from("habits")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
-
-  if (!includeArchived) {
-    query = query.eq("archived", false);
+    const rows = await db.select().from(habits).where(conditions).orderBy(asc(habits.createdAt));
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
-
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
 }
 
 async function getHabitStats(userId: string, habitId: string, days = 30) {
-  const supabase = getServiceClient();
+  try {
+    const habitRows = await db
+      .select()
+      .from(habits)
+      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)));
 
-  // Verify ownership
-  const { data: habit, error: habitError } = await supabase
-    .from("habits")
-    .select("*")
-    .eq("id", habitId)
-    .eq("user_id", userId)
-    .single();
+    if (habitRows.length === 0) return { data: null, error: "Habit not found" };
+    const habit = habitRows[0];
 
-  if (habitError || !habit) {
-    return { data: null, error: "Habit not found" };
-  }
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    const fromStr = fromDate.toISOString().split("T")[0];
 
-  const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - days);
-  const fromStr = fromDate.toISOString().split("T")[0];
+    const logs = await db
+      .select()
+      .from(habitLogs)
+      .where(and(eq(habitLogs.habitId, habitId), gte(habitLogs.logDate, fromStr)))
+      .orderBy(desc(habitLogs.logDate));
 
-  const { data: logs, error: logsError } = await supabase
-    .from("habit_logs")
-    .select("*")
-    .eq("habit_id", habitId)
-    .gte("log_date", fromStr)
-    .order("log_date", { ascending: false });
+    const completedDays = logs.length;
+    const completionRate = days > 0 ? Math.round((completedDays / days) * 100) : 0;
 
-  if (logsError) return { data: null, error: logsError.message };
-
-  const completedDays = logs?.length ?? 0;
-  const completionRate = days > 0 ? Math.round((completedDays / days) * 100) : 0;
-
-  return {
-    data: {
-      habit,
-      logs,
-      stats: {
-        completedDays,
-        totalDays: days,
-        completionRate,
+    return {
+      data: {
+        habit,
+        logs,
+        stats: {
+          completedDays,
+          totalDays: days,
+          completionRate,
+        },
       },
-    },
-    error: null,
-  };
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function createHabit(
@@ -79,66 +72,56 @@ async function createHabit(
     color?: string;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("habits")
-    .insert({
-      user_id: userId,
-      name: args.name,
-      description: args.description ?? null,
-      frequency: (args.frequency === "weekly" ? "weekly" : "daily") satisfies "daily" | "weekly",
-      target_days: args.target_days ?? [0, 1, 2, 3, 4, 5, 6],
-      archived: false,
-    })
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .insert(habits)
+      .values({
+        userId,
+        name: args.name,
+        description: args.description ?? null,
+        frequency: (args.frequency === "weekly" ? "weekly" : "daily") as "daily" | "weekly",
+        targetDays: args.target_days ?? [0, 1, 2, 3, 4, 5, 6],
+        color: args.color ?? "#d4a574",
+        archived: false,
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function toggleHabitLog(userId: string, habitId: string, date?: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
   const logDate = date ?? today;
 
-  // Verify ownership
-  const { data: habit, error: habitError } = await supabase
-    .from("habits")
-    .select("id")
-    .eq("id", habitId)
-    .eq("user_id", userId)
-    .single();
+  try {
+    // Verify ownership
+    const habitRows = await db
+      .select({ id: habits.id })
+      .from(habits)
+      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)));
 
-  if (habitError || !habit) {
-    return { data: null, error: "Habit not found" };
-  }
+    if (habitRows.length === 0) return { data: null, error: "Habit not found" };
 
-  // Check if log exists
-  const { data: existing } = await supabase
-    .from("habit_logs")
-    .select("id")
-    .eq("habit_id", habitId)
-    .eq("log_date", logDate)
-    .single();
+    // Check if log exists
+    const existingLogs = await db
+      .select({ id: habitLogs.id })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.logDate, logDate)));
 
-  if (existing) {
-    // Toggle off: delete the log
-    const { error } = await supabase
-      .from("habit_logs")
-      .delete()
-      .eq("id", existing.id);
-
-    return { data: { toggled: false, date: logDate }, error: error?.message ?? null };
-  } else {
-    // Toggle on: insert a log
-    const { data, error } = await supabase
-      .from("habit_logs")
-      .insert({ habit_id: habitId, user_id: userId, log_date: logDate })
-      .select()
-      .single();
-
-    return { data: { toggled: true, date: logDate, log: data }, error: error?.message ?? null };
+    if (existingLogs.length > 0) {
+      await db.delete(habitLogs).where(eq(habitLogs.id, existingLogs[0].id));
+      return { data: { toggled: false, date: logDate }, error: null };
+    } else {
+      const [log] = await db
+        .insert(habitLogs)
+        .values({ habitId, userId, logDate })
+        .returning();
+      return { data: { toggled: true, date: logDate, log }, error: null };
+    }
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
