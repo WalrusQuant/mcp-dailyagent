@@ -4,7 +4,15 @@
  * The token must exactly match MCP_API_KEY; userId is SELF_HOSTED_USER_ID.
  */
 
+import { timingSafeEqual } from "node:crypto";
 import { expandScopes } from "@/lib/oauth-scopes";
+
+function tokensMatch(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 export interface AuthResult {
   userId: string;
@@ -64,7 +72,7 @@ export async function validateMcpAuth(
     };
   }
 
-  if (token !== expected) {
+  if (!tokensMatch(token, expected)) {
     return {
       ok: false,
       error: {

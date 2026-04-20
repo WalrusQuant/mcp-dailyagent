@@ -14,7 +14,6 @@ export interface DailyBriefing {
 
 /** Get today's cached daily briefing, if it exists */
 export async function getTodayBriefing(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<DailyBriefing | null>> {
   try {

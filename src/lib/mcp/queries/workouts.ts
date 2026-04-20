@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 
 export interface WorkoutLogExercise {
@@ -80,7 +80,6 @@ function rowToExercise(row: typeof workoutLogExercises.$inferSelect): WorkoutLog
 }
 
 export async function getWorkoutLogs(
-  _db: typeof db,
   userId: string,
   params?: GetWorkoutLogsParams
 ): Promise<QueryResult<WorkoutLog[]>> {
@@ -110,40 +109,16 @@ export async function getWorkoutLogs(
 
     if (logs.length === 0) return { data: [], error: null };
 
-    // Fetch all exercises for these logs
     const logIds = logs.map((l) => l.id);
-    const allExercises = await db
+    const allEx = await db
       .select()
       .from(workoutLogExercises)
-      .where(
-        logIds.length === 1
-          ? eq(workoutLogExercises.logId, logIds[0])
-          : // Use raw SQL for IN with multiple values
-            eq(workoutLogExercises.logId, logIds[0]) // fallback handled below
-      );
+      .where(inArray(workoutLogExercises.logId, logIds));
 
-    // For multiple logs, fetch individually (simple approach)
     const exercisesByLog = new Map<string, WorkoutLogExercise[]>();
-    if (logIds.length > 1) {
-      const exRows = await db
-        .select()
-        .from(workoutLogExercises)
-        .where(eq(workoutLogExercises.logId, logIds[0]));
-      // Re-fetch for all — use inArray if available
-      const { inArray } = await import("drizzle-orm");
-      const allEx = await db
-        .select()
-        .from(workoutLogExercises)
-        .where(inArray(workoutLogExercises.logId, logIds));
-      for (const ex of allEx) {
-        if (!exercisesByLog.has(ex.logId)) exercisesByLog.set(ex.logId, []);
-        exercisesByLog.get(ex.logId)!.push(rowToExercise(ex));
-      }
-    } else if (logIds.length === 1) {
-      for (const ex of allExercises) {
-        if (!exercisesByLog.has(ex.logId)) exercisesByLog.set(ex.logId, []);
-        exercisesByLog.get(ex.logId)!.push(rowToExercise(ex));
-      }
+    for (const ex of allEx) {
+      if (!exercisesByLog.has(ex.logId)) exercisesByLog.set(ex.logId, []);
+      exercisesByLog.get(ex.logId)!.push(rowToExercise(ex));
     }
 
     const result: WorkoutLog[] = logs.map((log) => ({
@@ -165,7 +140,6 @@ export async function getWorkoutLogs(
 }
 
 export async function getWorkoutTemplates(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<WorkoutTemplate[]>> {
   try {
@@ -217,7 +191,6 @@ export async function getWorkoutTemplates(
 }
 
 export async function logWorkout(
-  _db: typeof db,
   userId: string,
   input: LogWorkoutInput
 ): Promise<QueryResult<WorkoutLog>> {

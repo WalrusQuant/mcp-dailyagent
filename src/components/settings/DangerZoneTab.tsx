@@ -9,14 +9,40 @@ export function DangerZoneTab() {
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [isWiping, setIsWiping] = useState(false);
   const [wipeError, setWipeError] = useState<string | null>(null);
   const [wipeSuccess, setWipeSuccess] = useState(false);
 
   const handleExport = async () => {
     setIsExporting(true);
-    // TODO: Wire up data export in a later phase
-    setTimeout(() => setIsExporting(false), 1000);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setExportError(data.error || `Request failed (${res.status})`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : `dailyagent-export-${new Date().toISOString().split("T")[0]}.json`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleWipe = async () => {
@@ -86,6 +112,11 @@ export function DangerZoneTab() {
             Export
           </button>
         </div>
+        {exportError && (
+          <p className="mt-3 text-xs" style={{ color: "var(--accent-negative)" }}>
+            Error: {exportError}
+          </p>
+        )}
       </div>
 
       {/* Wipe All Data */}

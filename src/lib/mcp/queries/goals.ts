@@ -55,7 +55,6 @@ function rowToGoal(row: typeof goals.$inferSelect): Goal {
 }
 
 export async function getGoals(
-  _db: typeof db,
   userId: string,
   status = "active"
 ): Promise<QueryResult<Goal[]>> {
@@ -85,7 +84,6 @@ export async function getGoals(
 }
 
 export async function createGoal(
-  _db: typeof db,
   userId: string,
   input: CreateGoalInput
 ): Promise<QueryResult<Goal>> {
@@ -109,7 +107,6 @@ export async function createGoal(
 }
 
 export async function updateGoal(
-  _db: typeof db,
   userId: string,
   goalId: string,
   fields: UpdateGoalFields
@@ -148,7 +145,6 @@ export async function updateGoal(
 }
 
 export async function logGoalProgress(
-  _db: typeof db,
   userId: string,
   goalId: string,
   progress: number
@@ -156,23 +152,27 @@ export async function logGoalProgress(
   try {
     const today = getToday();
 
-    const [goal] = await db
-      .update(goals)
-      .set({ progress, updatedAt: new Date() })
-      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
-      .returning();
+    const goal = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(goals)
+        .set({ progress, updatedAt: new Date() })
+        .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+        .returning();
+
+      if (!updated) return null;
+
+      await tx
+        .insert(goalProgressLogs)
+        .values({ goalId, userId, logDate: today, progress })
+        .onConflictDoUpdate({
+          target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
+          set: { progress },
+        });
+
+      return updated;
+    });
 
     if (!goal) return { data: null, error: "Goal not found" };
-
-    // Upsert progress log
-    await db
-      .insert(goalProgressLogs)
-      .values({ goalId, userId, logDate: today, progress })
-      .onConflictDoUpdate({
-        target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
-        set: { progress },
-      });
-
     return { data: rowToGoal(goal), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };

@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getTasksForDate, getOverdueTasks } from "@/lib/mcp/queries/tasks";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -20,7 +19,7 @@ export function registerTaskResources(server: McpServer) {
         };
       }
 
-      const result = await getTasksForDate(db, auth.userId);
+      const result = await getTasksForDate(auth.userId);
 
       return {
         contents: [
@@ -49,7 +48,7 @@ export function registerTaskResources(server: McpServer) {
         };
       }
 
-      const result = await getOverdueTasks(db, auth.userId);
+      const result = await getOverdueTasks(auth.userId);
 
       return {
         contents: [

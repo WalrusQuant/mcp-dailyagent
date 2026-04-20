@@ -10,7 +10,6 @@ function serializeReview(r: typeof weeklyReviews.$inferSelect) {
     user_id: r.userId,
     week_start: r.weekStart,
     content: r.content,
-    source: r.source,
     created_at: r.createdAt,
     updated_at: r.updatedAt,
   };
@@ -41,53 +40,6 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(serializeReview(rows[0]));
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const userId = getUserId();
-
-  const body = await request.json();
-  const { week_start, content } = body;
-
-  if (typeof week_start !== "string" || !week_start.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return NextResponse.json(
-      { error: "week_start must be a date string in YYYY-MM-DD format" },
-      { status: 400 }
-    );
-  }
-
-  if (typeof content !== "string" || content.trim().length === 0) {
-    return NextResponse.json({ error: "content is required" }, { status: 400 });
-  }
-
-  try {
-    // Upsert: check existing first
-    const existing = await db
-      .select()
-      .from(weeklyReviews)
-      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week_start)))
-      .limit(1);
-
-    let row;
-    if (existing.length > 0) {
-      const [updated] = await db
-        .update(weeklyReviews)
-        .set({ content, updatedAt: new Date() })
-        .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week_start)))
-        .returning();
-      row = updated;
-    } else {
-      const [inserted] = await db
-        .insert(weeklyReviews)
-        .values({ userId, weekStart: week_start, content })
-        .returning();
-      row = inserted;
-    }
-
-    return NextResponse.json(serializeReview(row), { status: 200 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, or, lt } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday, startOfWeek, endOfWeek, getCalendarGridDates } from "@/lib/dates";
 
@@ -61,7 +61,6 @@ export interface WeekSummary {
 
 /** Get detailed data for a single day */
 export async function getDaySummary(
-  _db: typeof db,
   userId: string,
   date: string
 ): Promise<QueryResult<DayDetail>> {
@@ -150,7 +149,6 @@ export async function getDaySummary(
 
 /** Get aggregated summary for a week (defaults to the current week) */
 export async function getWeekSummary(
-  _db: typeof db,
   userId: string,
   weekStartParam?: string
 ): Promise<QueryResult<WeekSummary>> {

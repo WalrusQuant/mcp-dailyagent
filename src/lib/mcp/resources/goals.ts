@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getGoals } from "@/lib/mcp/queries/goals";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -20,7 +19,7 @@ export function registerGoalResources(server: McpServer) {
         };
       }
 
-      const result = await getGoals(db, auth.userId, "active");
+      const result = await getGoals(auth.userId, "active");
 
       return {
         contents: [

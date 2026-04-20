@@ -31,13 +31,11 @@ async function saveBriefing(userId: string, briefingDate: string, content: strin
         userId,
         briefingDate,
         content,
-        source: "mcp",
       })
       .onConflictDoUpdate({
         target: [dailyBriefings.userId, dailyBriefings.briefingDate],
         set: {
           content,
-          source: "mcp",
           updatedAt: new Date(),
         },
       })

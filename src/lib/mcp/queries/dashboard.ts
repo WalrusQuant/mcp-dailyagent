@@ -50,7 +50,6 @@ export interface DashboardSnapshot {
 }
 
 export async function getDashboardSnapshot(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<DashboardSnapshot>> {
   try {

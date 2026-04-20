@@ -25,7 +25,6 @@ function rowToReview(row: typeof weeklyReviews.$inferSelect): WeeklyReview {
 
 /** Get the most recent weekly review */
 export async function getLatestReview(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<WeeklyReview | null>> {
   try {
@@ -44,7 +43,6 @@ export async function getLatestReview(
 
 /** Get the weekly review for a specific week */
 export async function getReviewForWeek(
-  _db: typeof db,
   userId: string,
   weekStart: string
 ): Promise<QueryResult<WeeklyReview | null>> {
@@ -65,9 +63,7 @@ export interface SaveReviewInput {
   content: string;
 }
 
-/** Upsert a weekly review, tagged as source='mcp' */
 export async function saveReview(
-  _db: typeof db,
   userId: string,
   input: SaveReviewInput
 ): Promise<QueryResult<WeeklyReview>> {
@@ -78,13 +74,11 @@ export async function saveReview(
         userId,
         weekStart: input.week_start,
         content: input.content,
-        source: "mcp",
       })
       .onConflictDoUpdate({
         target: [weeklyReviews.userId, weeklyReviews.weekStart],
         set: {
           content: input.content,
-          source: "mcp",
           updatedAt: new Date(),
         },
       })

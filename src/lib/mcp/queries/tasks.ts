@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
-import { eq, and, or, lt, asc, sql } from "drizzle-orm";
+import { eq, and, or, lt, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -65,7 +65,6 @@ function rowToTask(row: typeof tasks.$inferSelect): Task {
 }
 
 export async function getTasksForDate(
-  _db: typeof db,
   userId: string,
   date?: string
 ): Promise<QueryResult<Task[]>> {
@@ -104,7 +103,6 @@ export async function getTasksForDate(
 }
 
 export async function getOverdueTasks(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<Task[]>> {
   try {
@@ -125,7 +123,6 @@ export async function getOverdueTasks(
 }
 
 export async function createTask(
-  _db: typeof db,
   userId: string,
   input: CreateTaskInput
 ): Promise<QueryResult<Task>> {
@@ -154,7 +151,6 @@ export async function createTask(
 }
 
 export async function updateTask(
-  _db: typeof db,
   userId: string,
   taskId: string,
   fields: UpdateTaskFields
@@ -192,7 +188,6 @@ export async function updateTask(
 }
 
 export async function completeTask(
-  _db: typeof db,
   userId: string,
   taskId: string
 ): Promise<QueryResult<Task>> {
@@ -211,7 +206,6 @@ export async function completeTask(
 }
 
 export async function deleteTask(
-  _db: typeof db,
   userId: string,
   taskId: string
 ): Promise<QueryResult<{ success: boolean }>> {

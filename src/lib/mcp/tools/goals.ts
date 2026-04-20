@@ -5,6 +5,7 @@ import { goals } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, goalCategorySchema, goalStatusSchema } from "./validators";
+import { logGoalProgress } from "@/lib/mcp/queries/goals";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -80,19 +81,6 @@ async function updateGoal(
       .update(goals)
       .set(updates)
       .where(and(eq(goals.id, args.goal_id), eq(goals.userId, userId)))
-      .returning();
-    return { data: row ?? null, error: row ? null : "Goal not found" };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
-async function logGoalProgress(userId: string, goalId: string, progress: number) {
-  try {
-    const [row] = await db
-      .update(goals)
-      .set({ progress, updatedAt: new Date() })
-      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
       .returning();
     return { data: row ?? null, error: row ? null : "Goal not found" };
   } catch (err) {

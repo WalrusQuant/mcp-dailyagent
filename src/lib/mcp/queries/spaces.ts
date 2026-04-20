@@ -40,7 +40,6 @@ function rowToSpace(row: typeof spaces.$inferSelect): Space {
 }
 
 export async function getSpaces(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<Space[]>> {
   try {
@@ -57,7 +56,6 @@ export async function getSpaces(
 }
 
 export async function createSpace(
-  _db: typeof db,
   userId: string,
   input: CreateSpaceInput
 ): Promise<QueryResult<Space>> {
@@ -79,7 +77,6 @@ export async function createSpace(
 }
 
 export async function updateSpace(
-  _db: typeof db,
   userId: string,
   spaceId: string,
   fields: UpdateSpaceFields

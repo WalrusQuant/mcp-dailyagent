@@ -15,6 +15,13 @@
       "when": 1776698468650,
       "tag": "0001_rip_ai_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776726243773,
+      "tag": "0002_organic_warhawk",
+      "breakpoints": true
     }
   ]
 }

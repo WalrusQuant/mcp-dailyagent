@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import {
   getHabitsWithTodayStatus,
@@ -25,7 +24,7 @@ export function registerHabitResources(server: McpServer) {
         };
       }
 
-      const result = await getHabitsWithTodayStatus(db, auth.userId);
+      const result = await getHabitsWithTodayStatus(auth.userId);
 
       return {
         contents: [
@@ -54,7 +53,7 @@ export function registerHabitResources(server: McpServer) {
         };
       }
 
-      const habitsResult = await getHabits(db, auth.userId);
+      const habitsResult = await getHabits(auth.userId);
       if (!habitsResult.data) {
         return {
           contents: [
@@ -69,7 +68,7 @@ export function registerHabitResources(server: McpServer) {
 
       const statsResults = await Promise.all(
         habitsResult.data.map((habit: Habit) =>
-          getHabitStats(db, auth.userId, habit.id)
+          getHabitStats(auth.userId, habit.id)
         )
       );
 
