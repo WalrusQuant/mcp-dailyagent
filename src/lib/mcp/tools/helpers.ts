@@ -11,7 +11,6 @@ interface AuthInfo {
 export interface ExtractedAuth {
   userId: string;
   scopes: string[];
-  plan: string;
 }
 
 /** Extract auth info from MCP extra parameter. Returns null if not authenticated. */
@@ -22,7 +21,6 @@ export function getAuth(extra: Extra): ExtractedAuth | null {
   return {
     userId,
     scopes: authInfo?.scopes ?? [],
-    plan: (authInfo?.extra?.plan as string) ?? "free",
   };
 }
 
@@ -48,8 +46,3 @@ export function errorResult(msg: string) {
 
 /** Standard "not authenticated" response. */
 export const NOT_AUTHENTICATED = errorResult("Not authenticated");
-
-/** Standard "paid plan required" response. */
-export const PAID_PLAN_REQUIRED = errorResult(
-  "This action requires a paid plan. Upgrade at https://dailyagent.dev/pricing"
-);

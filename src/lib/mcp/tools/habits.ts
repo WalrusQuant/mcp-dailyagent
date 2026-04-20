@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getServiceClient } from "@/lib/mcp/supabase";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, PAID_PLAN_REQUIRED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -208,8 +208,6 @@ export function registerHabitTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await createHabit(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -231,8 +229,6 @@ export function registerHabitTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
-
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
 
       const result = await toggleHabitLog(auth.userId, args.habit_id, args.date);
       if (result.error) return errorResult(`Error: ${result.error}`);

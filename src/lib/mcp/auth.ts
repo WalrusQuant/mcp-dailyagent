@@ -1,10 +1,7 @@
 import { validateMcpAuth, AuthResult } from "@/lib/token-validation";
-import { getServiceClient } from "./supabase";
-import { UserPlan } from "./types";
 
 export interface McpAuthResult {
   auth: AuthResult;
-  plan: UserPlan;
 }
 
 export interface McpAuthError {
@@ -14,7 +11,7 @@ export interface McpAuthError {
 }
 
 /**
- * Authenticate an MCP request. Returns auth info + user plan,
+ * Authenticate an MCP request. Returns auth info,
  * or an error with status code and headers.
  */
 export async function authenticateMcpRequest(
@@ -37,21 +34,10 @@ export async function authenticateMcpRequest(
     };
   }
 
-  // Look up user plan
-  const supabase = getServiceClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("plan")
-    .eq("id", validation.auth.userId)
-    .single();
-
-  const plan: UserPlan = (profile?.plan as UserPlan) || "free";
-
   return {
     ok: true,
     result: {
       auth: validation.auth,
-      plan,
     },
   };
 }

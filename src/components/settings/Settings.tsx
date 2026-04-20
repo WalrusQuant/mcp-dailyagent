@@ -1,19 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { User, Key, Plug, CreditCard, Palette, AlertTriangle } from "lucide-react";
+import { User, Palette, AlertTriangle } from "lucide-react";
 import { AccountTab } from "./AccountTab";
-import { ApiKeysTab } from "./ApiKeysTab";
-import { ConnectionsTab } from "./ConnectionsTab";
-import { SubscriptionTab } from "./SubscriptionTab";
 import { PreferencesTab } from "./PreferencesTab";
 import { DangerZoneTab } from "./DangerZoneTab";
 
 const TABS = [
   { id: "account", label: "Account", icon: User },
-  { id: "api-keys", label: "API Keys", icon: Key },
-  { id: "connections", label: "Connections", icon: Plug },
-  { id: "subscription", label: "Subscription", icon: CreditCard },
   { id: "preferences", label: "Preferences", icon: Palette },
   { id: "danger", label: "Danger Zone", icon: AlertTriangle },
 ] as const;
@@ -71,9 +65,6 @@ export function Settings() {
           }}
         >
           {activeTab === "account" && <AccountTab />}
-          {activeTab === "api-keys" && <ApiKeysTab />}
-          {activeTab === "connections" && <ConnectionsTab />}
-          {activeTab === "subscription" && <SubscriptionTab />}
           {activeTab === "preferences" && <PreferencesTab />}
           {activeTab === "danger" && <DangerZoneTab />}
         </div>
