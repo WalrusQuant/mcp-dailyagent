@@ -1,124 +1,144 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { goals, tasks, habits, habitLogs, goalProgressLogs } from "@/lib/db/schema";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
+
+function serializeGoal(g: typeof goals.$inferSelect) {
+  return {
+    id: g.id,
+    user_id: g.userId,
+    title: g.title,
+    description: g.description,
+    category: g.category,
+    status: g.status,
+    progress: g.progress,
+    progress_mode: g.progressMode,
+    target_date: g.targetDate,
+    completed_at: g.completedAt,
+    sort_order: g.sortOrder,
+    created_at: g.createdAt,
+    updated_at: g.updatedAt,
+  };
+}
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
   const statusFilter = searchParams.get("status") || "active";
 
-  let query = supabase
-    .from("goals")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
+  try {
+    const conditions =
+      statusFilter !== "all"
+        ? and(eq(goals.userId, userId), eq(goals.status, statusFilter as "active" | "completed" | "abandoned"))
+        : eq(goals.userId, userId);
 
-  if (statusFilter !== "all") {
-    query = query.eq("status", statusFilter as "active" | "completed" | "abandoned");
-  }
+    const goalRows = await db
+      .select()
+      .from(goals)
+      .where(conditions)
+      .orderBy(asc(goals.sortOrder), desc(goals.createdAt));
 
-  const { data: goals, error } = await query;
+    // For auto-progress goals, compute progress from linked tasks/habits
+    const autoGoals = goalRows.filter((g) => g.progressMode === "auto");
+    if (autoGoals.length > 0) {
+      const goalIds = autoGoals.map((g) => g.id);
+      const today = new Date().toISOString().slice(0, 10);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+      const [taskRows, habitRows, habitLogRows] = await Promise.all([
+        db
+          .select({ goalId: tasks.goalId, done: tasks.done })
+          .from(tasks)
+          .where(inArray(tasks.goalId, goalIds)),
+        db
+          .select({ id: habits.id, goalId: habits.goalId })
+          .from(habits)
+          .where(and(inArray(habits.goalId, goalIds), eq(habits.archived, false))),
+        db
+          .select({ habitId: habitLogs.habitId })
+          .from(habitLogs)
+          .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, today))),
+      ]);
 
-  // For auto-progress goals, compute progress from linked tasks/habits
-  const autoGoals = (goals ?? []).filter((g) => g.progress_mode === "auto");
-  if (autoGoals.length > 0) {
-    const goalIds = autoGoals.map((g) => g.id);
-    const today = new Date().toISOString().slice(0, 10);
+      const tasksByGoal = new Map<string, { total: number; done: number }>();
+      for (const t of taskRows) {
+        if (!t.goalId) continue;
+        const counts = tasksByGoal.get(t.goalId) ?? { total: 0, done: 0 };
+        counts.total++;
+        if (t.done) counts.done++;
+        tasksByGoal.set(t.goalId, counts);
+      }
 
-    const [tasksResult, habitsResult, habitLogsResult] = await Promise.all([
-      supabase
-        .from("tasks")
-        .select("goal_id, done")
-        .in("goal_id", goalIds),
-      supabase
-        .from("habits")
-        .select("id, goal_id")
-        .in("goal_id", goalIds)
-        .eq("archived", false),
-      supabase
-        .from("habit_logs")
-        .select("habit_id")
-        .eq("user_id", user.id)
-        .eq("log_date", today),
-    ]);
+      const todayLogSet = new Set(habitLogRows.map((l) => l.habitId));
+      const habitsByGoal = new Map<string, { total: number; completed: number }>();
+      for (const h of habitRows) {
+        if (!h.goalId) continue;
+        const counts = habitsByGoal.get(h.goalId) ?? { total: 0, completed: 0 };
+        counts.total++;
+        if (todayLogSet.has(h.id)) counts.completed++;
+        habitsByGoal.set(h.goalId, counts);
+      }
 
-    const tasksByGoal = new Map<string, { total: number; done: number }>();
-    for (const t of tasksResult.data ?? []) {
-      if (!t.goal_id) continue;
-      const counts = tasksByGoal.get(t.goal_id) ?? { total: 0, done: 0 };
-      counts.total++;
-      if (t.done) counts.done++;
-      tasksByGoal.set(t.goal_id, counts);
-    }
+      for (const goal of autoGoals) {
+        const taskCounts = tasksByGoal.get(goal.id);
+        const habitCounts = habitsByGoal.get(goal.id);
 
-    const todayLogSet = new Set((habitLogsResult.data ?? []).map((l) => l.habit_id));
-    const habitsByGoal = new Map<string, { total: number; completed: number }>();
-    for (const h of habitsResult.data ?? []) {
-      if (!h.goal_id) continue;
-      const counts = habitsByGoal.get(h.goal_id) ?? { total: 0, completed: 0 };
-      counts.total++;
-      if (todayLogSet.has(h.id)) counts.completed++;
-      habitsByGoal.set(h.goal_id, counts);
-    }
+        let progress = 0;
+        let hasLinked = false;
 
-    for (const goal of autoGoals) {
-      const tasks = tasksByGoal.get(goal.id);
-      const habits = habitsByGoal.get(goal.id);
-
-      let progress = 0;
-      let hasLinked = false;
-
-      if (tasks && tasks.total > 0) {
-        hasLinked = true;
-        const taskProgress = Math.round((tasks.done / tasks.total) * 100);
-        if (habits && habits.total > 0) {
-          const habitProgress = Math.round((habits.completed / habits.total) * 100);
-          progress = Math.round((taskProgress + habitProgress) / 2);
-        } else {
-          progress = taskProgress;
+        if (taskCounts && taskCounts.total > 0) {
+          hasLinked = true;
+          const taskProgress = Math.round((taskCounts.done / taskCounts.total) * 100);
+          if (habitCounts && habitCounts.total > 0) {
+            const habitProgress = Math.round((habitCounts.completed / habitCounts.total) * 100);
+            progress = Math.round((taskProgress + habitProgress) / 2);
+          } else {
+            progress = taskProgress;
+          }
+        } else if (habitCounts && habitCounts.total > 0) {
+          hasLinked = true;
+          progress = Math.round((habitCounts.completed / habitCounts.total) * 100);
         }
-      } else if (habits && habits.total > 0) {
-        hasLinked = true;
-        progress = Math.round((habits.completed / habits.total) * 100);
-      }
 
-      if (hasLinked && progress !== goal.progress) {
-        goal.progress = progress;
-        await supabase.from("goals").update({ progress, updated_at: new Date().toISOString() }).eq("id", goal.id);
-      }
+        if (hasLinked && progress !== goal.progress) {
+          goal.progress = progress;
+          await db
+            .update(goals)
+            .set({ progress, updatedAt: new Date() })
+            .where(eq(goals.id, goal.id));
+        }
 
-      // Upsert today's progress log
-      await supabase.from("goal_progress_logs").upsert(
-        { goal_id: goal.id, user_id: user.id, log_date: today, progress: goal.progress },
-        { onConflict: "goal_id,log_date" }
-      );
+        // Upsert today's progress log
+        const existingLog = await db
+          .select()
+          .from(goalProgressLogs)
+          .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
+
+        if (existingLog.length > 0) {
+          await db
+            .update(goalProgressLogs)
+            .set({ progress: goal.progress })
+            .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
+        } else {
+          await db.insert(goalProgressLogs).values({
+            goalId: goal.id,
+            userId,
+            logDate: today,
+            progress: goal.progress,
+          });
+        }
+      }
     }
-  }
 
-  return NextResponse.json(goals);
+    return NextResponse.json(goalRows.map(serializeGoal));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { title, description, category, target_date, progress_mode, progress, sort_order } = body;
@@ -127,24 +147,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("goals")
-    .insert({
-      user_id: user.id,
-      title: title.trim(),
-      ...(description ? { description } : {}),
-      ...(category ? { category } : {}),
-      ...(target_date ? { target_date } : {}),
-      ...(progress_mode ? { progress_mode } : {}),
-      ...(typeof progress === "number" ? { progress } : {}),
-      ...(typeof sort_order === "number" ? { sort_order } : {}),
-    })
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .insert(goals)
+      .values({
+        userId,
+        title: title.trim(),
+        ...(description ? { description } : {}),
+        ...(category ? { category } : {}),
+        ...(target_date ? { targetDate: target_date } : {}),
+        ...(progress_mode ? { progressMode: progress_mode } : {}),
+        ...(typeof progress === "number" ? { progress } : {}),
+        ...(typeof sort_order === "number" ? { sortOrder: sort_order } : {}),
+      })
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(serializeGoal(row), { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data, { status: 201 });
 }

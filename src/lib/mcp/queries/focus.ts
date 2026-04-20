@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -31,8 +33,22 @@ export interface GetFocusSessionsParams {
   to?: string;
 }
 
+function rowToSession(row: typeof focusSessions.$inferSelect): FocusSession {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    task_id: row.taskId ?? null,
+    duration_minutes: row.durationMinutes,
+    break_minutes: row.breakMinutes,
+    notes: row.notes ?? null,
+    started_at: row.startedAt.toISOString(),
+    completed_at: row.completedAt ? row.completedAt.toISOString() : null,
+    status: row.status as "active" | "completed" | "cancelled",
+  };
+}
+
 export async function getFocusSessions(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   params?: GetFocusSessionsParams
 ): Promise<QueryResult<FocusSession[]>> {
@@ -43,42 +59,46 @@ export async function getFocusSessions(
     const from = params?.from || defaultFrom.toISOString();
     const to = params?.to || new Date().toISOString();
 
-    const { data, error } = await supabase
-      .from("focus_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .gte("started_at", from)
-      .lte("started_at", to)
-      .order("started_at", { ascending: false });
+    const rows = await db
+      .select()
+      .from(focusSessions)
+      .where(
+        and(
+          eq(focusSessions.userId, userId),
+          gte(focusSessions.startedAt, new Date(from)),
+          lte(focusSessions.startedAt, new Date(to))
+        )
+      )
+      .orderBy(desc(focusSessions.startedAt));
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as FocusSession[], error: null };
+    return { data: rows.map(rowToSession), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function getTodayFocusStats(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string
 ): Promise<QueryResult<TodayFocusStats>> {
   try {
     const today = getToday();
 
-    const { data, error } = await supabase
-      .from("focus_sessions")
-      .select("duration_minutes")
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .gte("started_at", `${today}T00:00:00.000Z`);
+    const rows = await db
+      .select({ durationMinutes: focusSessions.durationMinutes })
+      .from(focusSessions)
+      .where(
+        and(
+          eq(focusSessions.userId, userId),
+          eq(focusSessions.status, "completed"),
+          gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`))
+        )
+      );
 
-    if (error) return { data: null, error: error.message };
-
-    const sessions = data ?? [];
-    const totalMinutes = sessions.reduce((s, f) => s + (f.duration_minutes ?? 0), 0);
+    const totalMinutes = rows.reduce((s, f) => s + (f.durationMinutes ?? 0), 0);
 
     return {
-      data: { totalMinutes, sessionCount: sessions.length },
+      data: { totalMinutes, sessionCount: rows.length },
       error: null,
     };
   } catch (err) {
@@ -87,51 +107,44 @@ export async function getTodayFocusStats(
 }
 
 export async function startFocusSession(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: StartFocusSessionInput
 ): Promise<QueryResult<FocusSession>> {
   try {
-    const { data, error } = await supabase
-      .from("focus_sessions")
-      .insert({
-        user_id: userId,
-        task_id: input.task_id ?? null,
-        duration_minutes: input.duration_minutes,
-        break_minutes: typeof input.break_minutes === "number" ? input.break_minutes : 0,
+    const [row] = await db
+      .insert(focusSessions)
+      .values({
+        userId,
+        taskId: input.task_id ?? null,
+        durationMinutes: input.duration_minutes,
+        breakMinutes: typeof input.break_minutes === "number" ? input.break_minutes : 0,
         notes: input.notes ?? null,
-        started_at: new Date().toISOString(),
+        startedAt: new Date(),
         status: "active",
       })
-      .select()
-      .single();
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as FocusSession, error: null };
+    return { data: rowToSession(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function completeFocusSession(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   sessionId: string
 ): Promise<QueryResult<FocusSession>> {
   try {
-    const { data, error } = await supabase
-      .from("focus_sessions")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", sessionId)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    const [row] = await db
+      .update(focusSessions)
+      .set({ status: "completed", completedAt: new Date() })
+      .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as FocusSession, error: null };
+    if (!row) return { data: null, error: "Session not found" };
+    return { data: rowToSession(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }

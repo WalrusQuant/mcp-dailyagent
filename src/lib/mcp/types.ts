@@ -1,10 +1,10 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { db } from "@/lib/db/client";
 import { AuthResult } from "@/lib/token-validation";
 
 /** Context available to every MCP tool/resource/prompt handler */
 export interface McpContext {
   userId: string;
-  supabase: SupabaseClient;
+  db: typeof db;
   auth: AuthResult;
 }
 

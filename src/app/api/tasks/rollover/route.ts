@@ -1,64 +1,77 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { tasks } from "@/lib/db/schema";
+import { eq, and, lt, isNull } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-export async function POST(request: NextRequest) {
-  void request;
+function serializeTask(t: typeof tasks.$inferSelect) {
+  return {
+    id: t.id,
+    user_id: t.userId,
+    title: t.title,
+    notes: t.notes,
+    priority: t.priority,
+    sort_order: t.sortOrder,
+    done: t.done,
+    done_at: t.doneAt,
+    task_date: t.taskDate,
+    rolled_from: t.rolledFrom,
+    space_id: t.spaceId,
+    goal_id: t.goalId,
+    recurrence: t.recurrence,
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+  };
+}
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function POST(_request: NextRequest) {
+  void _request;
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  try {
+    const undoneTasks = await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          lt(tasks.taskDate, todayStr),
+          eq(tasks.done, false),
+          isNull(tasks.rolledFrom)
+        )
+      );
+
+    if (undoneTasks.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const created = await db
+      .insert(tasks)
+      .values(
+        undoneTasks.map((task) => ({
+          userId,
+          title: task.title,
+          notes: task.notes,
+          priority: task.priority,
+          taskDate: todayStr,
+          spaceId: task.spaceId,
+          recurrence: task.recurrence,
+          sortOrder: task.sortOrder,
+          rolledFrom: task.id,
+        }))
+      )
+      .returning();
+
+    // Mark originals as done so they don't show up in future rollover checks
+    const originalIds = undoneTasks.map((t) => t.id);
+    for (const oid of originalIds) {
+      await db.update(tasks).set({ done: true }).where(eq(tasks.id, oid));
+    }
+
+    return NextResponse.json(created.map(serializeTask));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
-
-  const { data: undoneTasks, error: fetchError } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("user_id", user.id)
-    .lt("task_date", todayStr)
-    .eq("done", false)
-    .is("rolled_from", null);
-
-  if (fetchError) {
-    return NextResponse.json({ error: fetchError.message }, { status: 500 });
-  }
-
-  if (!undoneTasks || undoneTasks.length === 0) {
-    return NextResponse.json([]);
-  }
-
-  const newTasks = undoneTasks.map((task) => ({
-    user_id: user.id,
-    title: task.title,
-    notes: task.notes,
-    priority: task.priority,
-    task_date: todayStr,
-    space_id: task.space_id,
-    recurrence: task.recurrence,
-    sort_order: task.sort_order,
-    rolled_from: task.id,
-  }));
-
-  const { data: created, error: insertError } = await supabase
-    .from("tasks")
-    .insert(newTasks)
-    .select();
-
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
-  }
-
-  // Mark originals as done so they don't show up in future rollover checks
-  const originalIds = undoneTasks.map((t) => t.id);
-  await supabase
-    .from("tasks")
-    .update({ done: true })
-    .in("id", originalIds);
-
-  return NextResponse.json(created);
 }

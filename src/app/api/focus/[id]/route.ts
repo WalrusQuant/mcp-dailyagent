@@ -1,24 +1,33 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { focusSessions } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// PATCH update a focus session
+function serializeSession(s: typeof focusSessions.$inferSelect) {
+  return {
+    id: s.id,
+    user_id: s.userId,
+    task_id: s.taskId,
+    duration_minutes: s.durationMinutes,
+    break_minutes: s.breakMinutes,
+    started_at: s.startedAt,
+    completed_at: s.completedAt,
+    status: s.status,
+    notes: s.notes,
+  };
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
 
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof focusSessions.$inferInsert> = {};
 
   if (typeof body.status === "string") {
     const validStatuses = ["active", "completed", "cancelled"];
@@ -30,14 +39,13 @@ export async function PATCH(
     }
     allowedFields.status = body.status;
 
-    // Auto-set completed_at when marking as completed
     if (body.status === "completed") {
-      allowedFields.completed_at = body.completed_at ?? new Date().toISOString();
+      allowedFields.completedAt = body.completed_at ? new Date(body.completed_at) : new Date();
     }
   }
 
   if (typeof body.completed_at === "string") {
-    allowedFields.completed_at = body.completed_at;
+    allowedFields.completedAt = new Date(body.completed_at);
   }
 
   if (typeof body.notes === "string" || body.notes === null) {
@@ -48,45 +56,37 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .update(allowedFields)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .update(focusSessions)
+      .set(allowedFields)
+      .where(and(eq(focusSessions.id, id), eq(focusSessions.userId, userId)))
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeSession(row));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
-// DELETE a focus session
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db
+      .delete(focusSessions)
+      .where(and(eq(focusSessions.id, id), eq(focusSessions.userId, userId)));
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("focus_sessions")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

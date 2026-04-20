@@ -1,138 +1,136 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import type { WorkoutLog } from "@/types/database";
+import { db } from "@/lib/db/client";
+import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions, goals } from "@/lib/db/schema";
+import { eq, and, gte, lte, asc, desc } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET today's dashboard snapshot
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-  const [
-    tasksAllResult,
-    tasksPriorityResult,
-    habitsResult,
-    habitLogsResult,
-    journalResult,
-    workoutTodayResult,
-    workoutWeekResult,
-    focusResult,
-    goalsResult,
-  ] = await Promise.all([
-    // All tasks today (for total/done counts)
-    supabase
-      .from("tasks")
-      .select("done")
-      .eq("user_id", user.id)
-      .eq("task_date", today),
-    // Top undone priority tasks
-    supabase
-      .from("tasks")
-      .select("id, title, priority, done, done_at, task_date")
-      .eq("user_id", user.id)
-      .eq("task_date", today)
-      .eq("done", false)
-      .order("sort_order", { ascending: true })
-      .limit(3),
-    // Active habits
-    supabase
-      .from("habits")
-      .select("id, name")
-      .eq("user_id", user.id)
-      .eq("archived", false),
-    // Today's habit logs
-    supabase
-      .from("habit_logs")
-      .select("habit_id")
-      .eq("user_id", user.id)
-      .eq("log_date", today),
-    // Today's journal entry
-    supabase
-      .from("journal_entries")
-      .select("mood")
-      .eq("user_id", user.id)
-      .eq("entry_date", today)
-      .maybeSingle(),
-    // Today's workout
-    supabase
-      .from("workout_logs")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("log_date", today)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    // This week's workout count
-    supabase
-      .from("workout_logs")
-      .select("id")
-      .eq("user_id", user.id)
-      .gte("log_date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10))
-      .lte("log_date", today),
-    // Today's focus sessions
-    supabase
-      .from("focus_sessions")
-      .select("duration_minutes")
-      .eq("user_id", user.id)
-      .eq("status", "completed")
-      .gte("started_at", `${today}T00:00:00.000Z`),
-    // Active goals
-    supabase
-      .from("goals")
-      .select("id, title, progress, category, target_date")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .order("target_date", { ascending: true, nullsFirst: false })
-      .limit(3),
-  ]);
+  try {
+    const [
+      allTasksToday,
+      topPriorityTasks,
+      allHabits,
+      todayHabitLogs,
+      todayJournal,
+      todayWorkout,
+      weekWorkouts,
+      todayFocus,
+      activeGoals,
+    ] = await Promise.all([
+      db
+        .select({ done: tasks.done })
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, today))),
+      db
+        .select({
+          id: tasks.id,
+          title: tasks.title,
+          priority: tasks.priority,
+          done: tasks.done,
+          done_at: tasks.doneAt,
+          task_date: tasks.taskDate,
+        })
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, today), eq(tasks.done, false)))
+        .orderBy(asc(tasks.sortOrder))
+        .limit(3),
+      db
+        .select({ id: habits.id, name: habits.name })
+        .from(habits)
+        .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
+      db
+        .select({ habitId: habitLogs.habitId })
+        .from(habitLogs)
+        .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, today))),
+      db
+        .select({ mood: journalEntries.mood })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, today)))
+        .limit(1),
+      db
+        .select()
+        .from(workoutLogs)
+        .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, today)))
+        .orderBy(desc(workoutLogs.createdAt))
+        .limit(1),
+      db
+        .select({ id: workoutLogs.id })
+        .from(workoutLogs)
+        .where(
+          and(
+            eq(workoutLogs.userId, userId),
+            gte(workoutLogs.logDate, weekAgo),
+            lte(workoutLogs.logDate, today)
+          )
+        ),
+      db
+        .select({ durationMinutes: focusSessions.durationMinutes })
+        .from(focusSessions)
+        .where(
+          and(
+            eq(focusSessions.userId, userId),
+            eq(focusSessions.status, "completed"),
+            gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`))
+          )
+        ),
+      db
+        .select({
+          id: goals.id,
+          title: goals.title,
+          progress: goals.progress,
+          category: goals.category,
+          target_date: goals.targetDate,
+        })
+        .from(goals)
+        .where(and(eq(goals.userId, userId), eq(goals.status, "active")))
+        .orderBy(asc(goals.targetDate))
+        .limit(3),
+    ]);
 
-  const tasks = tasksAllResult.data ?? [];
-  const totalTasks = tasks.length;
-  const doneTasks = tasks.filter((t) => t.done).length;
+    const totalTasks = allTasksToday.length;
+    const doneTasks = allTasksToday.filter((t) => t.done).length;
 
-  const habits = habitsResult.data ?? [];
-  const completedHabitIds = new Set((habitLogsResult.data ?? []).map((l) => l.habit_id));
-  const completedHabitsToday = habits.filter((h) => completedHabitIds.has(h.id)).length;
+    const completedHabitIds = new Set(todayHabitLogs.map((l) => l.habitId));
+    const completedHabitsToday = allHabits.filter((h) => completedHabitIds.has(h.id)).length;
 
-  const focusSessions = focusResult.data ?? [];
-  const todayFocusMinutes = focusSessions.reduce((s, f) => s + (f.duration_minutes ?? 0), 0);
+    const todayFocusMinutes = todayFocus.reduce((s, f) => s + (f.durationMinutes ?? 0), 0);
+    const weekCount = weekWorkouts.length;
+    const todayLog = todayWorkout[0] ?? null;
 
-  const todayLog = (workoutTodayResult.data as WorkoutLog | null) ?? null;
-  const weekCount = workoutWeekResult.data?.length ?? 0;
-
-  return NextResponse.json({
-    tasks: {
-      total: totalTasks,
-      done: doneTasks,
-      topPriorities: tasksPriorityResult.data ?? [],
-    },
-    habits: {
-      total: habits.length,
-      completedToday: completedHabitsToday,
-      streak: 0, // Streak calculation requires historical data; omitted for performance
-    },
-    journal: {
-      hasEntry: journalResult.data !== null,
-      mood: journalResult.data?.mood ?? null,
-    },
-    workouts: {
-      todayLog,
-      weekCount,
-    },
-    focus: {
-      todayMinutes: todayFocusMinutes,
-      todaySessions: focusSessions.length,
-    },
-    goals: {
-      activeCount: goalsResult.data?.length ?? 0,
-      topGoals: goalsResult.data ?? [],
-    },
-  });
+    return NextResponse.json({
+      tasks: {
+        total: totalTasks,
+        done: doneTasks,
+        topPriorities: topPriorityTasks,
+      },
+      habits: {
+        total: allHabits.length,
+        completedToday: completedHabitsToday,
+        streak: 0,
+      },
+      journal: {
+        hasEntry: todayJournal.length > 0,
+        mood: todayJournal[0]?.mood ?? null,
+      },
+      workouts: {
+        todayLog,
+        weekCount,
+      },
+      focus: {
+        todayMinutes: todayFocusMinutes,
+        todaySessions: todayFocus.length,
+      },
+      goals: {
+        activeCount: activeGoals.length,
+        topGoals: activeGoals,
+      },
+    });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+  }
 }

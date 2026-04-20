@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { spaces } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,15 +10,16 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getSpaces(userId: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("spaces")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  return { data, error: error?.message ?? null };
+  try {
+    const rows = await db
+      .select()
+      .from(spaces)
+      .where(eq(spaces.userId, userId))
+      .orderBy(desc(spaces.createdAt));
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function createSpace(
@@ -26,20 +29,20 @@ async function createSpace(
     description?: string;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("spaces")
-    .insert({
-      user_id: userId,
-      name: args.name,
-      description: args.description ?? null,
-      status: "active",
-    })
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .insert(spaces)
+      .values({
+        userId,
+        name: args.name,
+        description: args.description ?? null,
+        status: "active",
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function updateSpace(
@@ -51,22 +54,22 @@ async function updateSpace(
     status?: string;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const updates: Record<string, unknown> = {};
+  const updates: Partial<typeof spaces.$inferInsert> = {};
   if (args.name !== undefined) updates.name = args.name;
   if (args.description !== undefined) updates.description = args.description;
-  if (args.status !== undefined) updates.status = args.status;
+  if (args.status !== undefined) updates.status = args.status as "active" | "paused" | "completed";
+  updates.updatedAt = new Date();
 
-  const { data, error } = await supabase
-    .from("spaces")
-    .update(updates)
-    .eq("id", args.space_id)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(spaces)
+      .set(updates)
+      .where(and(eq(spaces.id, args.space_id), eq(spaces.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Space not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------

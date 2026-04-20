@@ -1,59 +1,57 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { journalEntries } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET single journal entry by id
+function serializeEntry(e: typeof journalEntries.$inferSelect) {
+  return {
+    id: e.id,
+    user_id: e.userId,
+    entry_date: e.entryDate,
+    content: e.content,
+    mood: e.mood,
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+  };
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)));
+
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeEntry(rows[0]));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// PATCH update a journal entry — whitelist: content, mood, entry_date
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
-  const allowedFields: Record<string, unknown> = {};
+  const allowedFields: Partial<typeof journalEntries.$inferInsert> = {};
 
   if (typeof body.content === "string") {
     if (body.content.trim() === "") {
-      return NextResponse.json(
-        { error: "content cannot be empty" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "content cannot be empty" }, { status: 400 });
     }
     allowedFields.content = body.content.trim();
   }
@@ -65,17 +63,13 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    allowedFields.entry_date = body.entry_date;
+    allowedFields.entryDate = body.entry_date;
   }
 
   if (body.mood !== undefined) {
     if (body.mood === null) {
       allowedFields.mood = null;
-    } else if (
-      typeof body.mood !== "number" ||
-      body.mood < 1 ||
-      body.mood > 5
-    ) {
+    } else if (typeof body.mood !== "number" || body.mood < 1 || body.mood > 5) {
       return NextResponse.json(
         { error: "mood must be an integer between 1 and 5, or null" },
         { status: 400 }
@@ -86,53 +80,42 @@ export async function PATCH(
   }
 
   if (Object.keys(allowedFields).length === 0) {
-    return NextResponse.json(
-      { error: "No valid fields to update" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  allowedFields.updated_at = new Date().toISOString();
+  allowedFields.updatedAt = new Date();
 
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .update(allowedFields)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .update(journalEntries)
+      .set(allowedFields)
+      .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)))
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(serializeEntry(row));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
 
-// DELETE a journal entry
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = getUserId();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await db
+      .delete(journalEntries)
+      .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)));
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { error } = await supabase
-    .from("journal_entries")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

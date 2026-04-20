@@ -1,4 +1,6 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { goals, goalProgressLogs } from "@/lib/db/schema";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
@@ -34,101 +36,119 @@ export interface UpdateGoalFields {
   target_date?: string | null;
 }
 
+function rowToGoal(row: typeof goals.$inferSelect): Goal {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    title: row.title,
+    description: row.description ?? null,
+    category: row.category ?? null,
+    status: row.status as "active" | "completed" | "abandoned",
+    progress: row.progress,
+    progress_mode: row.progressMode ?? null,
+    target_date: row.targetDate ?? null,
+    sort_order: row.sortOrder,
+    completed_at: row.completedAt ? row.completedAt.toISOString() : null,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
+}
+
 export async function getGoals(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   status = "active"
 ): Promise<QueryResult<Goal[]>> {
   try {
-    let query = supabase
-      .from("goals")
-      .select("*")
-      .eq("user_id", userId)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false });
+    const rows =
+      status !== "all"
+        ? await db
+            .select()
+            .from(goals)
+            .where(
+              and(
+                eq(goals.userId, userId),
+                eq(goals.status, status as "active" | "completed" | "abandoned")
+              )
+            )
+            .orderBy(asc(goals.sortOrder), desc(goals.createdAt))
+        : await db
+            .select()
+            .from(goals)
+            .where(eq(goals.userId, userId))
+            .orderBy(asc(goals.sortOrder), desc(goals.createdAt));
 
-    if (status !== "all") {
-      query = query.eq("status", status as "active" | "completed" | "abandoned");
-    }
-
-    const { data, error } = await query;
-
-    if (error) return { data: null, error: error.message };
-    return { data: data as Goal[], error: null };
+    return { data: rows.map(rowToGoal), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function createGoal(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   input: CreateGoalInput
 ): Promise<QueryResult<Goal>> {
   try {
-    const { data, error } = await supabase
-      .from("goals")
-      .insert({
-        user_id: userId,
+    const [row] = await db
+      .insert(goals)
+      .values({
+        userId,
         title: input.title.trim(),
         ...(input.description ? { description: input.description } : {}),
         ...(input.category ? { category: input.category } : {}),
-        ...(input.target_date ? { target_date: input.target_date } : {}),
-        ...(input.progress_mode ? { progress_mode: input.progress_mode } : {}),
+        ...(input.target_date ? { targetDate: input.target_date } : {}),
+        ...(input.progress_mode ? { progressMode: input.progress_mode } : {}),
       })
-      .select()
-      .single();
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Goal, error: null };
+    return { data: rowToGoal(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function updateGoal(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   goalId: string,
   fields: UpdateGoalFields
 ): Promise<QueryResult<Goal>> {
   try {
-    const allowedFields: Record<string, unknown> = {};
+    const updates: Partial<typeof goals.$inferInsert> = {};
 
-    if (typeof fields.title === "string") allowedFields.title = fields.title;
+    if (typeof fields.title === "string") updates.title = fields.title;
     if (typeof fields.description === "string" || fields.description === null)
-      allowedFields.description = fields.description;
+      updates.description = fields.description;
     if (typeof fields.status === "string") {
-      allowedFields.status = fields.status;
+      updates.status = fields.status as "active" | "completed" | "abandoned";
       if (fields.status === "completed") {
-        allowedFields.completed_at = new Date().toISOString();
+        updates.completedAt = new Date();
       } else if (fields.status === "active") {
-        allowedFields.completed_at = null;
+        updates.completedAt = null;
       }
     }
-    if (typeof fields.progress === "number") allowedFields.progress = fields.progress;
+    if (typeof fields.progress === "number") updates.progress = fields.progress;
     if (typeof fields.target_date === "string" || fields.target_date === null)
-      allowedFields.target_date = fields.target_date;
+      updates.targetDate = fields.target_date;
 
-    allowedFields.updated_at = new Date().toISOString();
+    updates.updatedAt = new Date();
 
-    const { data, error } = await supabase
-      .from("goals")
-      .update(allowedFields)
-      .eq("id", goalId)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    const [row] = await db
+      .update(goals)
+      .set(updates)
+      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+      .returning();
 
-    if (error) return { data: null, error: error.message };
-    return { data: data as Goal, error: null };
+    if (!row) return { data: null, error: "Goal not found" };
+    return { data: rowToGoal(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 export async function logGoalProgress(
-  supabase: SupabaseClient,
+  _db: typeof db,
   userId: string,
   goalId: string,
   progress: number
@@ -136,25 +156,24 @@ export async function logGoalProgress(
   try {
     const today = getToday();
 
-    const { data: goal, error: updateError } = await supabase
-      .from("goals")
-      .update({
-        progress,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", goalId)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    const [goal] = await db
+      .update(goals)
+      .set({ progress, updatedAt: new Date() })
+      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+      .returning();
 
-    if (updateError) return { data: null, error: updateError.message };
+    if (!goal) return { data: null, error: "Goal not found" };
 
-    await supabase.from("goal_progress_logs").upsert(
-      { goal_id: goalId, user_id: userId, log_date: today, progress },
-      { onConflict: "goal_id,log_date" }
-    );
+    // Upsert progress log
+    await db
+      .insert(goalProgressLogs)
+      .values({ goalId, userId, logDate: today, progress })
+      .onConflictDoUpdate({
+        target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
+        set: { progress },
+      });
 
-    return { data: goal as Goal, error: null };
+    return { data: rowToGoal(goal), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }

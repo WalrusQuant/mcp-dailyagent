@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { journalEntries } from "@/lib/db/schema";
+import { eq, and, gte, lte, desc, ilike, sql } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,47 +10,75 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getJournalEntry(userId: string, date: string) {
-  const supabase = getServiceClient();
+  try {
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date)));
 
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("entry_date", date)
-    .single();
-
-  return { data, error: error?.code === "PGRST116" ? null : (error?.message ?? null) };
+    return { data: rows.length > 0 ? rows[0] : null, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function getRecentJournalEntries(userId: string, from?: string, to?: string, limit = 10) {
-  const supabase = getServiceClient();
+  try {
+    let query = db
+      .select()
+      .from(journalEntries)
+      .where(eq(journalEntries.userId, userId))
+      .orderBy(desc(journalEntries.entryDate))
+      .limit(limit);
 
-  let query = supabase
-    .from("journal_entries")
-    .select("*")
-    .eq("user_id", userId)
-    .order("entry_date", { ascending: false })
-    .limit(limit);
+    if (from && to) {
+      query = db
+        .select()
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), gte(journalEntries.entryDate, from), lte(journalEntries.entryDate, to)))
+        .orderBy(desc(journalEntries.entryDate))
+        .limit(limit);
+    } else if (from) {
+      query = db
+        .select()
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), gte(journalEntries.entryDate, from)))
+        .orderBy(desc(journalEntries.entryDate))
+        .limit(limit);
+    } else if (to) {
+      query = db
+        .select()
+        .from(journalEntries)
+        .where(and(eq(journalEntries.userId, userId), lte(journalEntries.entryDate, to)))
+        .orderBy(desc(journalEntries.entryDate))
+        .limit(limit);
+    }
 
-  if (from) query = query.gte("entry_date", from);
-  if (to) query = query.lte("entry_date", to);
-
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
+    const rows = await query;
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function searchJournal(userId: string, query: string) {
-  const supabase = getServiceClient();
+  try {
+    const rows = await db
+      .select()
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.userId, userId),
+          ilike(journalEntries.content, `%${query}%`)
+        )
+      )
+      .orderBy(desc(journalEntries.entryDate))
+      .limit(20);
 
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .select("*")
-    .eq("user_id", userId)
-    .ilike("content", `%${query}%`)
-    .order("entry_date", { ascending: false })
-    .limit(20);
-
-  return { data, error: error?.message ?? null };
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function createOrUpdateJournalEntry(
@@ -59,25 +89,32 @@ async function createOrUpdateJournalEntry(
     mood?: number;
   }
 ) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
   const entryDate = args.entry_date ?? today;
 
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .upsert(
-      {
-        user_id: userId,
-        entry_date: entryDate,
+  try {
+    const [row] = await db
+      .insert(journalEntries)
+      .values({
+        userId,
+        entryDate,
         content: args.content,
         mood: args.mood ?? null,
-      },
-      { onConflict: "user_id,entry_date" }
-    )
-    .select()
-    .single();
+      })
+      .onConflictDoUpdate({
+        target: [journalEntries.userId, journalEntries.entryDate],
+        set: {
+          content: args.content,
+          mood: args.mood ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
-  return { data, error: error?.message ?? null };
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------

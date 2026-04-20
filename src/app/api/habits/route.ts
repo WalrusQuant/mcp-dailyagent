@@ -1,49 +1,50 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { habits } from "@/lib/db/schema";
+import { eq, and, asc } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
-// GET all habits for current user
+function serializeHabit(h: typeof habits.$inferSelect) {
+  return {
+    id: h.id,
+    user_id: h.userId,
+    name: h.name,
+    description: h.description,
+    frequency: h.frequency,
+    target_days: h.targetDays,
+    color: h.color,
+    archived: h.archived,
+    sort_order: h.sortOrder,
+    goal_id: h.goalId,
+    created_at: h.createdAt,
+  };
+}
+
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
   const includeArchived = searchParams.get("archived") === "true";
 
-  let query = supabase
-    .from("habits")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("sort_order", { ascending: true });
+  try {
+    const conditions = includeArchived
+      ? eq(habits.userId, userId)
+      : and(eq(habits.userId, userId), eq(habits.archived, false));
 
-  if (!includeArchived) {
-    query = query.eq("archived", false);
+    const rows = await db
+      .select()
+      .from(habits)
+      .where(conditions)
+      .orderBy(asc(habits.sortOrder));
+
+    return NextResponse.json(rows.map(serializeHabit));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data);
 }
 
-// POST create new habit
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const body = await request.json();
   const { name, description, frequency, target_days, color, sort_order, goal_id } = body;
@@ -52,24 +53,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("habits")
-    .insert({
-      user_id: user.id,
-      name: name.trim(),
-      ...(description ? { description } : {}),
-      ...(frequency ? { frequency } : {}),
-      ...(target_days ? { target_days } : {}),
-      ...(color ? { color } : {}),
-      ...(typeof sort_order === "number" ? { sort_order } : {}),
-      ...(goal_id !== undefined ? { goal_id: goal_id || null } : {}),
-    })
-    .select()
-    .single();
+  try {
+    const [row] = await db
+      .insert(habits)
+      .values({
+        userId,
+        name: name.trim(),
+        ...(description ? { description } : {}),
+        ...(frequency ? { frequency } : {}),
+        ...(target_days ? { targetDays: target_days } : {}),
+        ...(color ? { color } : {}),
+        ...(typeof sort_order === "number" ? { sortOrder: sort_order } : {}),
+        ...(goal_id !== undefined ? { goalId: goal_id || null } : {}),
+      })
+      .returning();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(serializeHabit(row), { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json(data, { status: 201 });
 }

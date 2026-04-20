@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
+import { focusSessions } from "@/lib/db/schema";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -8,48 +10,71 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 // ---------------------------------------------------------------------------
 
 async function getFocusSessions(userId: string, from?: string, to?: string) {
-  const supabase = getServiceClient();
+  try {
+    const conditions =
+      from && to
+        ? and(
+            eq(focusSessions.userId, userId),
+            gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`)),
+            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+          )
+        : from
+        ? and(
+            eq(focusSessions.userId, userId),
+            gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`))
+          )
+        : to
+        ? and(
+            eq(focusSessions.userId, userId),
+            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+          )
+        : eq(focusSessions.userId, userId);
 
-  let query = supabase
-    .from("focus_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("started_at", { ascending: false });
+    const query = db
+      .select()
+      .from(focusSessions)
+      .where(conditions)
+      .orderBy(desc(focusSessions.startedAt));
 
-  if (from) query = query.gte("started_at", `${from}T00:00:00.000Z`);
-  if (to) query = query.lte("started_at", `${to}T23:59:59.999Z`);
-  if (!from && !to) query = query.limit(30);
+    const rows = !from && !to ? await query.limit(30) : await query;
 
-  const { data, error } = await query;
-  return { data, error: error?.message ?? null };
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function getTodayFocusStats(userId: string) {
-  const supabase = getServiceClient();
   const today = new Date().toISOString().split("T")[0];
 
-  const { data: sessions, error } = await supabase
-    .from("focus_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("started_at", `${today}T00:00:00.000Z`)
-    .lte("started_at", `${today}T23:59:59.999Z`);
+  try {
+    const sessions = await db
+      .select()
+      .from(focusSessions)
+      .where(
+        and(
+          eq(focusSessions.userId, userId),
+          gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`)),
+          lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999Z`))
+        )
+      );
 
-  if (error) return { data: null, error: error.message };
+    const completed = sessions.filter((s) => s.completedAt != null);
+    const totalMinutes = completed.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
 
-  const completed = sessions?.filter((s) => s.completed_at != null) ?? [];
-  const totalMinutes = completed.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-
-  return {
-    data: {
-      date: today,
-      totalSessions: sessions?.length ?? 0,
-      completedSessions: completed.length,
-      totalFocusMinutes: totalMinutes,
-      sessions,
-    },
-    error: null,
-  };
+    return {
+      data: {
+        date: today,
+        totalSessions: sessions.length,
+        completedSessions: completed.length,
+        totalFocusMinutes: totalMinutes,
+        sessions,
+      },
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function startFocusSession(
@@ -60,36 +85,36 @@ async function startFocusSession(
     break_minutes?: number;
   }
 ) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .insert({
-      user_id: userId,
-      duration_minutes: args.duration_minutes,
-      task_id: args.task_id ?? null,
-      break_minutes: args.break_minutes ?? 5,
-      started_at: new Date().toISOString(),
-      completed_at: null,
-    })
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .insert(focusSessions)
+      .values({
+        userId,
+        durationMinutes: args.duration_minutes,
+        taskId: args.task_id ?? null,
+        breakMinutes: args.break_minutes ?? 5,
+        startedAt: new Date(),
+        completedAt: null,
+        status: "active",
+      })
+      .returning();
+    return { data: row, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 async function completeFocusSession(userId: string, sessionId: string) {
-  const supabase = getServiceClient();
-
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .update({ completed_at: new Date().toISOString() })
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  return { data, error: error?.message ?? null };
+  try {
+    const [row] = await db
+      .update(focusSessions)
+      .set({ completedAt: new Date(), status: "completed" })
+      .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Session not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // ---------------------------------------------------------------------------

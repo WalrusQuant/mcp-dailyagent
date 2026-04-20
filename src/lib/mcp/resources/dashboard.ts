@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getServiceClient } from "@/lib/mcp/supabase";
+import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getDashboardSnapshot } from "@/lib/mcp/queries/dashboard";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -15,8 +15,7 @@ export function registerDashboardResources(server: McpServer) {
       if (!auth) return { contents: [] };
 
       // Dashboard is accessible to any authenticated user — no specific scope required
-      const supabase = getServiceClient();
-      const result = await getDashboardSnapshot(supabase, auth.userId);
+      const result = await getDashboardSnapshot(db, auth.userId);
 
       return {
         contents: [

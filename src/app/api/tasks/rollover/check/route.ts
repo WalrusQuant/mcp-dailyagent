@@ -1,29 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { tasks } from "@/lib/db/schema";
+import { eq, and, lt, isNull, sql } from "drizzle-orm";
+import { getUserId } from "@/lib/auth";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = getUserId();
 
   const todayStr = new Date().toISOString().split("T")[0];
 
-  const { count, error } = await supabase
-    .from("tasks")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .lt("task_date", todayStr)
-    .eq("done", false)
-    .is("rolled_from", null);
+  try {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          lt(tasks.taskDate, todayStr),
+          eq(tasks.done, false),
+          isNull(tasks.rolledFrom)
+        )
+      );
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ count: result[0]?.count ?? 0 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
-
-  return NextResponse.json({ count: count ?? 0 });
 }
