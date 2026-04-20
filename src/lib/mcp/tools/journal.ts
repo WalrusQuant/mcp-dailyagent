@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, ilike, sql } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -127,10 +128,10 @@ export function registerJournalTools(server: McpServer) {
     "get_journal_entries",
     "Get journal entries. Fetches a specific date or a range of entries.",
     {
-      date: z.string().optional().describe("Specific date in YYYY-MM-DD format"),
-      from: z.string().optional().describe("Start date in YYYY-MM-DD format for a range"),
-      to: z.string().optional().describe("End date in YYYY-MM-DD format for a range"),
-      limit: z.number().optional().describe("Maximum number of entries to return (default: 10)"),
+      date: dateSchema.optional().describe("Specific date in YYYY-MM-DD format"),
+      from: dateSchema.optional().describe("Start date in YYYY-MM-DD format for a range"),
+      to: dateSchema.optional().describe("End date in YYYY-MM-DD format for a range"),
+      limit: z.number().int().min(1).max(100).optional().describe("Maximum number of entries to return (default: 10)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -179,8 +180,8 @@ export function registerJournalTools(server: McpServer) {
     "Create or update a journal entry for a given date (defaults to today)",
     {
       content: z.string().describe("Journal entry content"),
-      entry_date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
-      mood: z.number().min(1).max(5).optional().describe("Mood rating from 1 (low) to 5 (great)"),
+      entry_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      mood: z.number().int().min(1).max(5).optional().describe("Mood rating from 1 (low) to 5 (great)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

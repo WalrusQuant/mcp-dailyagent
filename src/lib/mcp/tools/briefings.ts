@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { dailyBriefings } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -80,7 +81,7 @@ export function registerBriefingTools(server: McpServer) {
     "save_daily_briefing",
     "Save or overwrite the daily briefing for a given date. If date is omitted, uses today.",
     {
-      briefing_date: z.string().optional().describe("Briefing date in YYYY-MM-DD format (defaults to today)"),
+      briefing_date: dateSchema.optional().describe("Briefing date in YYYY-MM-DD format (defaults to today)"),
       content: z.string().describe("Briefing content (markdown supported)"),
     },
     async (args, extra: Extra) => {

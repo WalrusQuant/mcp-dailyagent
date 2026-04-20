@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { goals } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema, goalCategorySchema, goalStatusSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -109,7 +110,7 @@ export function registerGoalTools(server: McpServer) {
     "list_goals",
     "List goals, optionally filtered by status",
     {
-      status: z.string().optional().describe("Filter by status: active, completed, paused, or abandoned"),
+      status: goalStatusSchema.optional().describe("Filter by status: active, completed, or abandoned"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -132,8 +133,10 @@ export function registerGoalTools(server: McpServer) {
     {
       title: z.string().describe("Goal title"),
       description: z.string().optional().describe("Detailed description of the goal"),
-      category: z.string().optional().describe("Goal category (e.g. health, career, personal)"),
-      target_date: z.string().optional().describe("Target completion date in YYYY-MM-DD format"),
+      category: goalCategorySchema
+        .optional()
+        .describe("Goal category: health, career, personal, financial, learning, relationships, or other"),
+      target_date: dateSchema.optional().describe("Target completion date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -157,7 +160,7 @@ export function registerGoalTools(server: McpServer) {
       goal_id: z.string().describe("Goal ID"),
       title: z.string().optional().describe("New title"),
       description: z.string().optional().describe("New description"),
-      status: z.string().optional().describe("New status: active, completed, paused, or abandoned"),
+      status: goalStatusSchema.optional().describe("New status: active, completed, or abandoned"),
       progress: z.number().min(0).max(100).optional().describe("Progress percentage (0-100)"),
     },
     async (args, extra: Extra) => {

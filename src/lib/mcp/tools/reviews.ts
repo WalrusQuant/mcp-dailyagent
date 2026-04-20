@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { weeklyReviews } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -70,7 +71,7 @@ export function registerReviewTools(server: McpServer) {
     "get_weekly_review",
     "Get a weekly review. If week_start is provided, fetches that specific week; otherwise returns the latest review.",
     {
-      week_start: z.string().optional().describe("Week start date in YYYY-MM-DD format"),
+      week_start: dateSchema.optional().describe("Week start date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -98,7 +99,7 @@ export function registerReviewTools(server: McpServer) {
     "save_weekly_review",
     "Save or overwrite a weekly review for a given week",
     {
-      week_start: z.string().describe("Week start date in YYYY-MM-DD format"),
+      week_start: dateSchema.describe("Week start date in YYYY-MM-DD format"),
       content: z.string().describe("Review content (markdown supported)"),
     },
     async (args, extra: Extra) => {

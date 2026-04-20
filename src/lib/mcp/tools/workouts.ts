@@ -4,6 +4,18 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
+
+const exerciseEntrySchema = z.object({
+  name: z.string().min(1, "Exercise name is required"),
+  type: z.enum(["strength", "timed", "cardio"]).optional(),
+  sets: z.number().int().min(0).optional(),
+  reps: z.number().int().min(0).optional(),
+  weight: z.number().optional(),
+  duration_seconds: z.number().optional(),
+  notes: z.string().optional(),
+});
+const exercisesArraySchema = z.array(exerciseEntrySchema);
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -90,14 +102,7 @@ async function getWorkoutTemplates(userId: string) {
   }
 }
 
-interface ExerciseEntry {
-  name: string;
-  sets?: number;
-  reps?: number;
-  weight?: number;
-  duration_seconds?: number;
-  notes?: string;
-}
+type ExerciseEntry = z.infer<typeof exerciseEntrySchema>;
 
 async function logWorkout(
   userId: string,
@@ -109,14 +114,22 @@ async function logWorkout(
     exercises?: string;
   }
 ) {
-  // Parse exercises JSON if provided
   let exercises: ExerciseEntry[] = [];
   if (args.exercises) {
+    let parsed: unknown;
     try {
-      exercises = JSON.parse(args.exercises) as ExerciseEntry[];
+      parsed = JSON.parse(args.exercises);
     } catch {
       return { data: null, error: "Invalid exercises JSON format" };
     }
+    const validated = exercisesArraySchema.safeParse(parsed);
+    if (!validated.success) {
+      return {
+        data: null,
+        error: `Invalid exercises payload: ${validated.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      };
+    }
+    exercises = validated.data;
   }
 
   try {
@@ -135,7 +148,7 @@ async function logWorkout(
       const exerciseRows = exercises.map((ex) => ({
         logId: log.id,
         exerciseName: ex.name,
-        exerciseType: "strength" as const,
+        exerciseType: ex.type ?? "strength",
         sets:
           ex.sets != null
             ? Array.from({ length: ex.sets }, () => ({
@@ -165,9 +178,9 @@ export function registerWorkoutTools(server: McpServer) {
     "list_workout_logs",
     "List workout logs, optionally filtered by date or date range",
     {
-      date: z.string().optional().describe("Specific date in YYYY-MM-DD format"),
-      from: z.string().optional().describe("Start date in YYYY-MM-DD format"),
-      to: z.string().optional().describe("End date in YYYY-MM-DD format"),
+      date: dateSchema.optional().describe("Specific date in YYYY-MM-DD format"),
+      from: dateSchema.optional().describe("Start date in YYYY-MM-DD format"),
+      to: dateSchema.optional().describe("End date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -208,11 +221,11 @@ export function registerWorkoutTools(server: McpServer) {
     "Log a completed workout",
     {
       name: z.string().describe("Workout name"),
-      log_date: z.string().describe("Date of the workout in YYYY-MM-DD format"),
-      duration_minutes: z.number().optional().describe("Duration in minutes"),
+      log_date: dateSchema.describe("Date of the workout in YYYY-MM-DD format"),
+      duration_minutes: z.number().int().min(0).optional().describe("Duration in minutes"),
       notes: z.string().optional().describe("Workout notes"),
       exercises: z.string().optional().describe(
-        'JSON string array of exercises, e.g. [{"name":"Squat","sets":3,"reps":10,"weight":100}]'
+        'JSON string array of exercises. Each exercise must include "name" and may include "type" ("strength" | "timed" | "cardio"), "sets", "reps", "weight", "duration_seconds", "notes". Example: [{"name":"Squat","type":"strength","sets":3,"reps":10,"weight":100}]'
       ),
     },
     async (args, extra: Extra) => {

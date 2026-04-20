@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { spaceStatusSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -126,7 +127,7 @@ export function registerSpaceTools(server: McpServer) {
       space_id: z.string().describe("Space ID"),
       name: z.string().optional().describe("New name"),
       description: z.string().optional().describe("New description"),
-      status: z.string().optional().describe("New status: active or archived"),
+      status: spaceStatusSchema.optional().describe("New status: active, paused, or completed"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
