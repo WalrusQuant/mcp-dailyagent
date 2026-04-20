@@ -43,3 +43,6 @@ next-env.d.ts
 
 # MkDocs build output
 /site/
+
+# Local working notes
+/tasks/
