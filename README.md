@@ -4,7 +4,7 @@
 
 **Hardened productivity data layer for [OpenClaw](https://openclaw.ai).** Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.
 
-Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journal, workouts, focus sessions, goals, and projects — exposed to your agent over MCP and to your browser over HTTP.
+Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journal, workouts, focus sessions, goals, and spaces — exposed to your agent over MCP and to your browser over HTTP.
 
 ---
 
@@ -13,7 +13,7 @@ Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journa
 Two front doors, one database:
 
 1. **MCP server** (`/api/mcp`) — the primary interface. Your OpenClaw agent reads and writes every piece of productivity data through it: 34 typed tools, a dozen prompt templates, a handful of read-only resources. Authenticated by a single bearer token.
-2. **Dashboard** (`/dashboard`, `/tasks`, `/habits`, `/journal`, `/workouts`, `/focus`, `/goals`, `/calendar`, `/review`, `/projects`, `/settings`) — a Next.js UI for browsing and manually editing the same data. No AI features. No generate buttons. If you want AI, you talk to OpenClaw.
+2. **Dashboard** (`/dashboard`, `/tasks`, `/habits`, `/journal`, `/workouts`, `/focus`, `/goals`, `/calendar`, `/review`, `/spaces`, `/settings`) — a Next.js UI for browsing and manually editing the same data. No AI features. No generate buttons. If you want AI, you talk to OpenClaw.
 
 OpenClaw owns everything about the agent: model choice, scheduling, message delivery (Telegram / WhatsApp / etc.), briefings, insights, reviews. This repo owns storage and the contract.
 
@@ -114,7 +114,7 @@ A plain viewer + manual editor. Access is gated by Tailscale — no login, no pa
 - **Workouts** — templates, active logger, stats
 - **Focus** — Pomodoro timer with task linking
 - **Goals** — progress, categories, target dates
-- **Projects (Spaces)** — group tasks/habits/goals
+- **Spaces** — group tasks/habits/goals (projects/areas of life)
 - **Calendar** — monthly view with per-day detail panels
 - **Review** — read or write the weekly review (content can also be written by OpenClaw)
 - **Settings** — theme, and a Danger Zone "Wipe All Data" with type-to-confirm
@@ -152,12 +152,12 @@ src/
     (protected)/          # Dashboard pages — no auth middleware, Tailscale gates access
       dashboard/          # Daily snapshot
       tasks/ habits/ journal/ workouts/ focus/ goals/
-      projects/           # Spaces (projects)
+      spaces/             # Areas of life / projects
       calendar/ review/ settings/
     api/
       mcp/                # THE MCP server endpoint (Streamable HTTP, Bearer auth)
       tasks/ habits/ journal/ workouts/ focus/ goals/
-      projects/ tags/ calendar/ dashboard/
+      spaces/ tags/ calendar/ dashboard/
       briefing/ insights/ # GET-only — reads what OpenClaw saved
       weekly-review/      # CRUD, no AI
       profile/            # Single user's profile
@@ -178,7 +178,7 @@ src/
     dates.ts theme.tsx retry.ts
   components/
     layout/ shared/ dashboard/ tasks/ habits/ journal/
-    workouts/ focus/ goals/ calendar/ review/ projects/ settings/
+    workouts/ focus/ goals/ calendar/ review/ spaces/ settings/
 drizzle/                  # Migration SQL, generated from schema.ts
 docker-compose.yml        # Postgres + app, bound to 127.0.0.1
 Dockerfile                # Multi-stage (deps → builder → runner), Next.js standalone

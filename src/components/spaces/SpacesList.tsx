@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2, Calendar, FolderKanban } from "lucide-react";
 import { Space } from "@/types/database";
-import { ProjectFormModal } from "./ProjectFormModal";
+import { SpaceFormModal } from "./SpaceFormModal";
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   active: { bg: "var(--accent-primary)", text: "var(--bg-base)" },
@@ -12,7 +12,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   completed: { bg: "var(--accent-positive)", text: "var(--bg-base)" },
 };
 
-export function ProjectsList() {
+export function SpacesList() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -23,8 +23,8 @@ export function ProjectsList() {
     setIsLoading(true);
     try {
       const url = statusFilter
-        ? `/api/projects?status=${statusFilter}`
-        : "/api/projects";
+        ? `/api/spaces?status=${statusFilter}`
+        : "/api/spaces";
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
@@ -43,7 +43,7 @@ export function ProjectsList() {
 
   const handleSpaceCreated = (space: Space) => {
     setShowModal(false);
-    router.push(`/projects/${space.id}`);
+    router.push(`/spaces/${space.id}`);
   };
 
   return (
@@ -99,7 +99,7 @@ export function ProjectsList() {
               return (
                 <button
                   key={space.id}
-                  onClick={() => router.push(`/projects/${space.id}`)}
+                  onClick={() => router.push(`/spaces/${space.id}`)}
                   className="text-left rounded-xl p-4 transition-colors"
                   style={{
                     background: "var(--bg-surface)",
@@ -166,7 +166,7 @@ export function ProjectsList() {
       </div>
 
       {showModal && (
-        <ProjectFormModal
+        <SpaceFormModal
           onClose={() => setShowModal(false)}
           onSave={handleSpaceCreated}
         />

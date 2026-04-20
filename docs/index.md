@@ -4,7 +4,7 @@
 Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.
 
 !!! info "Not a chatbot"
-    This project is *not* an AI product. It's a durable store for tasks, habits, journal, workouts, focus sessions, goals, and projects — exposed to your agent over MCP and to your browser over HTTP. All generative AI (briefings, reviews, insights) lives in OpenClaw.
+    This project is *not* an AI product. It's a durable store for tasks, habits, journal, workouts, focus sessions, goals, and spaces — exposed to your agent over MCP and to your browser over HTTP. All generative AI (briefings, reviews, insights) lives in OpenClaw.
 
 ---
 

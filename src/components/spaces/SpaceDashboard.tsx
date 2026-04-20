@@ -11,7 +11,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { Space, Task } from "@/types/database";
-import { ProjectFormModal } from "./ProjectFormModal";
+import { SpaceFormModal } from "./SpaceFormModal";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -32,7 +32,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   completed: { bg: "var(--accent-positive)", text: "var(--bg-base)" },
 };
 
-export function ProjectDashboard({ projectId }: { projectId: string }) {
+export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   const [space, setSpace] = useState<Space | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -45,8 +45,8 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
     setIsLoading(true);
     try {
       const [spaceRes, tasksRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}`),
-        fetch(`/api/tasks?space_id=${projectId}`),
+        fetch(`/api/spaces/${spaceId}`),
+        fetch(`/api/tasks?space_id=${spaceId}`),
       ]);
 
       if (spaceRes.ok) {
@@ -60,7 +60,7 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [spaceId]);
 
   useEffect(() => {
     loadAll();
@@ -68,7 +68,7 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
 
   const updateProgress = async (value: number) => {
     setProgress(value);
-    await fetch(`/api/projects/${projectId}`, {
+    await fetch(`/api/spaces/${spaceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ progress: value }),
@@ -77,8 +77,8 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
 
   const handleDelete = async () => {
     if (!confirm("Delete this space? This cannot be undone.")) return;
-    await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
-    router.push("/projects");
+    await fetch(`/api/spaces/${spaceId}`, { method: "DELETE" });
+    router.push("/spaces");
   };
 
   const handleToggleTask = async (task: Task) => {
@@ -131,7 +131,7 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <button
-            onClick={() => router.push("/projects")}
+            onClick={() => router.push("/spaces")}
             className="p-2 rounded-lg transition-colors"
             style={{ color: "var(--text-secondary)" }}
           >
@@ -272,8 +272,8 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
       </div>
 
       {showEditModal && (
-        <ProjectFormModal
-          project={space}
+        <SpaceFormModal
+          space={space}
           onClose={() => setShowEditModal(false)}
           onSave={handleSpaceSaved}
         />
@@ -281,7 +281,7 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
 
       {showTaskModal && (
         <TaskFormModal
-          defaultSpaceId={projectId}
+          defaultSpaceId={spaceId}
           onClose={() => setShowTaskModal(false)}
           onSave={handleTaskSaved}
         />

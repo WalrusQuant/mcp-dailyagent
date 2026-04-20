@@ -35,10 +35,10 @@ Test files live alongside source in `__tests__/` directories.
 
 ### Route Structure (Next.js App Router)
 
-- `src/app/(protected)/` — Dashboard UI: `dashboard`, `tasks`, `habits`, `journal`, `workouts`, `focus`, `goals`, `calendar`, `review`, `projects`, `settings`. No login — Tailscale gates access.
+- `src/app/(protected)/` — Dashboard UI: `dashboard`, `tasks`, `habits`, `journal`, `workouts`, `focus`, `goals`, `calendar`, `review`, `spaces`, `settings`. No login — Tailscale gates access.
 - `src/app/api/` — API endpoints:
   - `mcp/` — **MCP server endpoint** (Streamable HTTP, stateless, Bearer auth)
-  - `tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `projects/`, `tags/`, `calendar/`, `dashboard/` — CRUD for the dashboard
+  - `tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `spaces/`, `tags/`, `calendar/`, `dashboard/` — CRUD for the dashboard
   - `briefing/`, `insights/` — **GET-only**; reads what OpenClaw saved
   - `weekly-review/` — CRUD; no AI generation (user writes manually or OpenClaw writes via MCP)
   - `profile/` — single user's profile
@@ -90,7 +90,7 @@ Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Stream
 - `src/components/layout/BottomNav.tsx` — Mobile bottom nav
 - `src/components/settings/` — `Settings`, `AccountTab`, `PreferencesTab`, `DangerZoneTab` (with "Wipe All Data")
 - `src/components/dashboard/` — `Dashboard` + widgets (`TaskWidget`, `HabitWidget`, `JournalWidget`, `WorkoutWidget`, `FocusWidget`, `GoalWidget`, `DailyBriefing` (read-only), `DailyStartCard`, `InsightCards` (read-only))
-- `src/components/tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `calendar/`, `review/`, `projects/` — Per-tool UI
+- `src/components/tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `calendar/`, `review/`, `spaces/` — Per-tool UI
 - `src/components/shared/` — Reusable: `DateNavigation`, `StatCard`, `EmptyState`, `SparklineChart`, `FormModal`, `CommandPalette`, `Skeleton`, `Toast`
 - `src/components/ErrorBoundary.tsx` — Error boundary wrapper
 

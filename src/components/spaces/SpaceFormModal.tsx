@@ -4,17 +4,17 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { Space } from "@/types/database";
 
-interface ProjectFormModalProps {
-  project?: Space | null;
+interface SpaceFormModalProps {
+  space?: Space | null;
   onClose: () => void;
   onSave: (space: Space) => void;
 }
 
-export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalProps) {
-  const [name, setName] = useState(project?.name || "");
-  const [description, setDescription] = useState(project?.description || "");
-  const [status] = useState<"active" | "paused" | "completed">(project?.status || "active");
-  const [deadline] = useState(project?.deadline || "");
+export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) {
+  const [name, setName] = useState(space?.name || "");
+  const [description, setDescription] = useState(space?.description || "");
+  const [status] = useState<"active" | "paused" | "completed">(space?.status || "active");
+  const [deadline] = useState(space?.deadline || "");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -31,8 +31,8 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
 
     setIsSaving(true);
     try {
-      const url = project ? `/api/projects/${project.id}` : "/api/projects";
-      const method = project ? "PATCH" : "POST";
+      const url = space ? `/api/spaces/${space.id}` : "/api/spaces";
+      const method = space ? "PATCH" : "POST";
 
       const response = await fetch(url, {
         method,
@@ -65,7 +65,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
       >
         <div className="flex items-center justify-between p-4" style={{ borderBottom: "1px solid var(--border-default)" }}>
           <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            {project ? "Edit Space" : "New Space"}
+            {space ? "Edit Space" : "New Space"}
           </h2>
           <button onClick={onClose} className="p-1" style={{ color: "var(--text-muted)" }}>
             <X className="w-5 h-5" />
@@ -125,7 +125,7 @@ export function ProjectFormModal({ project, onClose, onSave }: ProjectFormModalP
               className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
               style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
             >
-              {isSaving ? "Saving..." : project ? "Save Changes" : "Create Space"}
+              {isSaving ? "Saving..." : space ? "Save Changes" : "Create Space"}
             </button>
           </div>
         </form>

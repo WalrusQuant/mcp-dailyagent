@@ -77,10 +77,10 @@ src/
   app/
     (protected)/              # Dashboard pages — Tailscale gates access
       dashboard/ tasks/ habits/ journal/ workouts/
-      focus/ goals/ projects/ calendar/ review/ settings/
+      focus/ goals/ spaces/ calendar/ review/ settings/
     api/
       mcp/                    # The MCP server endpoint
-      tasks/ habits/ journal/ workouts/ focus/ goals/ projects/
+      tasks/ habits/ journal/ workouts/ focus/ goals/ spaces/
       tags/ calendar/ dashboard/
       briefing/ insights/     # GET-only, read what OpenClaw saved
       weekly-review/ profile/ wipe-data/
@@ -105,7 +105,7 @@ src/
   components/
     layout/ shared/
     dashboard/ tasks/ habits/ journal/
-    workouts/ focus/ goals/ calendar/ review/ projects/ settings/
+    workouts/ focus/ goals/ calendar/ review/ spaces/ settings/
 drizzle/                      # Migration SQL
 docker-compose.yml            # Postgres + app, bound to 127.0.0.1
 Dockerfile                    # Multi-stage, Next.js standalone output

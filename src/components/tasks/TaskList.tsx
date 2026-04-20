@@ -128,7 +128,7 @@ export function TaskList() {
   }, [date, loadTasks]);
 
   useEffect(() => {
-    fetch("/api/projects")
+    fetch("/api/spaces")
       .then((r) => r.ok ? r.json() : [])
       .then(setSpaces)
       .catch(() => {});
