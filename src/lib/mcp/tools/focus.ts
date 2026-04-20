@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -127,8 +128,8 @@ export function registerFocusTools(server: McpServer) {
     "get_focus_sessions",
     "Get focus/Pomodoro sessions, optionally filtered by date range",
     {
-      from: z.string().optional().describe("Start date in YYYY-MM-DD format"),
-      to: z.string().optional().describe("End date in YYYY-MM-DD format"),
+      from: dateSchema.optional().describe("Start date in YYYY-MM-DD format"),
+      to: dateSchema.optional().describe("End date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -168,9 +169,9 @@ export function registerFocusTools(server: McpServer) {
     "start_focus_session",
     "Start a new focus/Pomodoro session",
     {
-      duration_minutes: z.number().describe("Focus session duration in minutes (e.g. 25)"),
+      duration_minutes: z.number().int().min(1).max(480).describe("Focus session duration in minutes (1-480, e.g. 25)"),
       task_id: z.string().optional().describe("Task ID to associate this session with"),
-      break_minutes: z.number().optional().describe("Break duration in minutes (default: 5)"),
+      break_minutes: z.number().int().min(0).max(120).optional().describe("Break duration in minutes (0-120, default: 5)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

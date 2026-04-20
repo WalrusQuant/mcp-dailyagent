@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, asc, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema, habitFrequencySchema } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -67,7 +68,7 @@ async function createHabit(
   args: {
     name: string;
     description?: string;
-    frequency?: string;
+    frequency?: "daily" | "weekly";
     target_days?: number[];
     color?: string;
   }
@@ -79,8 +80,8 @@ async function createHabit(
         userId,
         name: args.name,
         description: args.description ?? null,
-        frequency: (args.frequency === "weekly" ? "weekly" : "daily") as "daily" | "weekly",
-        targetDays: args.target_days ?? [0, 1, 2, 3, 4, 5, 6],
+        frequency: args.frequency ?? "daily",
+        targetDays: args.target_days ?? [1, 2, 3, 4, 5, 6, 7],
         color: args.color ?? "#d4a574",
         archived: false,
       })
@@ -180,8 +181,11 @@ export function registerHabitTools(server: McpServer) {
     {
       name: z.string().describe("Habit name"),
       description: z.string().optional().describe("Habit description"),
-      frequency: z.string().optional().describe("Frequency: daily, weekly, or custom"),
-      target_days: z.array(z.number()).optional().describe("Days of week to target (0=Sunday, 6=Saturday)"),
+      frequency: habitFrequencySchema.optional().describe("Frequency: daily or weekly"),
+      target_days: z
+        .array(z.number().int().min(1).max(7))
+        .optional()
+        .describe("ISO days of week to target (1=Monday, 7=Sunday). Defaults to all 7 days."),
       color: z.string().optional().describe("Color hex code for display"),
     },
     async (args, extra: Extra) => {
@@ -204,7 +208,7 @@ export function registerHabitTools(server: McpServer) {
     "Toggle habit completion for a given date (defaults to today)",
     {
       habit_id: z.string().describe("Habit ID"),
-      date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

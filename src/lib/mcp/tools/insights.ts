@@ -4,6 +4,12 @@ import { db } from "@/lib/db/client";
 import { insightCache } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
+
+const insightsPayloadSchema = z.union([
+  z.array(z.unknown()),
+  z.record(z.string(), z.unknown()),
+]);
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -79,8 +85,8 @@ export function registerInsightTools(server: McpServer) {
     "save_insights",
     "Save or overwrite insights for a given date. Insights is an arbitrary JSON value (typically an array of insight objects).",
     {
-      cache_date: z.string().optional().describe("Cache date in YYYY-MM-DD format (defaults to today)"),
-      insights: z.unknown().describe("Insight payload — any JSON-serializable value, typically an array of insight objects"),
+      cache_date: dateSchema.optional().describe("Cache date in YYYY-MM-DD format (defaults to today)"),
+      insights: insightsPayloadSchema.describe("Insight payload — must be a JSON array or object (not null/undefined). Typically an array of insight objects."),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

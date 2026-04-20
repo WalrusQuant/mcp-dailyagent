@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema, prioritySchema, priorityDescription } from "./validators";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -164,8 +165,8 @@ export function registerTaskTools(server: McpServer) {
     {
       title: z.string().describe("Task title"),
       notes: z.string().optional().describe("Additional notes"),
-      priority: z.enum(["A", "B", "C"]).optional().describe("Franklin Covey priority: A (critical), B (important), C (nice to have)"),
-      task_date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      priority: prioritySchema.optional().describe(priorityDescription),
+      task_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       space_id: z.string().optional().describe("Space/project ID to assign to"),
       goal_id: z.string().optional().describe("Goal ID to link to"),
     },
@@ -191,8 +192,8 @@ export function registerTaskTools(server: McpServer) {
       task_id: z.string().describe("Task ID"),
       title: z.string().optional().describe("New title"),
       notes: z.string().optional().describe("New notes"),
-      priority: z.enum(["A", "B", "C"]).optional().describe("New priority"),
-      task_date: z.string().optional().describe("New date in YYYY-MM-DD format"),
+      priority: prioritySchema.optional().describe(priorityDescription),
+      task_date: dateSchema.optional().describe("New date in YYYY-MM-DD format"),
       done: z.boolean().optional().describe("Mark as done or not done"),
     },
     async (args, extra: Extra) => {
