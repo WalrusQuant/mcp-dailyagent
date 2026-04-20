@@ -111,6 +111,39 @@ The server exposes prompt templates you can load for structured outputs. Use the
 
 Pattern: load the prompt → fill it with fresh data (call the read tools) → generate → save the result with the matching save tool (e.g. `save_daily_briefing`, `save_weekly_review`, `save_insights`).
 
+### What a loaded prompt looks like
+
+When you call a prompt, the server runs the read queries itself and returns a `messages` array of `{role: "user", content: {type: "text", text: "..."}}` entries. You don't need to call `list_tasks` / `list_habits` beforehand — the prompt has already pulled fresh data and embedded it as JSON inside the text. Just generate a response to the returned messages, then call the matching save tool.
+
+Example — loading `morning_briefing` returns a single user message whose text looks roughly like:
+
+```
+Good morning! Give me a quick briefing for 2026-04-20.
+
+## What's on My Plate
+- 7 tasks pending (2 are A-priority)
+- 4 habits to track today
+- 3 active goals in progress
+
+### Task Details
+[{"id":"...","title":"Ship MCP prompt docs","priority":"A1","done":false,"task_date":"2026-04-20"}, ...]
+
+### Habits
+[{"id":"...","name":"Morning walk","completed_today":false}, ...]
+
+Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence motivational close.
+```
+
+So the flow is: `prompt_load("morning_briefing")` → you generate the briefing text → `save_daily_briefing({content: "..."})` → deliver. Prompts that take args (`productivity_report`, `weekly_review`, `goal_planning`, `space_planning`) accept them as the prompt arguments, not as a separate tool call.
+
+Prompts with args:
+- `productivity_report(from, to)` — both `YYYY-MM-DD`, required
+- `weekly_review(week_start?)` — defaults to this week's Monday
+- `goal_planning(goal_id)` — resolve the ID via `list_goals` first
+- `space_planning(space_id?)` — omit for cross-space planning
+
+All other prompts take no args.
+
 ## Resources (read-only URIs)
 
 For quick contextual reads you can fetch resources instead of calling tools:
