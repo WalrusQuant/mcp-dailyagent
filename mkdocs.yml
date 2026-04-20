@@ -10,6 +10,7 @@ site_dir: site
 
 exclude_docs: |
   index.html
+  requirements.txt
 
 theme:
   name: material
