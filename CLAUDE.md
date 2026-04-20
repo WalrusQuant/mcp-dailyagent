@@ -2,24 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## What this is
 
-Self-hosted, single-user MCP server + productivity dashboard. Runs in Docker on a VPS alongside OpenClaw. The MCP server exposes tasks, habits, journal, workouts, focus, goals, and weekly reviews to Claude so it can read and write your productivity data directly. The dashboard is a visual UI over the same data.
+**Hardened data layer for the user's OpenClaw agent.**
 
-**Not a SaaS.** No multi-tenant, no signup, no billing, no OAuth. One user (you), one API key from `.env`, one deployment. Open-source because why not.
+The user already tracks tasks/habits/journal/etc. via OpenClaw skills using markdown templates + scripts. This project replaces that fragile setup with a proper Postgres DB behind a typed MCP interface.
 
-**Status:** Mid-pivot from SaaS. See "Current state" below — multi-tenant/billing/OAuth infra is fully ripped out (commit `34ab232` on `pivot-self-hosted-rip`). Next work: swap Supabase for local Postgres, wire Docker Compose for VPS deploy.
+- **MCP server** (this repo) — Postgres + `/api/mcp` typed read/write tools + prompt templates. Stores data. Exposes it. Knows nothing about AI.
+- **OpenClaw agent** — lives on the user's Mac, runs whatever model the user has configured (**model-agnostic — do NOT assume Claude**), has its own scheduler, bridges to Telegram/WhatsApp/etc. Calls MCP tools to read/write. Generates briefings/reviews/insights and saves them back via MCP write tools.
+- **Dashboard** (this repo) — Next.js UI. Viewer + manual editor for the DB. No AI. No generate buttons. If you want AI, you talk to OpenClaw.
+
+Two front doors (OpenClaw agent + dashboard), one DB. Dashboard access is gated by Tailscale (no app-level auth). MCP endpoint is protected by a single bearer token (`MCP_API_KEY`).
 
 ## Commands
 
 ```bash
-npm run dev      # Start development server (Turbopack)
-npm run build    # Build for production
-npm start        # Start production server
-npm run lint     # Run ESLint
-npm test         # Run all tests once (Vitest)
-npm run test:watch     # Watch mode
-npm run test:coverage  # Coverage report
+npm run dev         # Next.js dev server (Turbopack)
+npm run build       # Production build
+npm start           # Start production server
+npm run lint        # ESLint
+npm test            # Vitest once
+npm run test:watch  # Vitest watch
+npm run db:generate # Generate Drizzle migration from schema diff
+npm run db:migrate  # Apply migrations
+npm run db:push     # Push schema directly (dev only)
+npm run db:studio   # Drizzle studio UI
 ```
 
 Test files live alongside source in `__tests__/` directories.
@@ -28,83 +35,61 @@ Test files live alongside source in `__tests__/` directories.
 
 ### Route Structure (Next.js App Router)
 
-- `src/app/(auth)/login/` — Login page (single-user, no signup)
-- `src/app/(protected)/` — Dashboard and productivity tools: `dashboard`, `tasks`, `habits`, `journal`, `workouts`, `focus`, `goals`, `calendar`, `review`, `projects`, `settings`, `admin`
+- `src/app/(protected)/` — Dashboard UI: `dashboard`, `tasks`, `habits`, `journal`, `workouts`, `focus`, `goals`, `calendar`, `review`, `projects`, `settings`. No login — Tailscale gates access.
 - `src/app/api/` — API endpoints:
   - `mcp/` — **MCP server endpoint** (Streamable HTTP, stateless, Bearer auth)
-  - `tasks/` — Task CRUD + rollover + reorder (Franklin Covey A/B/C priorities)
-  - `habits/` — Habit CRUD + log toggle + streaks/stats
-  - `journal/` — Journal entry CRUD + full-text search + AI prompts
-  - `workouts/` — Workout templates + logs + exercises + stats
-  - `focus/` — Pomodoro focus sessions + stats
-  - `goals/` — Goals CRUD + progress tracking
-  - `dashboard/` — Aggregated daily snapshot
-  - `weekly-review/` — Weekly review CRUD + AI generation
-  - `calendar/` — Calendar day detail + monthly aggregation
-  - `projects/` — "Spaces" (areas of life that group tasks/goals/habits)
-  - `tags/` — Tag management
-  - `briefing/` — AI daily briefing generation
-  - `insights/` — AI proactive insights analysis
-  - `profile/` — User profile
-  - `auth/callback/` — Supabase auth callback
-  - `admin/providers/` — LLM provider management (OpenRouter config)
-  - `admin/settings/` — App settings (OpenRouter key, encrypted)
-- `src/middleware.ts` — Auth middleware (Supabase session check on protected routes)
+  - `tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `projects/`, `tags/`, `calendar/`, `dashboard/` — CRUD for the dashboard
+  - `briefing/`, `insights/` — **GET-only**; reads what OpenClaw saved
+  - `weekly-review/` — CRUD; no AI generation (user writes manually or OpenClaw writes via MCP)
+  - `profile/` — single user's profile
+  - `wipe-data/` — Danger Zone nuke button
 
 ### MCP Server
 
-The MCP server is the core artifact. Located at `/api/mcp`, it uses the official `@modelcontextprotocol/sdk` with Streamable HTTP transport. Stateless — each request is auth'd independently.
+Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Streamable HTTP transport. Stateless — each request auth'd independently.
 
-**Auth:** Bearer token must exactly match `MCP_API_KEY` env var. User ID is `SELF_HOSTED_USER_ID` env var. All requests get full scopes (`all` → expanded via `src/lib/oauth-scopes.ts`). No OAuth, no DB-backed keys, no plan gating, no per-user rate limits.
+**Auth:** Bearer token must match `MCP_API_KEY`. User ID is `SELF_HOSTED_USER_ID` env var. Every request gets full scopes (`all` → expanded via `src/lib/oauth-scopes.ts`).
 
 **Layout** (`src/lib/mcp/`):
 - `server.ts` — MCP server factory; registers tools, resources, prompts
 - `auth.ts` — Request authentication
 - `types.ts` — Shared types (`McpContext`, `QueryResult`)
-- `supabase.ts` — Service-role Supabase client for MCP handlers
-- `tools/` — Write and read tools (tasks, habits, journal, workouts, focus, goals, spaces, reviews)
+- `db.ts` — Re-exports Drizzle instance
+- `tools/` — Read + write tools (tasks, habits, journal, workouts, focus, goals, spaces, reviews, briefings, **insights**, calendar)
 - `resources/` — Read-only resource URIs (`dailyagent://...`)
-- `prompts/` — Pre-built prompt templates (daily planning, weekly review, habit analysis, etc.)
+- `prompts/` — Versioned prompt templates (daily planning, morning briefing, weekly review, habit analysis, productivity report, weekly trends, journal prompt, workout suggestion, goal planning, space planning, etc.). **OpenClaw calls these** — they replace the markdown templates that used to live in OpenClaw skills.
 - `queries/` — Shared DB query helpers
 - `tools/helpers.ts` — `getAuth`, `checkScope`, `textResult`, `errorResult`, `NOT_AUTHENTICATED`
 
-**How cron works:** OpenClaw schedules a message like "call the `morning_briefing` MCP prompt." Claude then calls the MCP tools to read state and writes the briefing back via `generate_daily_briefing`. The MCP server itself doesn't run cron.
+**How cron works:** OpenClaw has its own scheduler. It fires a task like "do the morning briefing" at 7am, which calls the `morning_briefing` MCP prompt → OpenClaw's LLM reads the returned template + data → generates text → calls `save_daily_briefing` MCP tool to persist → delivers to Telegram. The MCP server itself doesn't run cron, doesn't call an LLM.
 
 ### Data Flow
 
-1. Client components hit API routes (protected by Supabase session)
-2. MCP clients hit `/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`
-3. Both paths write to the same Supabase tables — one data layer, two interfaces
-4. AI-generated content (briefings, reviews, insights) follows last-write-wins — dashboard and MCP can overwrite each other's output
-5. House-model AI features (briefings/insights/journal prompts/weekly reviews) hit OpenRouter via the admin-configured key
+1. **OpenClaw → MCP.** Reads/writes productivity data via `/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`.
+2. **Dashboard → API routes → Drizzle → Postgres.** CRUD for all data types. No AI calls.
+3. **Dashboard reads what OpenClaw saves.** `daily_briefings`, `weekly_reviews`, `insight_cache` are written by OpenClaw via MCP save tools, displayed read-only in dashboard widgets.
+4. **Same DB, two interfaces.** Last-write-wins on shared tables.
 
 ### Key Files
 
-- `src/lib/llm/router.ts` — OpenAI-compatible adapter router (OpenRouter-only in practice)
-- `src/lib/llm/adapters/openai-compatible.ts` — The one LLM adapter
-- `src/lib/dates.ts` — Date utility functions
-- `src/lib/productivity-context.ts` — Data aggregation for AI context
+- `src/lib/db/client.ts` — Drizzle + postgres.js client (lazy-init so build doesn't need DATABASE_URL)
+- `src/lib/db/schema.ts` — All table defs
+- `src/lib/auth.ts` — `getUserId()` reading `SELF_HOSTED_USER_ID`
+- `src/lib/admin.ts` — Admin access helpers (single-user: always true)
+- `src/lib/dates.ts` — Date utilities
 - `src/lib/theme.tsx` — ThemeProvider (light/dark/system)
 - `src/lib/retry.ts` — Retry utility
-- `src/lib/rate-limit.ts` — In-memory sliding window rate limiter (used only for dashboard AI features: briefing, insights, journal prompts, weekly review)
-- `src/lib/encryption.ts` — AES-256-GCM encryption for stored OpenRouter API key
-- `src/lib/admin.ts` — Admin access helpers
-- `src/lib/app-config.ts` — DB-first config with env fallback + 5-min cache
-- `src/lib/ai-models.ts` — Per-task AI model routing
-- `src/lib/token-validation.ts` — MCP bearer-token validation against `MCP_API_KEY` env var
-- `src/lib/oauth-scopes.ts` — Scope expansion (`all` → individual scopes)
-- `src/lib/supabase/client.ts` — Client-side Supabase
-- `src/lib/supabase/server.ts` — Server-side Supabase (reads cookies)
-- `src/types/database.ts` — TypeScript types for Supabase tables
+- `src/lib/token-validation.ts` — MCP bearer-token validation
+- `src/lib/oauth-scopes.ts` — Scope list + `all` expansion
+- `src/types/database.ts` — Legacy TS types still imported by some UI components (harmless; will be regenerated from Drizzle later)
 
 ### Components
 
-- `src/components/layout/Sidebar.tsx` — Collapsible sidebar with nav, theme toggle
-- `src/components/layout/ProtectedLayoutClient.tsx` — Layout wrapper (sidebar state)
+- `src/components/layout/Sidebar.tsx` — Collapsible sidebar with nav + theme toggle (no logout, no admin link)
+- `src/components/layout/ProtectedLayoutClient.tsx` — Layout wrapper
 - `src/components/layout/BottomNav.tsx` — Mobile bottom nav
-- `src/components/auth/AuthForm.tsx` — Login form with remember-email
-- `src/components/settings/` — `Settings`, `AccountTab`, `PreferencesTab`, `DangerZoneTab`
-- `src/components/dashboard/` — `Dashboard` + widgets (`TaskWidget`, `HabitWidget`, `JournalWidget`, `WorkoutWidget`, `FocusWidget`, `GoalWidget`, `DailyBriefing`, `DailyStartCard`, `InsightCards`)
+- `src/components/settings/` — `Settings`, `AccountTab`, `PreferencesTab`, `DangerZoneTab` (with "Wipe All Data")
+- `src/components/dashboard/` — `Dashboard` + widgets (`TaskWidget`, `HabitWidget`, `JournalWidget`, `WorkoutWidget`, `FocusWidget`, `GoalWidget`, `DailyBriefing` (read-only), `DailyStartCard`, `InsightCards` (read-only))
 - `src/components/tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `calendar/`, `review/`, `projects/` — Per-tool UI
 - `src/components/shared/` — Reusable: `DateNavigation`, `StatCard`, `EmptyState`, `SparklineChart`, `FormModal`, `CommandPalette`, `Skeleton`, `Toast`
 - `src/components/ErrorBoundary.tsx` — Error boundary wrapper
@@ -115,72 +100,50 @@ The MCP server is the core artifact. Located at `/api/mcp`, it uses the official
 - Theming via `style={{ color: "var(--text-primary)" }}` — no Tailwind color classes for text
 - Warm accent color (#d4a574 dark / #b8845a light)
 - Collapsible sidebar: 280px full / 60px icon-only on desktop, hidden on mobile (BottomNav instead)
-- PWA with iOS viewport fix (`screen.height` on initial standalone load, `innerHeight` on resize)
+- PWA with iOS viewport fix
 
-### Database Schema (Supabase)
+### Database Schema
 
-Single consolidated schema file: `supabase/schema.sql`. Run the entire file in Supabase SQL Editor to set up.
+Managed by Drizzle. Single source of truth: `src/lib/db/schema.ts`. Migrations in `drizzle/`.
 
-Tables:
-- `profiles` — User profile (single row in practice); no billing columns
-- `spaces` — Areas of life that group tasks/goals/habits (renamed from "projects")
-- `tags` — User-defined tags
+Tables (17 total):
+- `profiles` — single-user profile
+- `spaces` — areas of life that group tasks/goals/habits
+- `tags` — user-defined tags
 - `tasks` — Franklin Covey A/B/C priorities, recurrence, rollover, space/goal linking
-- `habits` + `habit_logs` — Habit tracking with target days, streaks, completion rates
-- `journal_entries` — Daily journal with mood + full-text search
-- `workout_templates` + `workout_exercises` — Reusable workout templates
-- `workout_logs` + `workout_log_exercises` — Logged workouts with sets (JSONB)
+- `habits` + `habit_logs` — habit tracking with target days, streaks
+- `journal_entries` — daily journal with mood + full-text search
+- `workout_templates` + `workout_exercises` + `workout_logs` + `workout_log_exercises`
 - `focus_sessions` — Pomodoro timer sessions linked to tasks
-- `goals` + `goal_progress_logs` — Goals with progress tracking
-- `weekly_reviews` — Weekly review summaries (source: dashboard | mcp)
-- `daily_briefings` — Cached daily briefings (source: dashboard | mcp)
-- `insight_cache` — Cached proactive insights (source: dashboard | mcp)
-- `app_settings` — Admin key/value store (OpenRouter key encrypted here)
-- `app_models` — Admin-managed AI model list
-- `llm_providers` — LLM provider config (OpenRouter seeded)
-
-No migration history — fresh schema per deploy.
+- `goals` + `goal_progress_logs`
+- `weekly_reviews` — weekly review summaries (source: dashboard | mcp)
+- `daily_briefings` — daily briefings saved by OpenClaw (source: dashboard | mcp)
+- `insight_cache` — cached insights saved by OpenClaw (source: dashboard | mcp)
 
 ## Environment Variables
 
-Required in `.env.local`:
-- `NEXT_PUBLIC_SUPABASE_URL` — Supabase URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
-- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (used by MCP for DB access)
-- `MCP_API_KEY` — Bearer token the MCP client must send (generate a long random string)
-- `SELF_HOSTED_USER_ID` — The one user's Supabase `auth.users.id` (UUID)
-- `ENCRYPTION_KEY` — AES-256 key for encrypting OpenRouter key in `app_settings`
+Required (in `.env` for Docker compose, `.env.local` for local `npm run dev`):
+
+- `DATABASE_URL` — Postgres connection string
+- `SELF_HOSTED_USER_ID` — UUID for the one user; must exist as a row in `profiles`
+- `MCP_API_KEY` — Bearer token OpenClaw sends on every `/api/mcp` request
 
 Optional:
-- `NEXT_PUBLIC_SITE_NAME` — App name (default: `Daily Agent`)
-- `NEXT_PUBLIC_SITE_DESCRIPTION` — Meta description
+- `NEXT_PUBLIC_SITE_NAME`, `NEXT_PUBLIC_SITE_DESCRIPTION`
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — only used by the Postgres compose service
 
-OpenRouter API key is set from the admin panel (`/admin`) and stored encrypted in `app_settings` — not an env var.
+## Deployment
 
-## Current state (2026-04-19)
-
-- ✅ Phase 1 — Codebase cleanup (chat/image/search stripped)
-- ✅ Phase 2 — Fresh DB schema
-- ✅ Phase 3 — Multi-tenant auth → **ripped for self-hosted pivot**
-- ✅ Phase 4 — API key CRUD → **ripped, swapped for env var**
-- ✅ Phase 5 — Ory Hydra OAuth → **ripped entirely**
-- ✅ Phase 6 — MCP server (15 resources, 31 tools, 13 prompts) — **keep**
-- ✅ Self-hosted rip — 50 files changed, 4065 lines deleted (commit `34ab232`)
-
-**Next up:**
-1. Swap Supabase for self-hosted Postgres container
-2. `docker-compose.yml` for VPS deploy
-3. Reverse proxy / Tailscale access for dashboard
-4. OpenClaw MCP connection snippet
+See `docs/DEPLOY.md` for the full VPS walkthrough: Docker + compose + Tailscale + OpenClaw connection config. One-time bootstrap, then `git pull && docker compose up -d --build app` for updates.
 
 ## Tech Stack
 
 - Next.js 16 (App Router, Turbopack)
 - React 19 + TypeScript 5
 - Tailwind CSS 4
-- Supabase (auth + Postgres — temporary, being swapped for local Postgres)
-- OpenAI SDK (OpenRouter-compatible)
+- Drizzle ORM + `postgres` (postgres.js) on self-hosted Postgres 16
 - `@modelcontextprotocol/sdk` (official MCP TypeScript SDK)
 - Lucide React (icons)
 - Vitest + React Testing Library
 - PWA (manifest + service worker)
+- Docker + docker-compose for deploy
