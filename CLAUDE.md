@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Personal AI chatbot built with Next.js 16 and a multi-provider LLM layer (Anthropic, Google, OpenAI-compatible via OpenRouter). Features multi-model chat with agent/chat mode toggle, tool calling, image generation, web search with AI summarization, per-message usage/cost tracking, monthly budget enforcement, rate limiting, admin panel, collapsible sidebar, and Supabase for authentication and data persistence. Installable as a PWA with light/dark/system theme support.
+Self-hosted, single-user MCP server + productivity dashboard. Runs in Docker on a VPS alongside OpenClaw. The MCP server exposes tasks, habits, journal, workouts, focus, goals, and weekly reviews to Claude so it can read and write your productivity data directly. The dashboard is a visual UI over the same data.
+
+**Not a SaaS.** No multi-tenant, no signup, no billing, no OAuth. One user (you), one API key from `.env`, one deployment. Open-source because why not.
+
+**Status:** Mid-pivot from SaaS. See "Current state" below — multi-tenant/billing/OAuth infra is fully ripped out (commit `34ab232` on `pivot-self-hosted-rip`). Next work: swap Supabase for local Postgres, wire Docker Compose for VPS deploy.
 
 ## Commands
 
@@ -13,212 +17,170 @@ npm run dev      # Start development server (Turbopack)
 npm run build    # Build for production
 npm start        # Start production server
 npm run lint     # Run ESLint
+npm test         # Run all tests once (Vitest)
+npm run test:watch     # Watch mode
+npm run test:coverage  # Coverage report
 ```
 
-Tests use Vitest + React Testing Library:
-
-```bash
-npm test             # Run all tests once
-npm run test:watch   # Watch mode
-npm run test:coverage # Coverage report
-```
-
-Test files live alongside source in `__tests__/` directories (e.g., `src/lib/__tests__/cost.test.ts`). The Supabase mock factory is at `src/test/mocks/supabase.ts`.
+Test files live alongside source in `__tests__/` directories.
 
 ## Architecture
 
 ### Route Structure (Next.js App Router)
 
-- `src/app/(auth)/` - Public auth routes (login, signup) - redirect to /chat if authenticated
-- `src/app/(protected)/` - Protected routes (chat, image, settings, calendar, history) - redirect to /login if unauthenticated
-- `src/app/api/` - API endpoints:
-  - `chat/` - Chat streaming via multi-provider LLM router
-  - `chat/tool-execute/` - Agent tool execution endpoint
-  - `conversations/` - Conversations CRUD + per-conversation messages
-  - `conversations/[id]/tags/` - Conversation tag management
-  - `conversations/bulk-delete/` - Bulk conversation delete
-  - `image/` - Image generation via LLM router
-  - `models/` - Model list (public) + admin CRUD + `/raw` endpoint
-  - `profile/` - User profile and settings (system prompt, search config)
-  - `search/` - Conversation search
-  - `messages/` - Full-text message search
-  - `messages/save/` - Partial message save (streaming cancel)
-  - `usage/` - Cumulative usage/cost tracking
-  - `usage/stats/` - Usage statistics + budget tracking
-  - `web-search/` - Tavily web search
-  - `auth/` - Auth callback
-  - `auth/signup/` - Signup with secret code
-  - `tasks/` - Task CRUD + rollover + reorder (Franklin Covey priorities)
-  - `tasks/rollover/check/` - Rollover availability check
-  - `habits/` - Habit CRUD + log toggle + streaks/stats
-  - `journal/` - Journal entry CRUD + full-text search + AI prompts
-  - `workouts/` - Workout templates + logs + exercises + stats
-  - `focus/` - Pomodoro focus sessions + stats
-  - `goals/` - Goals CRUD + progress tracking + linked tasks/habits
-  - `dashboard/` - Aggregated daily snapshot across all tools
-  - `weekly-review/` - Weekly review CRUD + AI generation
-  - `calendar/` - Calendar day detail + monthly aggregation
-  - `images/` - Image storage/retrieval
-  - `projects/` - Project CRUD
-  - `tags/` - Tag management
-  - `briefing/` - AI daily briefing generation
-  - `insights/` - AI proactive insights analysis
-  - `ai-assist/` - In-tool AI suggestions
-  - `admin/limits/` - Usage limits CRUD
-  - `admin/providers/` - LLM provider management
-  - `admin/settings/` - App settings (API keys, encryption)
-  - `admin/settings/test/` - Provider connection testing
-  - `admin/usage/` - Admin usage overview
-- `src/middleware.ts` - Auth middleware that controls route protection
+- `src/app/(auth)/login/` — Login page (single-user, no signup)
+- `src/app/(protected)/` — Dashboard and productivity tools: `dashboard`, `tasks`, `habits`, `journal`, `workouts`, `focus`, `goals`, `calendar`, `review`, `projects`, `settings`, `admin`
+- `src/app/api/` — API endpoints:
+  - `mcp/` — **MCP server endpoint** (Streamable HTTP, stateless, Bearer auth)
+  - `tasks/` — Task CRUD + rollover + reorder (Franklin Covey A/B/C priorities)
+  - `habits/` — Habit CRUD + log toggle + streaks/stats
+  - `journal/` — Journal entry CRUD + full-text search + AI prompts
+  - `workouts/` — Workout templates + logs + exercises + stats
+  - `focus/` — Pomodoro focus sessions + stats
+  - `goals/` — Goals CRUD + progress tracking
+  - `dashboard/` — Aggregated daily snapshot
+  - `weekly-review/` — Weekly review CRUD + AI generation
+  - `calendar/` — Calendar day detail + monthly aggregation
+  - `projects/` — "Spaces" (areas of life that group tasks/goals/habits)
+  - `tags/` — Tag management
+  - `briefing/` — AI daily briefing generation
+  - `insights/` — AI proactive insights analysis
+  - `profile/` — User profile
+  - `auth/callback/` — Supabase auth callback
+  - `admin/providers/` — LLM provider management (OpenRouter config)
+  - `admin/settings/` — App settings (OpenRouter key, encrypted)
+- `src/middleware.ts` — Auth middleware (Supabase session check on protected routes)
+
+### MCP Server
+
+The MCP server is the core artifact. Located at `/api/mcp`, it uses the official `@modelcontextprotocol/sdk` with Streamable HTTP transport. Stateless — each request is auth'd independently.
+
+**Auth:** Bearer token must exactly match `MCP_API_KEY` env var. User ID is `SELF_HOSTED_USER_ID` env var. All requests get full scopes (`all` → expanded via `src/lib/oauth-scopes.ts`). No OAuth, no DB-backed keys, no plan gating, no per-user rate limits.
+
+**Layout** (`src/lib/mcp/`):
+- `server.ts` — MCP server factory; registers tools, resources, prompts
+- `auth.ts` — Request authentication
+- `types.ts` — Shared types (`McpContext`, `QueryResult`)
+- `supabase.ts` — Service-role Supabase client for MCP handlers
+- `tools/` — Write and read tools (tasks, habits, journal, workouts, focus, goals, spaces, reviews)
+- `resources/` — Read-only resource URIs (`dailyagent://...`)
+- `prompts/` — Pre-built prompt templates (daily planning, weekly review, habit analysis, etc.)
+- `queries/` — Shared DB query helpers
+- `tools/helpers.ts` — `getAuth`, `checkScope`, `textResult`, `errorResult`, `NOT_AUTHENTICATED`
+
+**How cron works:** OpenClaw schedules a message like "call the `morning_briefing` MCP prompt." Claude then calls the MCP tools to read state and writes the briefing back via `generate_daily_briefing`. The MCP server itself doesn't run cron.
 
 ### Data Flow
 
-1. Client components send requests to API routes
-2. API routes verify auth via Supabase server client
-3. Chat requests stream through the LLM router (`src/lib/llm/router.ts`), which resolves the model to a provider and dispatches to the appropriate adapter (Anthropic, Google, or OpenAI-compatible)
-4. Messages and conversations persist to Supabase with token counts and cost
-5. Web search (Tavily) results are optionally summarized by a configurable search model before injection into the system prompt
-6. AI-generated conversation titles via a fast model (TITLE_MODEL) after first response
-7. Usage metadata is sent inline via `[[USAGE:...]]` pattern at end of stream, parsed client-side
-8. Rate limiter enforces per-user, per-category request limits (chat, image, search, AI assist); admins bypass limits
-9. Monthly budget and daily conversation limits are enforced server-side via `src/lib/usage-limits.ts`
+1. Client components hit API routes (protected by Supabase session)
+2. MCP clients hit `/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`
+3. Both paths write to the same Supabase tables — one data layer, two interfaces
+4. AI-generated content (briefings, reviews, insights) follows last-write-wins — dashboard and MCP can overwrite each other's output
+5. House-model AI features (briefings/insights/journal prompts/weekly reviews) hit OpenRouter via the admin-configured key
 
 ### Key Files
 
-- `src/lib/models.ts` - Model type definition and title model config. Models come from `app_models` DB table, not hardcoded.
-- `src/lib/useModels.ts` - Client-side hook to fetch models from `/api/models` with in-memory caching
-- `src/lib/llm/router.ts` - Multi-provider LLM router (resolves model to provider, dispatches to adapter)
-- `src/lib/llm/types.ts` - Shared LLM types
-- `src/lib/llm/adapters/anthropic.ts` - Native Anthropic SDK adapter
-- `src/lib/llm/adapters/google.ts` - Native Google Generative AI adapter
-- `src/lib/llm/adapters/openai-compatible.ts` - OpenAI-compatible adapter (OpenRouter, OpenAI, xAI)
-- `src/lib/tools/definitions.ts` - Agent tool definitions (13 tools)
-- `src/lib/tools/executor.ts` - Server-side tool execution engine
-- `src/lib/enhanced-search.ts` - AI-summarized web search using configurable search model
-- `src/lib/cost.ts` - Per-message cost calculation from token counts and model pricing
-- `src/lib/system-prompt.ts` - Default system prompt (always applied unless user sets custom prompt)
-- `src/lib/dates.ts` - Date utility functions
-- `src/lib/productivity-context.ts` - Context injection data aggregation for AI
-- `src/lib/theme.tsx` - ThemeProvider for light/dark/system theme
-- `src/lib/tavily.ts` - Tavily web search client
-- `src/lib/retry.ts` - Retry utility
-- `src/lib/rate-limit.ts` - In-memory sliding window rate limiter (per user per category)
-- `src/lib/usage-limits.ts` - Monthly budget + daily conversation limit enforcement
-- `src/lib/encryption.ts` - AES-256-GCM encryption for stored API keys
-- `src/lib/admin.ts` - Admin access helpers
-- `src/lib/app-config.ts` - DB-first configuration with env var fallback + 5-min cache
-- `src/lib/ai-models.ts` - Per-task model routing (briefing, insights, assist, tools)
-- `src/lib/export.ts` - Markdown/JSON conversation export
-- `src/lib/model-context.tsx` - React context for active model
-- `src/lib/command-palette-context.tsx` - Command palette context
-- `src/lib/focus-timer-context.tsx` - Persistent focus timer state context
-- `src/lib/toast-context.tsx` - Toast notification context
-- `src/lib/supabase/client.ts` - Client-side Supabase instance
-- `src/lib/supabase/server.ts` - Server-side Supabase instance (uses cookies)
-- `src/types/database.ts` - TypeScript types for all Supabase tables
+- `src/lib/llm/router.ts` — OpenAI-compatible adapter router (OpenRouter-only in practice)
+- `src/lib/llm/adapters/openai-compatible.ts` — The one LLM adapter
+- `src/lib/dates.ts` — Date utility functions
+- `src/lib/productivity-context.ts` — Data aggregation for AI context
+- `src/lib/theme.tsx` — ThemeProvider (light/dark/system)
+- `src/lib/retry.ts` — Retry utility
+- `src/lib/rate-limit.ts` — In-memory sliding window rate limiter (used only for dashboard AI features: briefing, insights, journal prompts, weekly review)
+- `src/lib/encryption.ts` — AES-256-GCM encryption for stored OpenRouter API key
+- `src/lib/admin.ts` — Admin access helpers
+- `src/lib/app-config.ts` — DB-first config with env fallback + 5-min cache
+- `src/lib/ai-models.ts` — Per-task AI model routing
+- `src/lib/token-validation.ts` — MCP bearer-token validation against `MCP_API_KEY` env var
+- `src/lib/oauth-scopes.ts` — Scope expansion (`all` → individual scopes)
+- `src/lib/supabase/client.ts` — Client-side Supabase
+- `src/lib/supabase/server.ts` — Server-side Supabase (reads cookies)
+- `src/types/database.ts` — TypeScript types for Supabase tables
 
 ### Components
 
-- `src/components/Chat.tsx` - Main chat interface with streaming, sources, and usage display
-- `src/components/Message.tsx` - Message rendering with react-markdown, syntax highlighting, citation linkification, sources toggle, and markdown normalization (fixes broken numbered lists)
-- `src/components/ModelSelector.tsx` - Model selection popover
-- `src/components/ImageGenerator.tsx` - Image generation interface
-- `src/components/UsageBalance.tsx` - Sidebar cumulative usage display (fetches /api/usage)
-- `src/components/UsageDisplay.tsx` - Per-message token/cost display
-- `src/components/ToolCallCard.tsx` - Agent tool call approval UI
-- `src/components/ComposerMenu.tsx` - Chat input menu (file attach, web search toggle)
-- `src/components/ConversationSettings.tsx` - Per-conversation system prompt editor
-- `src/components/ErrorBoundary.tsx` - Error boundary wrapper
-- `src/components/FileUpload.tsx` - File/image attachment for chat
-- `src/components/ProjectPicker.tsx` - Project selection for conversations
-- `src/components/TagPicker.tsx` - Tag management for conversations
-- `src/components/layout/Sidebar.tsx` - Collapsible sidebar with conversation list, search, date grouping, nav links, collapsible Tools group, and theme toggle
-- `src/components/layout/ProtectedLayoutClient.tsx` - Layout wrapper managing sidebar state (open/close, collapsed/expanded)
-- `src/components/layout/BottomNav.tsx` - Mobile bottom navigation bar
-- `src/components/calendar/` - CalendarView, CalendarGrid, CalendarDayCell, DayDetailPanel
-- `src/components/history/` - ChatHistory with search, bulk delete, infinite scroll
-- `src/components/auth/AuthForm.tsx` - Login/signup form with remember email feature
-- `src/components/shared/` - Reusable components: DateNavigation, StatCard, EmptyState, SparklineChart, FormModal, CommandPalette, Skeleton, Toast
-- `src/components/tasks/` - TaskList, TaskItem, TaskFormModal, TaskRolloverBanner
-- `src/components/habits/` - HabitTracker, HabitRow, HabitFormModal
-- `src/components/journal/` - JournalView, JournalEditor, JournalEntryCard
-- `src/components/workouts/` - WorkoutDashboard, WorkoutLogger, WorkoutLogCard, TemplateFormModal, ExerciseSetInput
-- `src/components/focus/` - FocusTimer, TimerDisplay, FocusStats, FocusTimerBadge
-- `src/components/goals/` - GoalList, GoalItem, GoalDetail, GoalFormModal, GoalPicker
-- `src/components/dashboard/` - Dashboard + TaskWidget, HabitWidget, JournalWidget, WorkoutWidget, FocusWidget, GoalWidget, DailyBriefing, DailyStartCard, InsightCards
-- `src/components/projects/` - ProjectDashboard, ProjectFormModal, ProjectsList, ProjectFileUpload
-- `src/components/search/` - SearchModal, SearchResult (full-text conversation search)
-- `src/components/usage/` - UsageDashboard, BudgetAlert, BudgetSettings, ModelBreakdown, SpendingChart, TokenChart
-- `src/components/review/` - WeeklyReview
+- `src/components/layout/Sidebar.tsx` — Collapsible sidebar with nav, theme toggle
+- `src/components/layout/ProtectedLayoutClient.tsx` — Layout wrapper (sidebar state)
+- `src/components/layout/BottomNav.tsx` — Mobile bottom nav
+- `src/components/auth/AuthForm.tsx` — Login form with remember-email
+- `src/components/settings/` — `Settings`, `AccountTab`, `PreferencesTab`, `DangerZoneTab`
+- `src/components/dashboard/` — `Dashboard` + widgets (`TaskWidget`, `HabitWidget`, `JournalWidget`, `WorkoutWidget`, `FocusWidget`, `GoalWidget`, `DailyBriefing`, `DailyStartCard`, `InsightCards`)
+- `src/components/tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `calendar/`, `review/`, `projects/` — Per-tool UI
+- `src/components/shared/` — Reusable: `DateNavigation`, `StatCard`, `EmptyState`, `SparklineChart`, `FormModal`, `CommandPalette`, `Skeleton`, `Toast`
+- `src/components/ErrorBoundary.tsx` — Error boundary wrapper
 
 ### UI Design
 
-- CSS variables defined in `globals.css` for light/dark themes
-- All components use `style={{ color: "var(--text-primary)" }}` pattern for theming
-- Claude-inspired design: warm accent color (#d4a574 dark / #b8845a light), no avatars, pill-shaped inputs
-- Auto-create conversation on first message from `/chat`
-- Suggested prompt chips on empty state
-- Collapsible sidebar: full width (280px) or icon-only (60px) on desktop, hidden on mobile (uses BottomNav instead)
-- Mobile: bottom navigation bar with safe area insets for PWA
-- iOS PWA viewport fix: uses `screen.height` on initial standalone load, `innerHeight` on resize
+- CSS variables in `globals.css` for light/dark themes
+- Theming via `style={{ color: "var(--text-primary)" }}` — no Tailwind color classes for text
+- Warm accent color (#d4a574 dark / #b8845a light)
+- Collapsible sidebar: 280px full / 60px icon-only on desktop, hidden on mobile (BottomNav instead)
+- PWA with iOS viewport fix (`screen.height` on initial standalone load, `innerHeight` on resize)
 
 ### Database Schema (Supabase)
 
-- `profiles` - User profiles with system_prompt, search_model, search_results_basic/advanced, ai_model_config settings
-- `conversations` - Chat conversations with model selection
-- `messages` - Individual messages with role, token counts (prompt_tokens, completion_tokens), total_cost, and sources
-- `generated_images` - Stored image generation results
-- `app_models` - Admin-managed model definitions (model_id, name, provider, type, pricing, is_default, sort_order)
-- `projects` - Projects with system prompts and status
-- `tags` + `conversation_tags` - Tag system for conversations
-- `tasks` - Task manager with Franklin Covey A/B/C priorities, recurrence, rollover, project linking
-- `habits` + `habit_logs` - Habit tracking with target days, streaks, completion rates
-- `journal_entries` - Daily journal with mood tracking and full-text search
-- `workout_templates` + `workout_exercises` - Reusable workout templates with exercises
-- `workout_logs` + `workout_log_exercises` - Logged workouts with sets (JSONB)
-- `focus_sessions` - Pomodoro timer sessions linked to tasks
-- `goals` - Goals with progress tracking, target dates, linked tasks and habits
-- `weekly_reviews` - AI-generated weekly review summaries
-- `daily_briefings` - Cached AI daily briefings
-- `insight_cache` - Cached AI proactive insights
-- `ai_model_config` - Per-task AI model configuration
-- `ai_feature_toggles` - Feature toggle settings per user
-- `usage_limits` - Admin-configured per-user usage limits
+Single consolidated schema file: `supabase/schema.sql`. Run the entire file in Supabase SQL Editor to set up.
 
-### Migrations
+Tables:
+- `profiles` — User profile (single row in practice); no billing columns
+- `spaces` — Areas of life that group tasks/goals/habits (renamed from "projects")
+- `tags` — User-defined tags
+- `tasks` — Franklin Covey A/B/C priorities, recurrence, rollover, space/goal linking
+- `habits` + `habit_logs` — Habit tracking with target days, streaks, completion rates
+- `journal_entries` — Daily journal with mood + full-text search
+- `workout_templates` + `workout_exercises` — Reusable workout templates
+- `workout_logs` + `workout_log_exercises` — Logged workouts with sets (JSONB)
+- `focus_sessions` — Pomodoro timer sessions linked to tasks
+- `goals` + `goal_progress_logs` — Goals with progress tracking
+- `weekly_reviews` — Weekly review summaries (source: dashboard | mcp)
+- `daily_briefings` — Cached daily briefings (source: dashboard | mcp)
+- `insight_cache` — Cached proactive insights (source: dashboard | mcp)
+- `app_settings` — Admin key/value store (OpenRouter key encrypted here)
+- `app_models` — Admin-managed AI model list
+- `llm_providers` — LLM provider config (OpenRouter seeded)
 
-Single consolidated schema file: `supabase/migrations/schema.sql`
-- Run the entire file in Supabase SQL Editor to set up the database
-- Contains all tables, indexes, RLS policies, triggers, and storage buckets
+No migration history — fresh schema per deploy.
 
 ## Environment Variables
 
 Required in `.env.local`:
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `SIGNUP_SECRET` - Secret code for account creation
-
-Provider API keys (Anthropic, Google, OpenAI, OpenRouter) are configured from the Admin panel and stored encrypted in the database — not in environment variables.
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (used by MCP for DB access)
+- `MCP_API_KEY` — Bearer token the MCP client must send (generate a long random string)
+- `SELF_HOSTED_USER_ID` — The one user's Supabase `auth.users.id` (UUID)
+- `ENCRYPTION_KEY` — AES-256 key for encrypting OpenRouter key in `app_settings`
 
 Optional:
-- `DEFAULT_CHAT_MODEL` - Default chat model ID (default: `anthropic/claude-sonnet-4.5`)
-- `DEFAULT_IMAGE_MODEL` - Default image model ID (default: `google/gemini-2.5-flash-image`)
-- `TITLE_MODEL` - Model for generating conversation titles (default: `google/gemini-3-flash-preview`)
-- `TAVILY_API_KEY` - Tavily API key for web search
-- `ENCRYPTION_KEY` - Required for the admin settings feature (encrypts provider API keys stored in DB)
-- `NEXT_PUBLIC_SITE_NAME` - App name shown in UI and meta tags (default: `Daily Agent`)
-- `NEXT_PUBLIC_SITE_DESCRIPTION` - Meta description (default: `Your AI productivity agent`)
+- `NEXT_PUBLIC_SITE_NAME` — App name (default: `Daily Agent`)
+- `NEXT_PUBLIC_SITE_DESCRIPTION` — Meta description
+
+OpenRouter API key is set from the admin panel (`/admin`) and stored encrypted in `app_settings` — not an env var.
+
+## Current state (2026-04-19)
+
+- ✅ Phase 1 — Codebase cleanup (chat/image/search stripped)
+- ✅ Phase 2 — Fresh DB schema
+- ✅ Phase 3 — Multi-tenant auth → **ripped for self-hosted pivot**
+- ✅ Phase 4 — API key CRUD → **ripped, swapped for env var**
+- ✅ Phase 5 — Ory Hydra OAuth → **ripped entirely**
+- ✅ Phase 6 — MCP server (15 resources, 31 tools, 13 prompts) — **keep**
+- ✅ Self-hosted rip — 50 files changed, 4065 lines deleted (commit `34ab232`)
+
+**Next up:**
+1. Swap Supabase for self-hosted Postgres container
+2. `docker-compose.yml` for VPS deploy
+3. Reverse proxy / Tailscale access for dashboard
+4. OpenClaw MCP connection snippet
 
 ## Tech Stack
 
-- Next.js 16 with App Router (Turbopack)
-- React 19
-- TypeScript 5
+- Next.js 16 (App Router, Turbopack)
+- React 19 + TypeScript 5
 - Tailwind CSS 4
-- Supabase (auth + PostgreSQL)
-- Multi-provider LLM (Anthropic SDK, Google Generative AI, OpenAI-compatible)
-- Tavily (web search)
+- Supabase (auth + Postgres — temporary, being swapped for local Postgres)
+- OpenAI SDK (OpenRouter-compatible)
+- `@modelcontextprotocol/sdk` (official MCP TypeScript SDK)
 - Lucide React (icons)
-- react-markdown + rehype-highlight + remark-gfm
-- Vitest + React Testing Library (testing)
+- Vitest + React Testing Library
 - PWA (manifest + service worker)
