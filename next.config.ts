@@ -1,12 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  rewrites: async () => [
-    {
-      source: "/.well-known/oauth-protected-resource",
-      destination: "/api/oauth/well-known",
-    },
-  ],
+  output: "standalone",
   headers: async () => [
     {
       source: "/sw.js",

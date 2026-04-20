@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyagent}
       POSTGRES_DB: ${POSTGRES_DB:-dailyagent}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - dailyagent_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +16,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dailyagent-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dailyagent}:${POSTGRES_PASSWORD:-dailyagent}@postgres:5432/${POSTGRES_DB:-dailyagent}
+      SELF_HOSTED_USER_ID: ${SELF_HOSTED_USER_ID}
+      MCP_API_KEY: ${MCP_API_KEY}
+      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Daily Agent}
+      NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
+      NODE_ENV: production
+    ports:
+      # Bind to loopback only — Tailscale / reverse proxy handles external access
+      - "127.0.0.1:3000:3000"
 
 volumes:
   dailyagent_pgdata:
