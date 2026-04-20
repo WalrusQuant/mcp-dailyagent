@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daily Agent">
+  <title>Daily Agent</title>
+  <g fill="none" stroke="#d4a574" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Agent (top-left rectangle) -->
+    <rect x="26" y="36" width="72" height="56" rx="10"/>
+    <!-- Browser (bottom-left rectangle) -->
+    <rect x="26" y="164" width="72" height="56" rx="10"/>
+    <!-- Flow lines into the cylinder -->
+    <path d="M 98 64 Q 140 64 155 100" stroke-width="11"/>
+    <path d="M 98 192 Q 140 192 155 156" stroke-width="11"/>
+    <!-- Database cylinder -->
+    <ellipse cx="195" cy="96" rx="42" ry="16"/>
+    <path d="M 153 96 L 153 160 A 42 16 0 0 0 237 160 L 237 96"/>
+    <!-- Cylinder mid-band -->
+    <path d="M 153 128 A 42 16 0 0 0 237 128" stroke-width="10" opacity="0.55"/>
+  </g>
+</svg>
