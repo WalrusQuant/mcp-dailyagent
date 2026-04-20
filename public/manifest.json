@@ -1,7 +1,7 @@
 {
-  "name": "Daily Agent",
+  "name": "Daily Agent MCP",
   "short_name": "Daily Agent",
-  "description": "Your AI productivity agent",
+  "description": "Self-hosted productivity data layer",
   "id": "/dashboard",
   "start_url": "/dashboard",
   "scope": "/",

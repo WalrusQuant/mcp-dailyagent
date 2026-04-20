@@ -13,7 +13,7 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Daily Agent";
+const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Daily Agent MCP";
 const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "Your productivity dashboard";
 
 export const metadata: Metadata = {
