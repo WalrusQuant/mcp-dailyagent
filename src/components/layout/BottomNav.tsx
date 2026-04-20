@@ -25,7 +25,7 @@ const TABS = [
 ];
 
 const MORE_ITEMS = [
-  { href: "/projects", icon: FolderKanban, label: "Projects" },
+  { href: "/spaces", icon: FolderKanban, label: "Spaces" },
   { href: "/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/habits", icon: Target, label: "Habits" },
   { href: "/journal", icon: BookOpen, label: "Journal" },

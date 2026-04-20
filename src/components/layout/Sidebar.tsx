@@ -64,7 +64,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
   const toolLinks = [
     { href: "/calendar", icon: CalendarDays, label: "Calendar", match: "/calendar" },
-    { href: "/projects", icon: FolderKanban, label: "Projects", match: "/projects" },
+    { href: "/spaces", icon: FolderKanban, label: "Spaces", match: "/spaces" },
     { href: "/tasks", icon: CheckSquare, label: "Tasks", match: "/tasks" },
     { href: "/habits", icon: Target, label: "Habits", match: "/habits" },
     { href: "/workouts", icon: Dumbbell, label: "Workouts", match: "/workouts" },

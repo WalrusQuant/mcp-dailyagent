@@ -101,12 +101,12 @@ export function CommandPalette() {
         handler: () => navigate("/dashboard"),
       },
       {
-        id: "nav-projects",
-        label: "Projects",
+        id: "nav-spaces",
+        label: "Spaces",
         category: "Navigation",
         icon: <FolderKanban className={ICON_SIZE} />,
-        keywords: ["folder", "organize"],
-        handler: () => navigate("/projects"),
+        keywords: ["folder", "organize", "project"],
+        handler: () => navigate("/spaces"),
       },
       {
         id: "nav-tasks",
