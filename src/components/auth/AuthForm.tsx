@@ -7,11 +7,7 @@ import { Loader2 } from "lucide-react";
 
 const REMEMBERED_EMAIL_KEY = "remembered-email";
 
-interface AuthFormProps {
-  mode: "login" | "signup";
-}
-
-export function AuthForm({ mode }: AuthFormProps) {
+export function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(false);
@@ -56,42 +52,18 @@ export function AuthForm({ mode }: AuthFormProps) {
     setIsLoading(true);
 
     try {
-      if (mode === "signup") {
-        const response = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Signup failed");
-        }
-
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (signInError) throw signInError;
-
-        router.push("/dashboard");
-        router.refresh();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      if (rememberEmail) {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        if (rememberEmail) {
-          localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
-        } else {
-          localStorage.removeItem(REMEMBERED_EMAIL_KEY);
-        }
-        router.push("/dashboard");
-        router.refresh();
+        localStorage.removeItem(REMEMBERED_EMAIL_KEY);
       }
+      router.push("/dashboard");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -165,38 +137,36 @@ export function AuthForm({ mode }: AuthFormProps) {
           onBlur={(e) => (e.target.style.borderColor = "var(--border-default)")}
           placeholder="••••••••"
         />
-        {mode === "login" && (
-          <div className="flex items-center justify-between mt-1">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={rememberEmail}
-                onChange={(e) => {
-                  setRememberEmail(e.target.checked);
-                  if (!e.target.checked) {
-                    localStorage.removeItem(REMEMBERED_EMAIL_KEY);
-                  }
-                }}
-                className="rounded"
-                style={{ accentColor: "var(--accent-primary)" }}
-              />
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Remember email
-              </span>
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowForgotPassword(true)}
-              className="text-xs transition-opacity hover:opacity-80"
-              style={{ color: "var(--accent-primary)" }}
-            >
-              Forgot password?
-            </button>
-          </div>
-        )}
+        <div className="flex items-center justify-between mt-1">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={(e) => {
+                setRememberEmail(e.target.checked);
+                if (!e.target.checked) {
+                  localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+                }
+              }}
+              className="rounded"
+              style={{ accentColor: "var(--accent-primary)" }}
+            />
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Remember email
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(true)}
+            className="text-xs transition-opacity hover:opacity-80"
+            style={{ color: "var(--accent-primary)" }}
+          >
+            Forgot password?
+          </button>
+        </div>
       </div>
 
-      {showForgotPassword && mode === "login" && (
+      {showForgotPassword && (
         <div
           className="rounded-lg p-3"
           style={{
@@ -249,10 +219,8 @@ export function AuthForm({ mode }: AuthFormProps) {
         {isLoading ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
-            {mode === "signup" ? "Creating account..." : "Signing in..."}
+            Signing in...
           </>
-        ) : mode === "signup" ? (
-          "Create account"
         ) : (
           "Sign in"
         )}

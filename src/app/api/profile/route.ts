@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("display_name, avatar_url, timezone, plan, ai_model_config, tool_calling_enabled, briefing_enabled")
+    .select("display_name, avatar_url, timezone, ai_model_config, tool_calling_enabled, briefing_enabled")
     .eq("id", user.id)
     .single();
 
@@ -25,7 +25,6 @@ export async function GET() {
     displayName: profile?.display_name ?? null,
     avatarUrl: profile?.avatar_url ?? null,
     timezone: profile?.timezone ?? "UTC",
-    plan: profile?.plan ?? "free",
     toolCallingEnabled: profile?.tool_calling_enabled ?? true,
     briefingEnabled: profile?.briefing_enabled ?? true,
     aiModelConfig: profile?.ai_model_config ?? null,

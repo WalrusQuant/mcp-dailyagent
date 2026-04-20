@@ -6,10 +6,7 @@ export interface McpContext {
   userId: string;
   supabase: SupabaseClient;
   auth: AuthResult;
-  plan: UserPlan;
 }
-
-export type UserPlan = "free" | "active" | "canceled" | "expired";
 
 /** Standard query result shape */
 export interface QueryResult<T> {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getServiceClient } from "@/lib/mcp/supabase";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, PAID_PLAN_REQUIRED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -176,8 +176,6 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await createTask(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -204,8 +202,6 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await updateTask(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -227,8 +223,6 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await completeTask(auth.userId, args.task_id);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -249,8 +243,6 @@ export function registerTaskTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
-
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
 
       const result = await deleteTask(auth.userId, args.task_id);
       if (result.error) return errorResult(`Error: ${result.error}`);

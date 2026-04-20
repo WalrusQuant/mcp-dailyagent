@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   Shield, Eye, EyeOff, Loader2, Check, X, Trash2, Plus, Save,
 } from "lucide-react";
-import Link from "next/link";
 
 interface AppModel {
   id: string;
@@ -187,16 +186,6 @@ export default function AdminPage() {
           <Shield className="w-5 h-5" style={{ color: "var(--accent-primary)" }} />
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Admin</h1>
         </div>
-
-        {/* Usage & Limits */}
-        <Link
-          href="/admin/usage"
-          className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", color: "var(--accent-primary)" }}
-        >
-          <Shield className="w-4 h-4" />
-          Usage & Limits — View user stats and manage rate limits
-        </Link>
 
         {/* OpenRouter API Key */}
         <section

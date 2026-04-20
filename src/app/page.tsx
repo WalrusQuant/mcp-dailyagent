@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
 import { AuthForm } from "@/components/auth/AuthForm";
 import { MessageSquare } from "lucide-react";
 
@@ -34,18 +33,11 @@ export default async function Home() {
           <div className="flex items-center justify-center gap-2 mb-6">
             <MessageSquare className="w-6 h-6" style={{ color: "var(--accent-primary)" }} />
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              Chat
+              Daily Agent
             </h1>
           </div>
 
-          <AuthForm mode="login" />
-
-          <p className="text-center text-sm mt-6" style={{ color: "var(--text-muted)" }}>
-            Need an account?{" "}
-            <Link href="/signup" className="hover:underline" style={{ color: "var(--accent-primary)" }}>
-              Sign up
-            </Link>
-          </p>
+          <AuthForm />
         </div>
       </div>
     </div>
