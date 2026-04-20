@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getSpaces } from "@/lib/mcp/queries/spaces";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -20,7 +19,7 @@ export function registerSpaceResources(server: McpServer) {
         };
       }
 
-      const result = await getSpaces(db, auth.userId);
+      const result = await getSpaces(auth.userId);
 
       return {
         contents: [

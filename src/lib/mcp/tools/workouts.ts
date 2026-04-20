@@ -236,7 +236,7 @@ export function registerWorkoutTools(server: McpServer) {
       if (scopeError) return errorResult(scopeError);
 
       const result = await logWorkout(auth.userId, args);
-      if (result.error && !result.data) return errorResult(`Error: ${result.error}`);
+      if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
     }

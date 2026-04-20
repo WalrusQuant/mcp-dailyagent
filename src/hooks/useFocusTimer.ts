@@ -41,7 +41,44 @@ export function useFocusTimer() {
   const audioRef = useRef<AudioContext | null>(null);
   const completionHandledRef = useRef(false);
 
-  // Load from localStorage on mount
+  const playNotification = useCallback(() => {
+    try {
+      const ctx = audioRef.current || new AudioContext();
+      audioRef.current = ctx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 800;
+      gain.gain.value = 0.3;
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch {
+      // ignore audio errors
+    }
+  }, []);
+
+  const handleExpired = useCallback(async (state: TimerState) => {
+    if (!state.isBreak && state.sessionId) {
+      try {
+        await fetch(`/api/focus/${state.sessionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "completed" }),
+        });
+      } catch {
+        // ignore
+      }
+    }
+    storeState(null);
+    setTimerState(null);
+    setSecondsLeft(0);
+    setIsRunning(false);
+  }, []);
+
+  // Load from localStorage on mount. Runs once (empty deps) — handleExpired is
+  // a stable useCallback with no component-state capture, so omitting it is safe.
   useEffect(() => {
     const stored = getStoredState();
     if (!stored) return;
@@ -65,6 +102,7 @@ export function useFocusTimer() {
         setIsRunning(true);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tick
@@ -88,56 +126,7 @@ export function useFocusTimer() {
     };
   }, [isRunning, secondsLeft]);
 
-  // Handle timer reaching 0
-  useEffect(() => {
-    if (secondsLeft === 0 && timerState && !completionHandledRef.current) {
-      completionHandledRef.current = true;
-      if (timerState.isBreak) {
-        completeBreak();
-      } else {
-        completeWork();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secondsLeft, timerState]);
-
-  const playNotification = useCallback(() => {
-    try {
-      const ctx = audioRef.current || new AudioContext();
-      audioRef.current = ctx;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 800;
-      gain.gain.value = 0.3;
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.stop(ctx.currentTime + 0.5);
-    } catch {
-      // ignore audio errors
-    }
-  }, []);
-
-  const handleExpired = async (state: TimerState) => {
-    if (!state.isBreak && state.sessionId) {
-      try {
-        await fetch(`/api/focus/${state.sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed" }),
-        });
-      } catch {
-        // ignore
-      }
-    }
-    storeState(null);
-    setTimerState(null);
-    setSecondsLeft(0);
-    setIsRunning(false);
-  };
-
-  const completeWork = async () => {
+  const completeWork = useCallback(async () => {
     if (!timerState) return;
     playNotification();
 
@@ -169,16 +158,28 @@ export function useFocusTimer() {
     setSecondsLeft(timerState.breakDuration);
     completionHandledRef.current = false;
     setIsRunning(true);
-  };
+  }, [timerState, playNotification]);
 
-  const completeBreak = () => {
+  const completeBreak = useCallback(() => {
     playNotification();
     storeState(null);
     setTimerState(null);
     setSecondsLeft(0);
     setIsRunning(false);
     completionHandledRef.current = false;
-  };
+  }, [playNotification]);
+
+  // Handle timer reaching 0. State writes are deferred via queueMicrotask so they
+  // don't fire inside the effect's render phase (React 19 set-state-in-effect rule).
+  useEffect(() => {
+    if (secondsLeft !== 0 || !timerState || completionHandledRef.current) return;
+    completionHandledRef.current = true;
+    const isBreak = timerState.isBreak;
+    queueMicrotask(() => {
+      if (isBreak) completeBreak();
+      else completeWork();
+    });
+  }, [secondsLeft, timerState, completeBreak, completeWork]);
 
   const start = async (workMinutes: number, breakMinutes: number, taskId: string | null, taskName: string | null) => {
     // Create session in DB

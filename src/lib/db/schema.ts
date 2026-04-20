@@ -342,14 +342,12 @@ export const weeklyReviews = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     weekStart: date("week_start").notNull(),
     content: text("content").notNull(),
-    source: text("source").notNull().default("dashboard"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_weekly_reviews_user").on(t.userId),
     uniqueIndex("weekly_reviews_user_week_unique").on(t.userId, t.weekStart),
-    check("weekly_reviews_source_check", sql`${t.source} IN ('dashboard', 'mcp')`),
   ]
 );
 
@@ -365,13 +363,11 @@ export const dailyBriefings = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     briefingDate: date("briefing_date").notNull().defaultNow(),
     content: text("content").notNull(),
-    source: text("source").notNull().default("dashboard"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [
     uniqueIndex("daily_briefings_user_date_unique").on(t.userId, t.briefingDate),
-    check("daily_briefings_source_check", sql`${t.source} IN ('dashboard', 'mcp')`),
   ]
 );
 
@@ -387,12 +383,10 @@ export const insightCache = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     cacheDate: date("cache_date").notNull().defaultNow(),
     insights: jsonb("insights").notNull().default(sql`'[]'::jsonb`),
-    source: text("source").notNull().default("dashboard"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [
     uniqueIndex("insight_cache_user_date_unique").on(t.userId, t.cacheDate),
-    check("insight_cache_source_check", sql`${t.source} IN ('dashboard', 'mcp')`),
   ]
 );
 

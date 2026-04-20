@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Save, FileText } from "lucide-react";
+import { Loader2, FileText } from "lucide-react";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { startOfWeek, getToday } from "@/lib/dates";
@@ -12,10 +12,7 @@ import { ReviewSection } from "./ReviewSection";
 export function WeeklyReview() {
   const [weekStart, setWeekStart] = useState(startOfWeek(getToday()));
   const [content, setContent] = useState("");
-  const [, setReviewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<{
     tasks?: { total: number; done: number };
     habits?: { total: number; completedToday: number; streak: number };
@@ -29,20 +26,12 @@ export function WeeklyReview() {
       const response = await fetch(`/api/weekly-review?week=${week}`);
       if (response.ok) {
         const data = await response.json();
-        if (data && data.content) {
-          setContent(data.content);
-          setReviewId(data.id);
-        } else {
-          setContent("");
-          setReviewId(null);
-        }
+        setContent(data && data.content ? data.content : "");
       } else {
         setContent("");
-        setReviewId(null);
       }
     } catch {
       setContent("");
-      setReviewId(null);
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +39,6 @@ export function WeeklyReview() {
 
   useEffect(() => {
     loadReview(weekStart);
-    setIsEditing(false);
   }, [weekStart, loadReview]);
 
   useEffect(() => {
@@ -59,28 +47,6 @@ export function WeeklyReview() {
       .then(setDashboardStats)
       .catch(() => {});
   }, []);
-
-  const handleSave = async () => {
-    if (!content.trim()) return;
-    setIsSaving(true);
-    try {
-      const response = await fetch("/api/weekly-review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart, content }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setReviewId(data.id);
-        setIsEditing(false);
-      }
-    } catch (error) {
-      console.error("Failed to save review:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleDateChange = (date: string) => {
     setWeekStart(startOfWeek(date));
@@ -98,46 +64,11 @@ export function WeeklyReview() {
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
         </div>
-      ) : !content && !isEditing ? (
+      ) : !content ? (
         <EmptyState
           icon={FileText}
-          message="No review for this week yet"
-          actionLabel="Write one"
-          onAction={() => setIsEditing(true)}
+          message="No review for this week yet. Weekly reviews are written by the OpenClaw agent."
         />
-      ) : isEditing ? (
-        <div className="space-y-4">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full rounded-lg px-4 py-3 text-sm focus:outline-none resize-none min-h-[200px] md:min-h-[400px] font-mono"
-            style={{
-              background: "var(--bg-base)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-default)",
-              lineHeight: "1.6",
-            }}
-            placeholder="Write your weekly review..."
-          />
-          <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={() => { setIsEditing(false); loadReview(weekStart); }}
-              className="px-3 py-1.5 rounded-lg text-sm"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!content.trim() || isSaving}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
-              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
       ) : (
         <div>
           {dashboardStats && (
@@ -188,16 +119,6 @@ export function WeeklyReview() {
               </div>
             );
           })()}
-
-          <div className="flex items-center justify-end gap-2 mt-4">
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-3 py-1.5 rounded-lg text-sm"
-              style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)" }}
-            >
-              Edit
-            </button>
-          </div>
         </div>
       )}
     </div>

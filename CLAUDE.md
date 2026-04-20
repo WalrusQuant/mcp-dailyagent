@@ -39,8 +39,7 @@ Test files live alongside source in `__tests__/` directories.
 - `src/app/api/` — API endpoints:
   - `mcp/` — **MCP server endpoint** (Streamable HTTP, stateless, Bearer auth)
   - `tasks/`, `habits/`, `journal/`, `workouts/`, `focus/`, `goals/`, `spaces/`, `tags/`, `calendar/`, `dashboard/` — CRUD for the dashboard
-  - `briefing/`, `insights/` — **GET-only**; reads what OpenClaw saved
-  - `weekly-review/` — CRUD; no AI generation (user writes manually or OpenClaw writes via MCP)
+  - `briefing/`, `insights/`, `weekly-review/` — **GET-only**; reads what OpenClaw saved
   - `profile/` — single user's profile
   - `wipe-data/` — Danger Zone nuke button
 
@@ -116,7 +115,7 @@ Tables (17 total):
 - `workout_templates` + `workout_exercises` + `workout_logs` + `workout_log_exercises`
 - `focus_sessions` — Pomodoro timer sessions linked to tasks
 - `goals` + `goal_progress_logs`
-- `weekly_reviews` — weekly review summaries (source: dashboard | mcp)
+- `weekly_reviews` — weekly review summaries (source: mcp; dashboard is read-only)
 - `daily_briefings` — daily briefings saved by OpenClaw (source: dashboard | mcp)
 - `insight_cache` — cached insights saved by OpenClaw (source: dashboard | mcp)
 

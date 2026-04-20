@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
-import { eq, and, lt, isNull } from "drizzle-orm";
+import { eq, and, lt, isNull, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 
 function serializeTask(t: typeof tasks.$inferSelect) {
@@ -31,44 +31,45 @@ export async function POST(_request: NextRequest) {
   const todayStr = new Date().toISOString().split("T")[0];
 
   try {
-    const undoneTasks = await db
-      .select()
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          lt(tasks.taskDate, todayStr),
-          eq(tasks.done, false),
-          isNull(tasks.rolledFrom)
+    const created = await db.transaction(async (tx) => {
+      const undoneTasks = await tx
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            lt(tasks.taskDate, todayStr),
+            eq(tasks.done, false),
+            isNull(tasks.rolledFrom)
+          )
+        );
+
+      if (undoneTasks.length === 0) return [];
+
+      const inserted = await tx
+        .insert(tasks)
+        .values(
+          undoneTasks.map((task) => ({
+            userId,
+            title: task.title,
+            notes: task.notes,
+            priority: task.priority,
+            taskDate: todayStr,
+            spaceId: task.spaceId,
+            recurrence: task.recurrence,
+            sortOrder: task.sortOrder,
+            rolledFrom: task.id,
+          }))
         )
-      );
+        .returning();
 
-    if (undoneTasks.length === 0) {
-      return NextResponse.json([]);
-    }
+      await tx
+        .update(tasks)
+        .set({ done: true })
+        .where(inArray(tasks.id, undoneTasks.map((t) => t.id)));
 
-    const created = await db
-      .insert(tasks)
-      .values(
-        undoneTasks.map((task) => ({
-          userId,
-          title: task.title,
-          notes: task.notes,
-          priority: task.priority,
-          taskDate: todayStr,
-          spaceId: task.spaceId,
-          recurrence: task.recurrence,
-          sortOrder: task.sortOrder,
-          rolledFrom: task.id,
-        }))
-      )
-      .returning();
-
-    // Mark originals as done so they don't show up in future rollover checks
-    const originalIds = undoneTasks.map((t) => t.id);
-    for (const oid of originalIds) {
-      await db.update(tasks).set({ done: true }).where(eq(tasks.id, oid));
-    }
+      return inserted;
+    });
 
     return NextResponse.json(created.map(serializeTask));
   } catch (err) {

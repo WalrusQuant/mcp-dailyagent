@@ -43,9 +43,9 @@ Three tables are written by OpenClaw but only *read* by the dashboard:
 
 - `daily_briefings` — populated via `save_daily_briefing` MCP tool
 - `insight_cache` — populated via `save_insights` MCP tool
-- `weekly_reviews` — populated via `save_weekly_review` MCP tool (also writable from the dashboard)
+- `weekly_reviews` — populated via `save_weekly_review` MCP tool
 
-The dashboard's `/api/briefing`, `/api/insights`, and `/api/weekly-review` routes are **GET-only** for briefings and insights. Generation is OpenClaw's job. The dashboard just shows whatever the agent last saved.
+The dashboard's `/api/briefing`, `/api/insights`, and `/api/weekly-review` routes are **GET-only**. Generation is OpenClaw's job. The dashboard just shows whatever the agent last saved.
 
 This is the key architectural rule: **no AI in this repo**. If the dashboard starts rendering something interesting, it's because OpenClaw wrote it into Postgres via an MCP tool.
 
@@ -64,9 +64,9 @@ This is the key architectural rule: **no AI in this repo**. If the dashboard sta
 | `workout_templates`, `workout_exercises`, `workout_logs`, `workout_log_exercises` | Templates and logged workouts; per-exercise `strength` / `timed` / `cardio`. |
 | `focus_sessions` | Pomodoro sessions (`active` / `completed` / `cancelled`). |
 | `goals`, `goal_progress_logs` | Goals with category, progress %, target date. |
-| `weekly_reviews` | Weekly review content. Source: `dashboard` or `mcp`. |
-| `daily_briefings` | OpenClaw-generated briefings. Source: `dashboard` or `mcp`. |
-| `insight_cache` | OpenClaw-generated insight cards. Source: `dashboard` or `mcp`. |
+| `weekly_reviews` | Weekly review content written by OpenClaw. |
+| `daily_briefings` | OpenClaw-generated briefings. |
+| `insight_cache` | OpenClaw-generated insight cards. |
 
 Every table with a domain enum has a matching `CHECK` constraint. Every date field is a proper `date` column. Every JSON column is `jsonb`.
 
@@ -82,8 +82,8 @@ src/
       mcp/                    # The MCP server endpoint
       tasks/ habits/ journal/ workouts/ focus/ goals/ spaces/
       tags/ calendar/ dashboard/
-      briefing/ insights/     # GET-only, read what OpenClaw saved
-      weekly-review/ profile/ wipe-data/
+      briefing/ insights/ weekly-review/  # GET-only, read what OpenClaw saved
+      profile/ wipe-data/
   lib/
     db/
       client.ts               # Lazy-proxy Drizzle instance

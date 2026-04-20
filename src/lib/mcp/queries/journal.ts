@@ -33,7 +33,6 @@ function rowToEntry(row: typeof journalEntries.$inferSelect): JournalEntry {
 }
 
 export async function getJournalEntry(
-  _db: typeof db,
   userId: string,
   date: string
 ): Promise<QueryResult<JournalEntry | null>> {
@@ -50,7 +49,6 @@ export async function getJournalEntry(
 }
 
 export async function getRecentJournalEntries(
-  _db: typeof db,
   userId: string,
   limit = 7
 ): Promise<QueryResult<JournalEntry[]>> {
@@ -69,7 +67,6 @@ export async function getRecentJournalEntries(
 }
 
 export async function searchJournal(
-  _db: typeof db,
   userId: string,
   query: string
 ): Promise<QueryResult<JournalEntry[]>> {
@@ -92,7 +89,6 @@ export async function searchJournal(
 }
 
 export async function createOrUpdateJournalEntry(
-  _db: typeof db,
   userId: string,
   input: CreateOrUpdateJournalInput
 ): Promise<QueryResult<JournalEntry>> {

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc, ilike, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, ilike } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
 

@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getJournalEntry, getRecentJournalEntries } from "@/lib/mcp/queries/journal";
 import { getToday } from "@/lib/dates";
@@ -21,7 +20,7 @@ export function registerJournalResources(server: McpServer) {
         };
       }
 
-      const result = await getJournalEntry(db, auth.userId, getToday());
+      const result = await getJournalEntry(auth.userId, getToday());
 
       return {
         contents: [
@@ -50,7 +49,7 @@ export function registerJournalResources(server: McpServer) {
         };
       }
 
-      const result = await getRecentJournalEntries(db, auth.userId, 7);
+      const result = await getRecentJournalEntries(auth.userId, 7);
 
       return {
         contents: [

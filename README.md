@@ -69,7 +69,7 @@ Dashboard at <http://localhost:3000>. MCP at <http://localhost:3000/api/mcp>.
 - **workout_templates**, **workout_exercises**, **workout_logs**, **workout_log_exercises** — strength / timed / cardio
 - **focus_sessions** — Pomodoro timer sessions, optionally linked to a task
 - **goals**, **goal_progress_logs** — category, progress %, target date
-- **weekly_reviews** — written by dashboard or by OpenClaw via `save_weekly_review`
+- **weekly_reviews** — written by OpenClaw via `save_weekly_review`, displayed read-only in the dashboard
 - **daily_briefings** — written by OpenClaw via `save_daily_briefing`, displayed read-only in the dashboard
 - **insight_cache** — written by OpenClaw via `save_insights`, displayed as insight cards on the dashboard
 
@@ -116,7 +116,7 @@ A plain viewer + manual editor. Access is gated by Tailscale — no login, no pa
 - **Goals** — progress, categories, target dates
 - **Spaces** — group tasks/habits/goals (projects/areas of life)
 - **Calendar** — monthly view with per-day detail panels
-- **Review** — read or write the weekly review (content can also be written by OpenClaw)
+- **Review** — read-only view of the weekly review written by OpenClaw
 - **Settings** — theme, and a Danger Zone "Wipe All Data" with type-to-confirm
 
 ![Tasks](docs/screenshots/tasks.png)
@@ -158,8 +158,7 @@ src/
       mcp/                # THE MCP server endpoint (Streamable HTTP, Bearer auth)
       tasks/ habits/ journal/ workouts/ focus/ goals/
       spaces/ tags/ calendar/ dashboard/
-      briefing/ insights/ # GET-only — reads what OpenClaw saved
-      weekly-review/      # CRUD, no AI
+      briefing/ insights/ weekly-review/ # GET-only — reads what OpenClaw saved
       profile/            # Single user's profile
       wipe-data/          # Danger Zone
   lib/

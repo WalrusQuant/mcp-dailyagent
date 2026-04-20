@@ -48,7 +48,6 @@ function rowToSession(row: typeof focusSessions.$inferSelect): FocusSession {
 }
 
 export async function getFocusSessions(
-  _db: typeof db,
   userId: string,
   params?: GetFocusSessionsParams
 ): Promise<QueryResult<FocusSession[]>> {
@@ -78,7 +77,6 @@ export async function getFocusSessions(
 }
 
 export async function getTodayFocusStats(
-  _db: typeof db,
   userId: string
 ): Promise<QueryResult<TodayFocusStats>> {
   try {
@@ -107,7 +105,6 @@ export async function getTodayFocusStats(
 }
 
 export async function startFocusSession(
-  _db: typeof db,
   userId: string,
   input: StartFocusSessionInput
 ): Promise<QueryResult<FocusSession>> {
@@ -132,7 +129,6 @@ export async function startFocusSession(
 }
 
 export async function completeFocusSession(
-  _db: typeof db,
   userId: string,
   sessionId: string
 ): Promise<QueryResult<FocusSession>> {

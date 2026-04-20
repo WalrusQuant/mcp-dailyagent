@@ -1,9 +1,10 @@
-import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, or, lt } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { dateSchema } from "./validators";
+import { getToday, startOfWeek } from "@/lib/dates";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -171,7 +172,7 @@ export function registerCalendarTools(server: McpServer) {
     "get_day_summary",
     "Get a comprehensive summary of a day including tasks, habits, journal, workouts, and focus sessions",
     {
-      date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -180,7 +181,7 @@ export function registerCalendarTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "calendar:read");
       if (scopeError) return errorResult(scopeError);
 
-      const date = args.date ?? new Date().toISOString().split("T")[0];
+      const date = args.date ?? getToday();
       const result = await getDaySummary(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -193,7 +194,7 @@ export function registerCalendarTools(server: McpServer) {
     "get_week_summary",
     "Get an aggregated summary of a full week including task completion, habits, workouts, focus time, and mood",
     {
-      week_start: z.string().optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
+      week_start: dateSchema.optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -202,15 +203,7 @@ export function registerCalendarTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "calendar:read");
       if (scopeError) return errorResult(scopeError);
 
-      let weekStart = args.week_start;
-      if (!weekStart) {
-        const now = new Date();
-        const day = now.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        now.setDate(now.getDate() + diff);
-        weekStart = now.toISOString().split("T")[0];
-      }
-
+      const weekStart = args.week_start ?? startOfWeek(getToday());
       const result = await getWeekSummary(auth.userId, weekStart);
       if (result.error) return errorResult(`Error: ${result.error}`);
 

@@ -36,13 +36,11 @@ async function saveInsights(userId: string, cacheDate: string, insights: unknown
         userId,
         cacheDate,
         insights,
-        source: "mcp",
       })
       .onConflictDoUpdate({
         target: [insightCache.userId, insightCache.cacheDate],
         set: {
           insights,
-          source: "mcp",
         },
       })
       .returning();

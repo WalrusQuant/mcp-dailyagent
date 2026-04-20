@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "@/lib/db/client";
 import { getAuth } from "@/lib/mcp/tools/helpers";
 import { getTodayBriefing } from "@/lib/mcp/queries/briefings";
 import type { Extra } from "@/lib/mcp/tools/helpers";
@@ -20,7 +19,7 @@ export function registerBriefingResources(server: McpServer) {
         };
       }
 
-      const result = await getTodayBriefing(db, auth.userId);
+      const result = await getTodayBriefing(auth.userId);
 
       return {
         contents: [

@@ -44,13 +44,11 @@ async function saveReview(userId: string, weekStart: string, content: string) {
         userId,
         weekStart,
         content,
-        source: "mcp",
       })
       .onConflictDoUpdate({
         target: [weeklyReviews.userId, weeklyReviews.weekStart],
         set: {
           content,
-          source: "mcp",
           updatedAt: new Date(),
         },
       })
