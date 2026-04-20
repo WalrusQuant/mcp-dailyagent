@@ -16,10 +16,6 @@ export interface Database {
           display_name: string | null;
           avatar_url: string | null;
           timezone: string;
-          plan: "free" | "active" | "canceled" | "expired";
-          stripe_customer_id: string | null;
-          stripe_subscription_id: string | null;
-          subscription_status: "active" | "canceled" | "past_due" | null;
           is_admin: boolean;
           ai_model_config: Record<string, string> | null;
           tool_calling_enabled: boolean;
@@ -34,10 +30,6 @@ export interface Database {
           display_name?: string | null;
           avatar_url?: string | null;
           timezone?: string;
-          plan?: "free" | "active" | "canceled" | "expired";
-          stripe_customer_id?: string | null;
-          stripe_subscription_id?: string | null;
-          subscription_status?: "active" | "canceled" | "past_due" | null;
           is_admin?: boolean;
           ai_model_config?: Record<string, string> | null;
           tool_calling_enabled?: boolean;
@@ -52,10 +44,6 @@ export interface Database {
           display_name?: string | null;
           avatar_url?: string | null;
           timezone?: string;
-          plan?: "free" | "active" | "canceled" | "expired";
-          stripe_customer_id?: string | null;
-          stripe_subscription_id?: string | null;
-          subscription_status?: "active" | "canceled" | "past_due" | null;
           is_admin?: boolean;
           ai_model_config?: Record<string, string> | null;
           tool_calling_enabled?: boolean;
@@ -63,45 +51,6 @@ export interface Database {
           onboarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
-        };
-        Relationships: [];
-      };
-      api_keys: {
-        Row: {
-          id: string;
-          user_id: string;
-          name: string;
-          key_prefix: string;
-          key_hash: string;
-          scopes: string[];
-          last_used_at: string | null;
-          expires_at: string | null;
-          revoked_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          name: string;
-          key_prefix: string;
-          key_hash: string;
-          scopes?: string[];
-          last_used_at?: string | null;
-          expires_at?: string | null;
-          revoked_at?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          name?: string;
-          key_prefix?: string;
-          key_hash?: string;
-          scopes?: string[];
-          last_used_at?: string | null;
-          expires_at?: string | null;
-          revoked_at?: string | null;
-          created_at?: string;
         };
         Relationships: [];
       };
@@ -750,90 +699,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      usage_limits: {
-        Row: {
-          id: string;
-          user_id: string | null;
-          plan: "free" | "active" | null;
-          limit_type: "requests" | "ai_suggestions";
-          limit_value: number;
-          period: "daily" | "monthly";
-          mode: "hard" | "soft";
-          active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id?: string | null;
-          plan?: "free" | "active" | null;
-          limit_type: "requests" | "ai_suggestions";
-          limit_value: number;
-          period: "daily" | "monthly";
-          mode?: "hard" | "soft";
-          active?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string | null;
-          plan?: "free" | "active" | null;
-          limit_type?: "requests" | "ai_suggestions";
-          limit_value?: number;
-          period?: "daily" | "monthly";
-          mode?: "hard" | "soft";
-          active?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      stripe_events: {
-        Row: {
-          id: string;
-          type: string;
-          processed_at: string;
-        };
-        Insert: {
-          id: string;
-          type: string;
-          processed_at?: string;
-        };
-        Update: {
-          id?: string;
-          type?: string;
-          processed_at?: string;
-        };
-        Relationships: [];
-      };
-      subscription_history: {
-        Row: {
-          id: string;
-          user_id: string;
-          plan: string;
-          action: "created" | "canceled" | "renewed" | "expired";
-          stripe_subscription_id: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          plan: string;
-          action: "created" | "canceled" | "renewed" | "expired";
-          stripe_subscription_id?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          plan?: string;
-          action?: "created" | "canceled" | "renewed" | "expired";
-          stripe_subscription_id?: string | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
     };
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     Views: {};
@@ -851,7 +716,6 @@ export interface Database {
 }
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-export type ApiKey = Database["public"]["Tables"]["api_keys"]["Row"];
 export type Space = Database["public"]["Tables"]["spaces"]["Row"];
 export type Tag = Database["public"]["Tables"]["tags"]["Row"];
 export type Task = Database["public"]["Tables"]["tasks"]["Row"];
@@ -871,18 +735,3 @@ export type InsightCache = Database["public"]["Tables"]["insight_cache"]["Row"];
 export type AppSetting = Database["public"]["Tables"]["app_settings"]["Row"];
 export type AppModel = Database["public"]["Tables"]["app_models"]["Row"];
 export type LLMProvider = Database["public"]["Tables"]["llm_providers"]["Row"];
-export type StripeEvent = Database["public"]["Tables"]["stripe_events"]["Row"];
-export type SubscriptionHistory = Database["public"]["Tables"]["subscription_history"]["Row"];
-
-export interface UsageLimit {
-  id: string;
-  user_id: string | null;
-  plan: "free" | "active" | null;
-  limit_type: "requests" | "ai_suggestions";
-  limit_value: number;
-  period: "daily" | "monthly";
-  mode: "hard" | "soft";
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-}

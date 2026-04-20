@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getServiceClient } from "@/lib/mcp/supabase";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, PAID_PLAN_REQUIRED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -108,8 +108,6 @@ export function registerSpaceTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "spaces:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await createSpace(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -133,8 +131,6 @@ export function registerSpaceTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "spaces:write");
       if (scopeError) return errorResult(scopeError);
-
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
 
       const result = await updateSpace(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);

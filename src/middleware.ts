@@ -32,11 +32,6 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // OAuth routes — never redirect, Hydra manages the flow
-  if (pathname.startsWith("/oauth/")) {
-    return supabaseResponse;
-  }
-
   // Protected routes - redirect to login if not authenticated
   const protectedPrefixes = [
     "/settings",
@@ -57,8 +52,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Auth routes - redirect to chat if already authenticated
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Auth routes - redirect to dashboard if already authenticated
+  if (user && pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
@@ -68,8 +63,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/login",
-    "/signup",
-    "/oauth/:path*",
     "/settings/:path*",
     "/tasks/:path*",
     "/habits/:path*",

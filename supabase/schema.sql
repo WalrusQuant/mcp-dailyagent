@@ -12,10 +12,6 @@ CREATE TABLE public.profiles (
   display_name TEXT,
   avatar_url TEXT,
   timezone TEXT DEFAULT 'UTC',
-  plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'active', 'canceled', 'expired')),
-  stripe_customer_id TEXT,
-  stripe_subscription_id TEXT,
-  subscription_status TEXT CHECK (subscription_status IN ('active', 'canceled', 'past_due', NULL)),
   is_admin BOOLEAN NOT NULL DEFAULT false,
   ai_model_config JSONB DEFAULT NULL,
   tool_calling_enabled BOOLEAN NOT NULL DEFAULT true,
@@ -50,48 +46,8 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
--- Index for Stripe webhook lookups
-CREATE INDEX idx_profiles_stripe_customer ON public.profiles(stripe_customer_id);
-
 -- ---------------------------------------------------------------------------
--- 2. API Keys (for MCP connections)
--- ---------------------------------------------------------------------------
-CREATE TABLE public.api_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  key_prefix TEXT NOT NULL,
-  key_hash TEXT NOT NULL,
-  scopes TEXT[] DEFAULT '{}',
-  last_used_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ,
-  revoked_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_api_keys_hash ON public.api_keys(key_hash);
-CREATE INDEX idx_api_keys_user ON public.api_keys(user_id);
-
-ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own api keys"
-  ON public.api_keys FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can create own api keys"
-  ON public.api_keys FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own api keys"
-  ON public.api_keys FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own api keys"
-  ON public.api_keys FOR DELETE
-  USING (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
--- 3. Spaces (groups tasks, goals, habits by area of life)
+-- 2. Spaces (groups tasks, goals, habits by area of life)
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.spaces (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -630,66 +586,3 @@ CREATE POLICY "Admins can update models" ON public.app_models
 CREATE POLICY "Admins can delete models" ON public.app_models
   FOR DELETE TO authenticated USING (public.is_admin());
 
--- Usage Limits (admin-managed, plan-aware)
--- plan = NULL means applies to all plans (global default)
--- plan = 'free' or 'active' means applies only to that plan
--- user_id = NULL means global default for that plan
--- user_id = specific user means per-user override
-CREATE TABLE public.usage_limits (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  plan TEXT DEFAULT NULL CHECK (plan IN ('free', 'active', NULL)),
-  limit_type TEXT NOT NULL CHECK (limit_type IN ('requests', 'ai_suggestions')),
-  limit_value NUMERIC NOT NULL CHECK (limit_value > 0),
-  period TEXT NOT NULL CHECK (period IN ('daily', 'monthly')),
-  mode TEXT NOT NULL DEFAULT 'hard' CHECK (mode IN ('hard', 'soft')),
-  active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_usage_limits_user ON public.usage_limits(user_id);
-
-CREATE UNIQUE INDEX idx_usage_limits_unique
-  ON public.usage_limits(
-    COALESCE(user_id, '00000000-0000-0000-0000-000000000000'),
-    limit_type,
-    period,
-    COALESCE(plan, '__any__')
-  );
-
-ALTER TABLE public.usage_limits ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Admins can manage usage_limits"
-  ON public.usage_limits FOR ALL
-  USING (public.is_admin()) WITH CHECK (public.is_admin());
-
--- ---------------------------------------------------------------------------
--- 15. Billing
--- ---------------------------------------------------------------------------
-
--- Idempotent Stripe webhook event log
-CREATE TABLE public.stripe_events (
-  id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,
-  processed_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- No RLS on stripe_events — server-side only via service role key
-
--- Subscription history
-CREATE TABLE public.subscription_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  plan TEXT NOT NULL,
-  action TEXT NOT NULL CHECK (action IN ('created', 'canceled', 'renewed', 'expired')),
-  stripe_subscription_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_subscription_history_user ON public.subscription_history(user_id);
-
-ALTER TABLE public.subscription_history ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own subscription history" ON public.subscription_history
-  FOR SELECT USING (auth.uid() = user_id);

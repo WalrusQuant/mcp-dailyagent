@@ -9,10 +9,10 @@ function makeExtra(overrides: Record<string, unknown> = {}): Extra {
   return overrides as unknown as Extra;
 }
 
-function makeExtraWithAuth(userId: string, scopes: string[], plan = "free"): Extra {
+function makeExtraWithAuth(userId: string, scopes: string[]): Extra {
   return makeExtra({
     authInfo: {
-      extra: { userId, plan },
+      extra: { userId },
       scopes,
     },
   });
@@ -21,14 +21,13 @@ function makeExtraWithAuth(userId: string, scopes: string[], plan = "free"): Ext
 // ---------------------------------------------------------------------------
 
 describe("getAuth", () => {
-  it("extracts userId, scopes, and plan from extra object", () => {
-    const extra = makeExtraWithAuth("user-abc", ["tasks:read", "tasks:write"], "active");
+  it("extracts userId and scopes from extra object", () => {
+    const extra = makeExtraWithAuth("user-abc", ["tasks:read", "tasks:write"]);
     const auth = getAuth(extra);
 
     expect(auth).not.toBeNull();
     expect(auth!.userId).toBe("user-abc");
     expect(auth!.scopes).toEqual(["tasks:read", "tasks:write"]);
-    expect(auth!.plan).toBe("active");
   });
 
   it("returns null when authInfo is missing", () => {
@@ -39,7 +38,7 @@ describe("getAuth", () => {
   it("returns null when userId is missing from authInfo.extra", () => {
     const extra = makeExtra({
       authInfo: {
-        extra: { plan: "free" }, // no userId
+        extra: {},
         scopes: [],
       },
     });
@@ -56,18 +55,6 @@ describe("getAuth", () => {
     const auth = getAuth(extra);
     expect(auth).not.toBeNull();
     expect(auth!.scopes).toEqual([]);
-  });
-
-  it('defaults plan to "free" when not provided', () => {
-    const extra = makeExtra({
-      authInfo: {
-        extra: { userId: "user-xyz" },
-        scopes: [],
-      },
-    });
-    const auth = getAuth(extra);
-    expect(auth).not.toBeNull();
-    expect(auth!.plan).toBe("free");
   });
 });
 
