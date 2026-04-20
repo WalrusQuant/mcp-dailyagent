@@ -103,7 +103,7 @@ export function DangerZoneTab() {
             >
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--accent-negative)" }} />
               <p className="text-xs" style={{ color: "var(--accent-negative)" }}>
-                This will permanently delete your account, all your data, cancel any active subscription, and revoke all API keys. This action cannot be reversed.
+                This will permanently delete your account and all your data. This action cannot be reversed.
               </p>
             </div>
             <div>

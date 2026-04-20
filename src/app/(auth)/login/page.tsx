@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { AuthForm } from "@/components/auth/AuthForm";
 import { MessageSquare } from "lucide-react";
 
@@ -18,14 +17,7 @@ export default function LoginPage() {
         </h1>
       </div>
 
-      <AuthForm mode="login" />
-
-      <p className="text-center text-sm mt-6" style={{ color: "var(--text-muted)" }}>
-        Need an account?{" "}
-        <Link href="/signup" className="hover:underline" style={{ color: "var(--accent-primary)" }}>
-          Sign up
-        </Link>
-      </p>
+      <AuthForm />
     </div>
   );
 }

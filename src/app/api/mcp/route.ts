@@ -2,11 +2,10 @@ import { NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "@/lib/mcp/server";
 import { authenticateMcpRequest } from "@/lib/mcp/auth";
-import { checkMcpRateLimit } from "@/lib/mcp/rate-limit";
 
 /**
  * MCP Server endpoint — handles all MCP communication via Streamable HTTP.
- * Auth: Bearer token (OAuth via Hydra or API key with da_sk_ prefix).
+ * Auth: Bearer token (API key with da_sk_ prefix).
  * Stateless: each request is independently authenticated.
  */
 
@@ -25,22 +24,7 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
     });
   }
 
-  const { auth, plan } = authResult.result;
-
-  // Rate limit
-  const retryAfter = checkMcpRateLimit(auth.userId, plan);
-  if (retryAfter !== null) {
-    return new Response(
-      JSON.stringify({ error: "Rate limit exceeded" }),
-      {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(retryAfter),
-        },
-      }
-    );
-  }
+  const { auth } = authResult.result;
 
   // Create stateless transport and server per request
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -60,7 +44,6 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
       scopes: auth.scopes,
       extra: {
         userId: auth.userId,
-        plan,
         authMethod: auth.authMethod,
       },
     },

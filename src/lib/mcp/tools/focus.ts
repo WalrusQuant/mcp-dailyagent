@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getServiceClient } from "@/lib/mcp/supabase";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, PAID_PLAN_REQUIRED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -154,8 +154,6 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
-
       const result = await startFocusSession(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -176,8 +174,6 @@ export function registerFocusTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
-
-      if (auth.plan !== "active") return PAID_PLAN_REQUIRED;
 
       const result = await completeFocusSession(auth.userId, args.session_id);
       if (result.error) return errorResult(`Error: ${result.error}`);
