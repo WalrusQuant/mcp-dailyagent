@@ -156,16 +156,65 @@
       position: relative;
       overflow: hidden;
     }
-    .hero::before {
-      content: '';
+    .hero-blob {
       position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(circle at 50% 0%, var(--accent-dim) 0%, transparent 45%),
-        radial-gradient(circle at 10% 100%, rgba(212, 165, 116, 0.04) 0%, transparent 40%);
+      width: 700px;
+      height: 700px;
+      border-radius: 50%;
+      filter: blur(90px);
       pointer-events: none;
+      opacity: 0.55;
+      z-index: 0;
+      will-change: transform;
     }
-    .hero-content { position: relative; }
+    .hero-blob.b1 {
+      background: radial-gradient(circle, rgba(212, 165, 116, 0.7) 0%, transparent 60%);
+      top: -250px;
+      left: -200px;
+      animation: orbit-1 18s ease-in-out infinite;
+    }
+    .hero-blob.b2 {
+      background: radial-gradient(circle, rgba(232, 189, 138, 0.55) 0%, transparent 60%);
+      top: -200px;
+      right: -250px;
+      animation: orbit-2 22s ease-in-out infinite;
+    }
+    @keyframes orbit-1 {
+      0%   { transform: translate(0, 0) scale(1); }
+      33%  { transform: translate(40vw, 80px) scale(1.1); }
+      66%  { transform: translate(20vw, 250px) scale(0.95); }
+      100% { transform: translate(0, 0) scale(1); }
+    }
+    @keyframes orbit-2 {
+      0%   { transform: translate(0, 0) scale(1); }
+      33%  { transform: translate(-30vw, 150px) scale(0.9); }
+      66%  { transform: translate(-50vw, 50px) scale(1.15); }
+      100% { transform: translate(0, 0) scale(1); }
+    }
+    .hero-content { position: relative; z-index: 1; }
+
+    /* Cycling word in headline */
+    .cycle-wrap {
+      display: inline-block;
+      position: relative;
+      min-width: 1ch;
+    }
+    .cycle-word {
+      display: inline-block;
+      color: var(--accent);
+      transition: opacity 320ms ease, transform 320ms ease, filter 320ms ease;
+      will-change: opacity, transform;
+    }
+    .cycle-word.out {
+      opacity: 0;
+      transform: translateY(-14px);
+      filter: blur(4px);
+    }
+    .cycle-word.in {
+      opacity: 0;
+      transform: translateY(14px);
+      filter: blur(4px);
+    }
     .hero-badge {
       display: inline-block;
       padding: 6px 16px;
@@ -208,16 +257,32 @@
       border-radius: 100px;
       font-weight: 600;
       font-size: 15px;
-      transition: transform 0.15s, background 0.2s, border-color 0.2s, opacity 0.2s;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s, background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.25s;
     }
     .cta-primary {
       background: var(--accent);
       color: var(--bg);
+      box-shadow: 0 4px 20px rgba(212, 165, 116, 0.0);
+    }
+    .cta-primary::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 80%;
+      height: 100%;
+      background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+      transition: left 0.55s ease;
+      pointer-events: none;
     }
     .cta-primary:hover {
       background: var(--accent-hover);
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(212, 165, 116, 0.4);
     }
+    .cta-primary:hover::before { left: 120%; }
+    .cta-primary > * { position: relative; z-index: 1; }
     .cta-secondary {
       background: transparent;
       color: var(--text);
@@ -226,6 +291,7 @@
     .cta-secondary:hover {
       border-color: var(--accent);
       color: var(--accent);
+      transform: translateY(-2px);
     }
 
     /* Diagram */
@@ -346,12 +412,28 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 24px;
-      transition: border-color 0.2s, transform 0.15s;
+      position: relative;
+      transition: border-color 0.25s, transform 0.2s, box-shadow 0.25s;
+    }
+    .feature::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      padding: 1px;
+      background: linear-gradient(135deg, var(--accent) 0%, transparent 50%, var(--accent) 100%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
     }
     .feature:hover {
-      border-color: var(--border-strong);
-      transform: translateY(-2px);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
+    .feature:hover::after { opacity: 1; }
     .feature-icon {
       width: 36px;
       height: 36px;
@@ -474,6 +556,22 @@
     @media (max-width: 640px) {
       .nav-links a:not(.github) { display: none; }
     }
+
+    /* ---- Motion ---- */
+
+    /* Architecture diagram: animated data dots */
+    .data-dot {
+      fill: var(--accent);
+      filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 12px var(--accent));
+    }
+
+    /* Reduced motion: turn it all off cleanly */
+    @media (prefers-reduced-motion: reduce) {
+      .hero-blob { animation: none !important; opacity: 0.4 !important; }
+      .data-dots { display: none !important; }
+      .cycle-word { transition: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+      .cta-primary::before { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -499,9 +597,11 @@
   </nav>
 
   <section class="hero">
+    <div class="hero-blob b1"></div>
+    <div class="hero-blob b2"></div>
     <div class="container hero-content">
       <span class="hero-badge">MCP Data Layer</span>
-      <h1>Your productivity data.<br><span class="accent">Your agent. Your rules.</span></h1>
+      <h1>Your <span class="cycle-wrap"><span class="cycle-word" id="cycleWord">tasks</span></span>.<br><span class="accent">Your agent. Your rules.</span></h1>
       <p class="tagline">
         A typed MCP server and a clean dashboard over a single self-hosted Postgres.
         Your OpenClaw agent writes. Your browser reads. No SaaS. No AI in the dashboard — that's the point.
@@ -537,56 +637,100 @@
           </p>
         </div>
 
-        <svg class="flow-diagram" viewBox="0 0 520 360" role="img" aria-label="Architecture diagram">
-          <!-- Agent node -->
-          <g class="node" transform="translate(20, 40)">
-            <rect width="170" height="72" rx="10"/>
-            <text x="85" y="32" text-anchor="middle">OpenClaw agent</text>
-            <text class="sub" x="85" y="52" text-anchor="middle">MCP client</text>
-          </g>
-          <!-- Browser node -->
-          <g class="node" transform="translate(20, 248)">
-            <rect width="170" height="72" rx="10"/>
-            <text x="85" y="32" text-anchor="middle">Browser dashboard</text>
-            <text class="sub" x="85" y="52" text-anchor="middle">Next.js UI</text>
-          </g>
-
-          <!-- MCP server node -->
-          <g class="node" transform="translate(230, 40)">
-            <rect width="130" height="72" rx="10"/>
-            <text x="65" y="32" text-anchor="middle">/api/mcp</text>
-            <text class="sub" x="65" y="52" text-anchor="middle">Bearer auth</text>
-          </g>
-          <!-- API routes node -->
-          <g class="node" transform="translate(230, 248)">
-            <rect width="130" height="72" rx="10"/>
-            <text x="65" y="32" text-anchor="middle">/api routes</text>
-            <text class="sub" x="65" y="52" text-anchor="middle">CRUD</text>
-          </g>
-
-          <!-- Postgres (cylinder) -->
-          <g class="db" transform="translate(400, 130)">
-            <path d="M 0 16 L 0 88 A 50 16 0 0 0 100 88 L 100 16" fill="none"/>
-            <ellipse cx="50" cy="16" rx="50" ry="16"/>
-            <path d="M 0 16 A 50 16 0 0 0 100 16" fill="none"/>
-            <text x="50" y="60" text-anchor="middle" fill="#e8e4e0" font-size="13" font-weight="600">Postgres</text>
-          </g>
-
-          <!-- Arrows -->
-          <path class="arrow" d="M 190 76 L 228 76" marker-end="url(#arrowhead)"/>
-          <path class="arrow" d="M 190 284 L 228 284" marker-end="url(#arrowhead)"/>
-          <path class="arrow" d="M 360 76 Q 400 76 420 140" marker-end="url(#arrowhead)"/>
-          <path class="arrow" d="M 360 284 Q 400 284 420 230" marker-end="url(#arrowhead)"/>
-
-          <!-- Arrow labels -->
-          <text class="arrow-label" x="209" y="70" text-anchor="middle">/api/mcp</text>
-          <text class="arrow-label" x="209" y="278" text-anchor="middle">/api/*</text>
-
+        <svg class="flow-diagram" viewBox="0 0 760 380" role="img" aria-label="Architecture diagram">
           <defs>
             <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
               <path d="M 0 0 L 8 4 L 0 8 z" fill="#d4a574"/>
             </marker>
           </defs>
+
+          <!-- OpenClaw agent (top-left) -->
+          <g class="node" transform="translate(10, 50)">
+            <rect width="170" height="72" rx="10"/>
+            <text x="85" y="32" text-anchor="middle">OpenClaw agent</text>
+            <text class="sub" x="85" y="52" text-anchor="middle">MCP client</text>
+          </g>
+          <!-- Browser dashboard (bottom-left) -->
+          <g class="node" transform="translate(10, 258)">
+            <rect width="170" height="72" rx="10"/>
+            <text x="85" y="32" text-anchor="middle">Browser dashboard</text>
+            <text class="sub" x="85" y="52" text-anchor="middle">Next.js UI</text>
+          </g>
+
+          <!-- MCP server (top-middle) -->
+          <g class="node" transform="translate(280, 50)">
+            <rect width="140" height="72" rx="10"/>
+            <text x="70" y="32" text-anchor="middle">/api/mcp</text>
+            <text class="sub" x="70" y="52" text-anchor="middle">Bearer auth</text>
+          </g>
+          <!-- API routes (bottom-middle) -->
+          <g class="node" transform="translate(280, 258)">
+            <rect width="140" height="72" rx="10"/>
+            <text x="70" y="32" text-anchor="middle">/api routes</text>
+            <text class="sub" x="70" y="52" text-anchor="middle">CRUD</text>
+          </g>
+
+          <!-- Drizzle ORM (centre-right) -->
+          <g class="node" transform="translate(510, 154)">
+            <rect width="110" height="72" rx="10"/>
+            <text x="55" y="32" text-anchor="middle">Drizzle</text>
+            <text class="sub" x="55" y="52" text-anchor="middle">ORM</text>
+          </g>
+
+          <!-- Postgres cylinder (far right, larger) -->
+          <g class="db" transform="translate(680, 130)">
+            <path d="M 0 18 L 0 102 A 35 12 0 0 0 70 102 L 70 18" fill="none"/>
+            <ellipse cx="35" cy="18" rx="35" ry="12"/>
+            <path d="M 0 18 A 35 12 0 0 0 70 18" fill="none"/>
+            <text x="35" y="68" text-anchor="middle" fill="#e8e4e0" font-size="13" font-weight="600">Postgres</text>
+            <text class="sub" x="35" y="86" text-anchor="middle">17 tables</text>
+          </g>
+
+          <!-- Arrow paths -->
+          <path id="arrow-mcp"     class="arrow" d="M 180 86  L 278 86"                  marker-end="url(#arrowhead)"/>
+          <path id="arrow-api"     class="arrow" d="M 180 294 L 278 294"                 marker-end="url(#arrowhead)"/>
+          <path id="arrow-mcp-dz"  class="arrow" d="M 420 86  Q 510 86  525 154"         marker-end="url(#arrowhead)"/>
+          <path id="arrow-api-dz"  class="arrow" d="M 420 294 Q 510 294 525 226"         marker-end="url(#arrowhead)"/>
+          <path id="arrow-dz-pg"   class="arrow" d="M 620 190 L 678 184"                 marker-end="url(#arrowhead)"/>
+
+          <!-- Arrow labels -->
+          <text class="arrow-label" x="229" y="76"  text-anchor="middle">Bearer</text>
+          <text class="arrow-label" x="229" y="310" text-anchor="middle">fetch</text>
+          <text class="arrow-label" x="649" y="178" text-anchor="middle">SQL</text>
+
+          <!-- Animated data dots — bigger, brighter, with glow -->
+          <g class="data-dots">
+            <circle class="data-dot" r="5">
+              <animateMotion dur="2.4s" repeatCount="indefinite" begin="0s" calcMode="linear">
+                <mpath href="#arrow-mcp"/>
+              </animateMotion>
+            </circle>
+            <circle class="data-dot" r="5">
+              <animateMotion dur="2.4s" repeatCount="indefinite" begin="0.6s" calcMode="linear">
+                <mpath href="#arrow-mcp-dz"/>
+              </animateMotion>
+            </circle>
+            <circle class="data-dot" r="5">
+              <animateMotion dur="1.4s" repeatCount="indefinite" begin="1.2s" calcMode="linear">
+                <mpath href="#arrow-dz-pg"/>
+              </animateMotion>
+            </circle>
+            <circle class="data-dot" r="5">
+              <animateMotion dur="2.4s" repeatCount="indefinite" begin="1.8s" calcMode="linear">
+                <mpath href="#arrow-api"/>
+              </animateMotion>
+            </circle>
+            <circle class="data-dot" r="5">
+              <animateMotion dur="2.4s" repeatCount="indefinite" begin="2.4s" calcMode="linear">
+                <mpath href="#arrow-api-dz"/>
+              </animateMotion>
+            </circle>
+            <circle class="data-dot" r="5">
+              <animateMotion dur="1.4s" repeatCount="indefinite" begin="3.0s" calcMode="linear">
+                <mpath href="#arrow-dz-pg"/>
+              </animateMotion>
+            </circle>
+          </g>
         </svg>
       </div>
     </div>
@@ -707,6 +851,28 @@
 
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Cycling word in the headline. Smooth crossfade + slide between values.
+    (function () {
+      const el = document.getElementById('cycleWord');
+      if (!el) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const words = ['tasks', 'habits', 'journal', 'workouts', 'goals', 'focus', 'productivity data'];
+      let i = 0;
+      const swap = () => {
+        el.classList.add('out');
+        setTimeout(() => {
+          i = (i + 1) % words.length;
+          el.textContent = words[i];
+          el.classList.remove('out');
+          el.classList.add('in');
+          // Force reflow so the 'in' class actually animates from its starting state
+          void el.offsetWidth;
+          el.classList.remove('in');
+        }, 320);
+      };
+      setInterval(swap, 2400);
+    })();
   </script>
 </body>
 </html>
