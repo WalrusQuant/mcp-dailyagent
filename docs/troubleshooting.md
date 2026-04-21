@@ -98,12 +98,10 @@ Fix: align them in `.env`, then recreate Postgres to pick up the new password:
 ```bash
 docker compose down
 docker volume rm mcp-dailyagent_dailyagent_pgdata   # ⚠️ wipes DB data
-docker compose up -d postgres
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
-# re-seed the profile row
+docker compose up -d
 ```
 
-Only do the volume wipe if there's no data you care about yet.
+The container's entrypoint will re-run migrations and re-seed the profile row on next start. Only do the volume wipe if there's no data you care about yet.
 
 ## Port conflicts
 
@@ -119,7 +117,7 @@ Another service (gotenberg, grafana, whatever) is bound to 3000 on the VPS. Two 
     - "127.0.0.1:3100:3000"
   ```
 
-  Then update the OpenClaw MCP config to `http://<host>:3100/api/mcp` and rebuild: `docker compose up -d --build app`.
+  Then update the OpenClaw MCP config to `http://<host>:3100/api/mcp` and apply: `docker compose up -d` (add `--build` if you're building from source).
 
 ### Postgres port 5432 already in use
 
@@ -140,7 +138,13 @@ docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
 
 ### `drizzle-kit migrate` says "no migrations to apply" but the tables aren't there
 
-The migration files aren't baked into the image. Rebuild:
+The migration files aren't baked into the image. If you're using the prebuilt image, pull again:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+If you're building from source, rebuild and re-run:
 
 ```bash
 docker compose build app

@@ -1,5 +1,7 @@
 # Local development
 
+> **Just want to run an instance for personal use on your laptop?** Follow the [quick-start](quick-start.md) instead — Docker handles everything. This page is for **contributors hacking on the source code** (changing the dashboard, adding MCP tools, debugging the schema, etc.) where you need a hot-reloading `npm run dev` setup.
+
 Setup for running the dashboard + MCP server on your laptop against a local Postgres.
 
 ## Requirements
@@ -175,9 +177,7 @@ If you want to run the full container stack on your laptop (useful for reproduci
 
 ```bash
 cp .env.local .env   # compose reads .env
-docker compose up -d postgres
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
-docker compose up -d --build app
+docker compose up -d --build
 ```
 
-The app will be on `http://localhost:3000` (compose binds to `127.0.0.1:3000` by default).
+The container's entrypoint waits for Postgres, runs migrations, and seeds the profile row automatically. App lands at `http://localhost:3000` (compose binds to `127.0.0.1:3000` by default).

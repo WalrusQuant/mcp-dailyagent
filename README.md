@@ -2,7 +2,7 @@
 
 > 📖 **Full documentation:** <https://dailyagent.dev/>
 
-**Hardened productivity data layer for [OpenClaw](https://openclaw.ai).** Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.
+**Self-hosted productivity data layer for [OpenClaw](https://openclaw.ai).** Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Single-user, Tailscale-gated.
 
 Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journal, workouts, focus sessions, goals, and spaces — exposed to your agent over MCP and to your browser over HTTP.
 
@@ -21,9 +21,9 @@ OpenClaw owns everything about the agent: model choice, scheduling, message deli
 
 ---
 
-## Quick start
+## Install
 
-Prebuilt multi-arch image on GHCR (and Docker Hub). No clone, no build, no manual migration. Full walkthrough in **[docs/quick-start.md](docs/quick-start.md)**.
+Prebuilt multi-arch image on GHCR (and Docker Hub). Same commands work on a VPS, your laptop, a Raspberry Pi — anywhere with Docker. Full walkthrough in **[docs/quick-start.md](docs/quick-start.md)**.
 
 ```bash
 mkdir mcp-dailyagent && cd mcp-dailyagent
@@ -38,24 +38,37 @@ curl -o .env \
 docker compose up -d
 ```
 
-The container runs migrations and seeds the profile row on first start. To update: `docker compose pull && docker compose up -d`.
+The container waits for Postgres, runs migrations, seeds the profile row, and starts the app — all on first boot. Dashboard lands at <http://localhost:3000>.
 
-Then bring your host onto Tailscale (or put it behind another reverse proxy) and firewall port 3000 off the public internet. If you'd rather build the image yourself instead of pulling, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+For a VPS install, do the same thing on the box and add Tailscale + a firewall rule on port 3000. If you'd rather build the image yourself, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
-### OpenClaw connection
-
-Point an MCP server entry at `http://<vps-tailnet-host>:3000/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`. Install the skill file (**[docs/openclaw-skill.md](docs/openclaw-skill.md)**) into OpenClaw's skills directory so the agent knows how to use the tools.
-
-### Local development
+## Update
 
 ```bash
+docker compose pull && docker compose up -d
+```
+
+Pulls the latest image, swaps in a new container, runs any pending migrations automatically. Pin to `:v1` in `docker-compose.yml` for safe auto-upgrades within a major version, or `:latest` for newest.
+
+## OpenClaw connection
+
+Point an MCP server entry at `http://<host>:3000/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`. Drop the skill file (**[docs/openclaw-skill.md](docs/openclaw-skill.md)**) into OpenClaw's skills directory so the agent knows what tools are available.
+
+## Hacking on the code
+
+For contributors who want to modify the dashboard or MCP server itself (not just self-host an instance):
+
+```bash
+git clone https://github.com/WalrusQuant/mcp-dailyagent.git
+cd mcp-dailyagent
+
 # .env.local with DATABASE_URL, SELF_HOSTED_USER_ID, MCP_API_KEY
 npm install
 npm run db:migrate
 npm run dev
 ```
 
-Dashboard at <http://localhost:3000>. MCP at <http://localhost:3000/api/mcp>.
+Dashboard at <http://localhost:3000>. MCP at <http://localhost:3000/api/mcp>. See **[docs/local-development.md](docs/local-development.md)** for the full setup.
 
 ---
 
@@ -235,20 +248,12 @@ npm run db:studio    # Drizzle Studio UI
 
 ---
 
-## Updating a running VPS
-
-```bash
-cd mcp-dailyagent
-git pull
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
-docker compose up -d --build app
-```
-
----
-
 ## Documentation
 
-- **[docs/DEPLOY.md](docs/DEPLOY.md)** — VPS deploy walkthrough (Docker + Compose + Tailscale + OpenClaw wiring)
+- **[docs/quick-start.md](docs/quick-start.md)** — 5-minute install on any Docker host (recommended)
+- **[docs/DEPLOY.md](docs/DEPLOY.md)** — From-source build walkthrough for contributors who want to build the image locally
+- **[docs/local-development.md](docs/local-development.md)** — Hacking on the dashboard / MCP server with `npm run dev`
+- **[docs/backup-restore.md](docs/backup-restore.md)** — Postgres backup, restore, and migration playbook
 - **[docs/openclaw-skill.md](docs/openclaw-skill.md)** — Skill file for OpenClaw: full tool, prompt, and resource reference plus usage patterns
 - **[CLAUDE.md](CLAUDE.md)** — Contributor guide for Claude Code agents working in this repo
 

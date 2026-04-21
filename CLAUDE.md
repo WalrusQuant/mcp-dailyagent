@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Hardened data layer for the user's OpenClaw agent.**
+**Self-hosted data layer for the user's OpenClaw agent.**
 
 The user already tracks tasks/habits/journal/etc. via OpenClaw skills using markdown templates + scripts. This project replaces that fragile setup with a proper Postgres DB behind a typed MCP interface.
 
@@ -133,7 +133,13 @@ Optional:
 
 ## Deployment
 
-See `docs/DEPLOY.md` for the full VPS walkthrough: Docker + compose + Tailscale + OpenClaw connection config. One-time bootstrap, then `git pull && docker compose up -d --build app` for updates.
+**Self-host install:** prebuilt multi-arch image lives at `ghcr.io/walrusquant/mcp-dailyagent` (and `docker.io/walrusquant/mcp-dailyagent`). Users follow `docs/quick-start.md` — download `docker-compose.example.yml` + `.env.example`, fill three env vars, `docker compose up -d`. The container's entrypoint (`docker-entrypoint.sh`) waits for Postgres, runs `drizzle-kit migrate`, seeds the profile row via `INSERT ... ON CONFLICT DO NOTHING`, then execs the Next.js standalone server.
+
+**Self-host update:** `docker compose pull && docker compose up -d`. Migrations run automatically on container start.
+
+**From-source path** (this repo's tracked `docker-compose.yml`, used on the author's VPS): `git pull && docker compose up -d --build app`. Migrations still auto-run via the entrypoint.
+
+GHA workflow at `.github/workflows/docker.yml` builds + pushes the multi-arch image (linux/amd64 + linux/arm64) on every push to `main` and on `v*.*.*` tags. See `docs/DEPLOY.md` for the from-source walkthrough.
 
 ## Tech Stack
 
