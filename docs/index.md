@@ -1,7 +1,7 @@
 # Daily Agent MCP
 
-**Hardened productivity data layer for [OpenClaw](https://openclaw.ai).**
-Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Self-hosted, single-user, Tailscale-gated.
+**Self-hosted productivity data layer for [OpenClaw](https://openclaw.ai).**
+Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Single-user, Tailscale-gated.
 
 !!! info "Not a chatbot"
     This project is *not* an AI product. It's a durable store for tasks, habits, journal, workouts, focus sessions, goals, and spaces — exposed to your agent over MCP and to your browser over HTTP. All generative AI (briefings, reviews, insights) lives in OpenClaw.
@@ -42,17 +42,25 @@ You if:
 
     ---
 
-    The short path: clone, `.env`, compose up, you're done.
+    Download `docker-compose.example.yml`, fill three env vars, `docker compose up -d`. Works on any Docker host.
 
-    [:octicons-arrow-right-24: Get running](quick-start.md)
+    [:octicons-arrow-right-24: Install in 5 minutes](quick-start.md)
 
--   :material-server:{ .lg .middle } **Full VPS walkthrough**
+-   :material-update:{ .lg .middle } **Updating**
 
     ---
 
-    Docker, Compose, Tailscale, OpenClaw wiring — every step spelled out.
+    `docker compose pull && docker compose up -d`. Migrations run automatically.
 
-    [:octicons-arrow-right-24: Deploy guide](DEPLOY.md)
+    [:octicons-arrow-right-24: See quick-start](quick-start.md#updating)
+
+-   :material-server:{ .lg .middle } **Build from source**
+
+    ---
+
+    For contributors who want to build the image locally instead of pulling from GHCR.
+
+    [:octicons-arrow-right-24: Deploy from source](DEPLOY.md)
 
 -   :material-api:{ .lg .middle } **MCP reference**
 
