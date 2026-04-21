@@ -3,8 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { spaceStatusSchema } from "./validators";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -46,7 +47,19 @@ async function createSpace(
   }
 }
 
-async function updateSpace(
+function buildSpacePatch(args: {
+  name?: string;
+  description?: string;
+  status?: string;
+}): Partial<typeof spaces.$inferInsert> {
+  const patch: Partial<typeof spaces.$inferInsert> = {};
+  if (args.name !== undefined) patch.name = args.name;
+  if (args.description !== undefined) patch.description = args.description;
+  if (args.status !== undefined) patch.status = args.status as "active" | "paused" | "completed";
+  return patch;
+}
+
+async function updateSpaceLegacy(
   userId: string,
   args: {
     space_id: string;
@@ -55,10 +68,7 @@ async function updateSpace(
     status?: string;
   }
 ) {
-  const updates: Partial<typeof spaces.$inferInsert> = {};
-  if (args.name !== undefined) updates.name = args.name;
-  if (args.description !== undefined) updates.description = args.description;
-  if (args.status !== undefined) updates.status = args.status as "active" | "paused" | "completed";
+  const updates = buildSpacePatch(args);
   updates.updatedAt = new Date();
 
   try {
@@ -122,9 +132,14 @@ export function registerSpaceTools(server: McpServer) {
   // --- update_space (WRITE) ---
   server.tool(
     "update_space",
-    "Update a space's name, description, or status",
+    "Update a space's name, description, or status. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
       space_id: z.string().describe("Space ID"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
       name: z.string().optional().describe("New name"),
       description: z.string().optional().describe("New description"),
       status: spaceStatusSchema.optional().describe("New status: active, paused, or completed"),
@@ -136,7 +151,22 @@ export function registerSpaceTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "spaces:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await updateSpace(auth.userId, args);
+      if (args.expected_updated_at) {
+        const patch = buildSpacePatch(args);
+        const result = await updateWithVersion<typeof spaces.$inferSelect>({
+          table: spaces,
+          id: args.space_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch,
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Space not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await updateSpaceLegacy(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);

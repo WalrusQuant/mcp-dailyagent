@@ -17,6 +17,7 @@ function serializeHabit(h: typeof habits.$inferSelect) {
     sort_order: h.sortOrder,
     goal_id: h.goalId,
     created_at: h.createdAt,
+    updated_at: h.updatedAt,
   };
 }
 

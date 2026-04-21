@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useToast } from "@/lib/toast-context";
 import { Space } from "@/types/database";
 
 interface SpaceFormModalProps {
@@ -16,6 +17,7 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
   const [status] = useState<"active" | "paused" | "completed">(space?.status || "active");
   const [deadline] = useState(space?.deadline || "");
   const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -34,23 +36,41 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
       const url = space ? `/api/spaces/${space.id}` : "/api/spaces";
       const method = space ? "PATCH" : "POST";
 
+      const body: Record<string, unknown> = {
+        name: name.trim(),
+        description: description.trim() || null,
+        status,
+        deadline: deadline || null,
+      };
+      if (space?.updated_at) {
+        body.expected_updated_at = space.updated_at;
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          status,
-          deadline: deadline || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
         const data = await response.json();
         onSave(data);
+        return;
       }
+
+      if (response.status === 409) {
+        addToast(
+          "This space was changed elsewhere. Close and reopen to see the latest.",
+          "error",
+          5000
+        );
+        return;
+      }
+
+      const err = await response.json().catch(() => ({}));
+      addToast(err.error || "Failed to save space", "error", 4000);
     } catch (error) {
-      console.error("Failed to save space:", error);
+      addToast(error instanceof Error ? error.message : "Failed to save space", "error", 4000);
     } finally {
       setIsSaving(false);
     }

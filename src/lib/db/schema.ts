@@ -182,6 +182,7 @@ export const habits = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_habits_user").on(t.userId),
@@ -285,6 +286,7 @@ export const workoutLogs = pgTable(
     durationMinutes: integer("duration_minutes"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_workout_logs_user_date").on(t.userId, t.logDate)]
 );
@@ -321,6 +323,7 @@ export const focusSessions = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     status: text("status").notNull().default("active"),
     notes: text("notes"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_focus_sessions_user").on(t.userId),

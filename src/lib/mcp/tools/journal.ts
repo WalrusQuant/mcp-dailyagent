@@ -3,8 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, ilike } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -177,11 +178,16 @@ export function registerJournalTools(server: McpServer) {
   // --- create_journal_entry (WRITE) ---
   server.tool(
     "create_journal_entry",
-    "Create or update a journal entry for a given date (defaults to today)",
+    "Create or update a journal entry for a given date (defaults to today). When updating an existing entry, pass expected_updated_at to opt into concurrency-safe writes.",
     {
       content: z.string().describe("Journal entry content"),
       entry_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       mood: z.number().int().min(1).max(5).optional().describe("Mood rating from 1 (low) to 5 (great)"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; if set and the entry exists, requires a version match."),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -189,6 +195,31 @@ export function registerJournalTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "journal:write");
       if (scopeError) return errorResult(scopeError);
+
+      if (args.expected_updated_at) {
+        const today = new Date().toISOString().split("T")[0];
+        const entryDate = args.entry_date ?? today;
+
+        const [existing] = await db
+          .select()
+          .from(journalEntries)
+          .where(and(eq(journalEntries.userId, auth.userId), eq(journalEntries.entryDate, entryDate)))
+          .limit(1);
+
+        if (!existing) return errorResult("Journal entry not found");
+
+        const result = await updateWithVersion<typeof journalEntries.$inferSelect>({
+          table: journalEntries,
+          id: existing.id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch: { content: args.content, mood: args.mood ?? null },
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Journal entry not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
 
       const result = await createOrUpdateJournalEntry(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);

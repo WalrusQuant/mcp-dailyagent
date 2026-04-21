@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
+import { useToast } from "@/lib/toast-context";
 import { Task, Space } from "@/types/database";
 
 interface TaskFormModalProps {
@@ -25,6 +26,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClo
   const [goalId, setGoalId] = useState(task?.goal_id || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
   const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +47,10 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClo
         recurrence: recurrenceType ? { type: recurrenceType } : null,
       };
 
+      if (task?.updated_at) {
+        body.expected_updated_at = task.updated_at;
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -54,9 +60,22 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClo
       if (response.ok) {
         const data = await response.json();
         onSave(data);
+        return;
       }
+
+      if (response.status === 409) {
+        addToast(
+          "This task was changed elsewhere. Close and reopen to see the latest.",
+          "error",
+          5000
+        );
+        return;
+      }
+
+      const err = await response.json().catch(() => ({}));
+      addToast(err.error || "Failed to save task", "error", 4000);
     } catch (error) {
-      console.error("Failed to save task:", error);
+      addToast(error instanceof Error ? error.message : "Failed to save task", "error", 4000);
     } finally {
       setIsSaving(false);
     }

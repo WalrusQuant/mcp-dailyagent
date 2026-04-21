@@ -3,6 +3,8 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { updateWithVersion } from "@/lib/db/optimistic";
+import { conflictResponse } from "@/lib/api-conflict";
 
 function serializeLogExercise(e: typeof workoutLogExercises.$inferSelect) {
   return {
@@ -25,6 +27,7 @@ function serializeLog(l: typeof workoutLogs.$inferSelect, exercises: typeof work
     duration_minutes: l.durationMinutes,
     notes: l.notes,
     created_at: l.createdAt,
+    updated_at: l.updatedAt,
     workout_log_exercises: exercises.map(serializeLogExercise),
   };
 }
@@ -85,7 +88,26 @@ export async function PATCH(
   }
 
   try {
-    if (Object.keys(allowedFields).length > 0) {
+    if (typeof body.expected_updated_at === "string") {
+      const result = await updateWithVersion<typeof workoutLogs.$inferSelect>({
+        table: workoutLogs,
+        id,
+        userId,
+        expectedUpdatedAt: body.expected_updated_at,
+        patch: allowedFields,
+      });
+      if (!result.ok) {
+        if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+        if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+        const currentExercises = await db
+          .select()
+          .from(workoutLogExercises)
+          .where(eq(workoutLogExercises.logId, id))
+          .orderBy(workoutLogExercises.sortOrder);
+        return conflictResponse(serializeLog(result.current, currentExercises));
+      }
+    } else if (Object.keys(allowedFields).length > 0 || Array.isArray(body.exercises)) {
+      allowedFields.updatedAt = new Date();
       await db
         .update(workoutLogs)
         .set(allowedFields)

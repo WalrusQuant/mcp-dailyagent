@@ -3,6 +3,8 @@ import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { updateWithVersion } from "@/lib/db/optimistic";
+import { conflictResponse } from "@/lib/api-conflict";
 
 function serializeEntry(e: typeof journalEntries.$inferSelect) {
   return {
@@ -83,9 +85,24 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  allowedFields.updatedAt = new Date();
-
   try {
+    if (typeof body.expected_updated_at === "string") {
+      const result = await updateWithVersion<typeof journalEntries.$inferSelect>({
+        table: journalEntries,
+        id,
+        userId,
+        expectedUpdatedAt: body.expected_updated_at,
+        patch: allowedFields,
+      });
+      if (!result.ok) {
+        if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+        if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+        return conflictResponse(serializeEntry(result.current));
+      }
+      return NextResponse.json(serializeEntry(result.row));
+    }
+
+    allowedFields.updatedAt = new Date();
     const [row] = await db
       .update(journalEntries)
       .set(allowedFields)

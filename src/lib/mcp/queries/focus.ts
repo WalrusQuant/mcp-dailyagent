@@ -135,7 +135,7 @@ export async function completeFocusSession(
   try {
     const [row] = await db
       .update(focusSessions)
-      .set({ status: "completed", completedAt: new Date() })
+      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
       .returning();
 
