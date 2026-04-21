@@ -42,8 +42,12 @@ COPY --from=builder /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
 COPY --from=builder /app/node_modules/postgres ./node_modules/postgres
 COPY --from=builder /app/src/lib/db/schema.ts ./src/lib/db/schema.ts
 
+# Entrypoint: wait for DB → migrate → seed profile → exec Next.js server
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 USER nextjs
 
 EXPOSE 3000
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
