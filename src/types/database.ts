@@ -77,6 +77,7 @@ export interface Habit {
   sort_order: number;
   goal_id: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface HabitLog {
@@ -127,6 +128,7 @@ export interface WorkoutLog {
   duration_minutes: number | null;
   notes: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface WorkoutSet {
@@ -154,6 +156,7 @@ export interface FocusSession {
   completed_at: string | null;
   status: "active" | "completed" | "cancelled";
   notes: string | null;
+  updated_at: string;
 }
 
 export interface Goal {

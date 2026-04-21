@@ -3,6 +3,8 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { updateWithVersion } from "@/lib/db/optimistic";
+import { conflictResponse } from "@/lib/api-conflict";
 
 function serializeTask(t: typeof tasks.$inferSelect) {
   return {
@@ -102,14 +104,31 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  allowedFields.updatedAt = new Date();
-
   try {
-    const [row] = await db
-      .update(tasks)
-      .set(allowedFields)
-      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
-      .returning();
+    let row: typeof tasks.$inferSelect | null = null;
+
+    if (typeof body.expected_updated_at === "string") {
+      const result = await updateWithVersion<typeof tasks.$inferSelect>({
+        table: tasks,
+        id,
+        userId,
+        expectedUpdatedAt: body.expected_updated_at,
+        patch: allowedFields,
+      });
+      if (!result.ok) {
+        if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+        if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+        return conflictResponse(serializeTask(result.current));
+      }
+      row = result.row;
+    } else {
+      allowedFields.updatedAt = new Date();
+      [row] = await db
+        .update(tasks)
+        .set(allowedFields)
+        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+        .returning();
+    }
 
     if (!row) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

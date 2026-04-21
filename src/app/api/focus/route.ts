@@ -15,6 +15,7 @@ function serializeSession(s: typeof focusSessions.$inferSelect) {
     completed_at: s.completedAt,
     status: s.status,
     notes: s.notes,
+    updated_at: s.updatedAt,
   };
 }
 

@@ -3,8 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, prioritySchema, priorityDescription } from "./validators";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -75,7 +76,26 @@ async function createTask(
   }
 }
 
-async function updateTask(
+function buildTaskPatch(args: {
+  title?: string;
+  notes?: string;
+  priority?: string;
+  task_date?: string;
+  done?: boolean;
+}): Partial<typeof tasks.$inferInsert> {
+  const patch: Partial<typeof tasks.$inferInsert> = {};
+  if (args.title !== undefined) patch.title = args.title;
+  if (args.notes !== undefined) patch.notes = args.notes;
+  if (args.priority !== undefined) patch.priority = args.priority;
+  if (args.task_date !== undefined) patch.taskDate = args.task_date;
+  if (args.done !== undefined) {
+    patch.done = args.done;
+    patch.doneAt = args.done ? new Date() : null;
+  }
+  return patch;
+}
+
+async function updateTaskLegacy(
   userId: string,
   args: {
     task_id: string;
@@ -86,15 +106,7 @@ async function updateTask(
     done?: boolean;
   }
 ) {
-  const updates: Partial<typeof tasks.$inferInsert> = {};
-  if (args.title !== undefined) updates.title = args.title;
-  if (args.notes !== undefined) updates.notes = args.notes;
-  if (args.priority !== undefined) updates.priority = args.priority;
-  if (args.task_date !== undefined) updates.taskDate = args.task_date;
-  if (args.done !== undefined) {
-    updates.done = args.done;
-    updates.doneAt = args.done ? new Date() : null;
-  }
+  const updates = buildTaskPatch(args);
   updates.updatedAt = new Date();
 
   try {
@@ -109,7 +121,7 @@ async function updateTask(
   }
 }
 
-async function completeTask(userId: string, taskId: string) {
+async function completeTaskLegacy(userId: string, taskId: string) {
   try {
     const [row] = await db
       .update(tasks)
@@ -187,9 +199,14 @@ export function registerTaskTools(server: McpServer) {
   // --- update_task (WRITE) ---
   server.tool(
     "update_task",
-    "Update an existing task",
+    "Update an existing task. Pass expected_updated_at (from the last read of this task) to opt into concurrency-safe writes — the call will fail with a conflict if the task was modified in the meantime.",
     {
       task_id: z.string().describe("Task ID"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency. Omit for last-write-wins."),
       title: z.string().optional().describe("New title"),
       notes: z.string().optional().describe("New notes"),
       priority: prioritySchema.optional().describe(priorityDescription),
@@ -203,7 +220,22 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await updateTask(auth.userId, args);
+      if (args.expected_updated_at) {
+        const patch = buildTaskPatch(args);
+        const result = await updateWithVersion<typeof tasks.$inferSelect>({
+          table: tasks,
+          id: args.task_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch,
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Task not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await updateTaskLegacy(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
@@ -213,9 +245,14 @@ export function registerTaskTools(server: McpServer) {
   // --- complete_task (WRITE) ---
   server.tool(
     "complete_task",
-    "Mark a task as complete",
+    "Mark a task as complete. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
       task_id: z.string().describe("Task ID to complete"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -224,7 +261,21 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await completeTask(auth.userId, args.task_id);
+      if (args.expected_updated_at) {
+        const result = await updateWithVersion<typeof tasks.$inferSelect>({
+          table: tasks,
+          id: args.task_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch: { done: true, doneAt: new Date() },
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Task not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await completeTaskLegacy(auth.userId, args.task_id);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);

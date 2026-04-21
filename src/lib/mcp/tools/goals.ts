@@ -3,9 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { goals } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, goalCategorySchema, goalStatusSchema } from "./validators";
 import { logGoalProgress } from "@/lib/mcp/queries/goals";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -59,7 +60,21 @@ async function createGoal(
   }
 }
 
-async function updateGoal(
+function buildGoalPatch(args: {
+  title?: string;
+  description?: string;
+  status?: string;
+  progress?: number;
+}): Partial<typeof goals.$inferInsert> {
+  const patch: Partial<typeof goals.$inferInsert> = {};
+  if (args.title !== undefined) patch.title = args.title;
+  if (args.description !== undefined) patch.description = args.description;
+  if (args.status !== undefined) patch.status = args.status as "active" | "completed" | "abandoned";
+  if (args.progress !== undefined) patch.progress = args.progress;
+  return patch;
+}
+
+async function updateGoalLegacy(
   userId: string,
   args: {
     goal_id: string;
@@ -69,11 +84,7 @@ async function updateGoal(
     progress?: number;
   }
 ) {
-  const updates: Partial<typeof goals.$inferInsert> = {};
-  if (args.title !== undefined) updates.title = args.title;
-  if (args.description !== undefined) updates.description = args.description;
-  if (args.status !== undefined) updates.status = args.status as "active" | "completed" | "abandoned";
-  if (args.progress !== undefined) updates.progress = args.progress;
+  const updates = buildGoalPatch(args);
   updates.updatedAt = new Date();
 
   try {
@@ -143,9 +154,14 @@ export function registerGoalTools(server: McpServer) {
   // --- update_goal (WRITE) ---
   server.tool(
     "update_goal",
-    "Update an existing goal's details or status",
+    "Update an existing goal's details or status. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
       goal_id: z.string().describe("Goal ID"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
       title: z.string().optional().describe("New title"),
       description: z.string().optional().describe("New description"),
       status: goalStatusSchema.optional().describe("New status: active, completed, or abandoned"),
@@ -158,7 +174,22 @@ export function registerGoalTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "goals:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await updateGoal(auth.userId, args);
+      if (args.expected_updated_at) {
+        const patch = buildGoalPatch(args);
+        const result = await updateWithVersion<typeof goals.$inferSelect>({
+          table: goals,
+          id: args.goal_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch,
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Goal not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await updateGoalLegacy(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);

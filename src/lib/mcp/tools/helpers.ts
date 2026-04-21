@@ -44,5 +44,18 @@ export function errorResult(msg: string) {
   };
 }
 
+/** Build a structured conflict result for optimistic-concurrency failures. */
+export function conflictResult<T>(current: T) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({ error: "conflict", current }, null, 2),
+      },
+    ],
+    isError: true as const,
+  };
+}
+
 /** Standard "not authenticated" response. */
 export const NOT_AUTHENTICATED = errorResult("Not authenticated");

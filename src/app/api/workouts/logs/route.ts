@@ -25,6 +25,7 @@ function serializeLog(l: typeof workoutLogs.$inferSelect, exercises: typeof work
     duration_minutes: l.durationMinutes,
     notes: l.notes,
     created_at: l.createdAt,
+    updated_at: l.updatedAt,
     workout_log_exercises: exercises.map(serializeLogExercise),
   };
 }

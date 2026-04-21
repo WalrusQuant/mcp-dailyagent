@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
+import { useToast } from "@/lib/toast-context";
 import { Goal } from "@/types/database";
 
 interface GoalFormModalProps {
@@ -28,6 +29,7 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
   const [progressMode, setProgressMode] = useState(goal?.progress_mode || "auto");
   const [progress, setProgress] = useState(goal?.progress || 0);
   const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +52,10 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
         body.progress = progress;
       }
 
+      if (goal?.updated_at) {
+        body.expected_updated_at = goal.updated_at;
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -59,9 +65,22 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
       if (response.ok) {
         const data = await response.json();
         onSave(data);
+        return;
       }
+
+      if (response.status === 409) {
+        addToast(
+          "This goal was changed elsewhere. Close and reopen to see the latest.",
+          "error",
+          5000
+        );
+        return;
+      }
+
+      const err = await response.json().catch(() => ({}));
+      addToast(err.error || "Failed to save goal", "error", 4000);
     } catch (error) {
-      console.error("Failed to save goal:", error);
+      addToast(error instanceof Error ? error.message : "Failed to save goal", "error", 4000);
     } finally {
       setIsSaving(false);
     }

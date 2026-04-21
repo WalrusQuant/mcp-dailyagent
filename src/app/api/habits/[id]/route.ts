@@ -3,6 +3,8 @@ import { db } from "@/lib/db/client";
 import { habits } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { updateWithVersion } from "@/lib/db/optimistic";
+import { conflictResponse } from "@/lib/api-conflict";
 
 function serializeHabit(h: typeof habits.$inferSelect) {
   return {
@@ -17,6 +19,7 @@ function serializeHabit(h: typeof habits.$inferSelect) {
     sort_order: h.sortOrder,
     goal_id: h.goalId,
     created_at: h.createdAt,
+    updated_at: h.updatedAt,
   };
 }
 
@@ -75,6 +78,23 @@ export async function PATCH(
   }
 
   try {
+    if (typeof body.expected_updated_at === "string") {
+      const result = await updateWithVersion<typeof habits.$inferSelect>({
+        table: habits,
+        id,
+        userId,
+        expectedUpdatedAt: body.expected_updated_at,
+        patch: allowedFields,
+      });
+      if (!result.ok) {
+        if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+        if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+        return conflictResponse(serializeHabit(result.current));
+      }
+      return NextResponse.json(serializeHabit(result.row));
+    }
+
+    allowedFields.updatedAt = new Date();
     const [row] = await db
       .update(habits)
       .set(allowedFields)

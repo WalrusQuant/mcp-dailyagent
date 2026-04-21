@@ -3,8 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -105,11 +106,11 @@ async function startFocusSession(
   }
 }
 
-async function completeFocusSession(userId: string, sessionId: string) {
+async function completeFocusSessionLegacy(userId: string, sessionId: string) {
   try {
     const [row] = await db
       .update(focusSessions)
-      .set({ completedAt: new Date(), status: "completed" })
+      .set({ completedAt: new Date(), status: "completed", updatedAt: new Date() })
       .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
       .returning();
     return { data: row ?? null, error: row ? null : "Session not found" };
@@ -190,9 +191,14 @@ export function registerFocusTools(server: McpServer) {
   // --- complete_focus_session (WRITE) ---
   server.tool(
     "complete_focus_session",
-    "Mark a focus session as complete",
+    "Mark a focus session as complete. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
       session_id: z.string().describe("Focus session ID to complete"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -201,7 +207,21 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await completeFocusSession(auth.userId, args.session_id);
+      if (args.expected_updated_at) {
+        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
+          table: focusSessions,
+          id: args.session_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch: { status: "completed", completedAt: new Date() },
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Session not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await completeFocusSessionLegacy(auth.userId, args.session_id);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);

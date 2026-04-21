@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
+import { useToast } from "@/lib/toast-context";
 import { Habit } from "@/types/database";
 
 interface HabitFormModalProps {
@@ -22,6 +23,7 @@ export function HabitFormModal({ habit, onClose, onSave }: HabitFormModalProps) 
   const [color, setColor] = useState(habit?.color || "#d4a574");
   const [goalId, setGoalId] = useState(habit?.goal_id || "");
   const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
   const toggleDay = (day: number) => {
     setTargetDays((prev) =>
@@ -38,25 +40,43 @@ export function HabitFormModal({ habit, onClose, onSave }: HabitFormModalProps) 
       const url = habit ? `/api/habits/${habit.id}` : "/api/habits";
       const method = habit ? "PATCH" : "POST";
 
+      const body: Record<string, unknown> = {
+        name: name.trim(),
+        description: description.trim() || null,
+        frequency,
+        target_days: targetDays,
+        color,
+        goal_id: goalId || null,
+      };
+      if (habit?.updated_at) {
+        body.expected_updated_at = habit.updated_at;
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          frequency,
-          target_days: targetDays,
-          color,
-          goal_id: goalId || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
         const data = await response.json();
         onSave(data);
+        return;
       }
+
+      if (response.status === 409) {
+        addToast(
+          "This habit was changed elsewhere. Close and reopen to see the latest.",
+          "error",
+          5000
+        );
+        return;
+      }
+
+      const err = await response.json().catch(() => ({}));
+      addToast(err.error || "Failed to save habit", "error", 4000);
     } catch (error) {
-      console.error("Failed to save habit:", error);
+      addToast(error instanceof Error ? error.message : "Failed to save habit", "error", 4000);
     } finally {
       setIsSaving(false);
     }
