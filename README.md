@@ -23,21 +23,24 @@ OpenClaw owns everything about the agent: model choice, scheduling, message deli
 
 ## Quick start
 
-For the full walkthrough (Docker Compose + Tailscale + OpenClaw hookup on a VPS) see **[docs/DEPLOY.md](docs/DEPLOY.md)**. The short version:
+Prebuilt multi-arch image on GHCR (and Docker Hub). No clone, no build, no manual migration. Full walkthrough in **[docs/quick-start.md](docs/quick-start.md)**.
 
 ```bash
-git clone https://github.com/WalrusQuant/mcp-dailyagent.git
-cd mcp-dailyagent
+mkdir mcp-dailyagent && cd mcp-dailyagent
 
-# Write .env with DATABASE_URL, SELF_HOSTED_USER_ID, MCP_API_KEY
-# (see DEPLOY.md for secret generation)
+curl -o docker-compose.yml \
+  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/docker-compose.example.yml
+curl -o .env \
+  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/.env.example
 
-docker compose up -d postgres
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
-docker compose up -d --build app
+# Edit .env: set SELF_HOSTED_USER_ID (uuidgen), MCP_API_KEY (openssl rand -hex 32), POSTGRES_PASSWORD
+
+docker compose up -d
 ```
 
-Then bring your VPS onto Tailscale and firewall port 3000 off the public internet.
+The container runs migrations and seeds the profile row on first start. To update: `docker compose pull && docker compose up -d`.
+
+Then bring your host onto Tailscale (or put it behind another reverse proxy) and firewall port 3000 off the public internet. If you'd rather build the image yourself instead of pulling, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ### OpenClaw connection
 

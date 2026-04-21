@@ -1,4 +1,6 @@
-# VPS Deploy
+# VPS Deploy (from source)
+
+> **Most users should follow the [quick-start guide](quick-start.md) instead.** It uses the prebuilt container image, skips the clone + build step, and runs migrations automatically. This page is for contributors who want to build the image from source or customize it.
 
 End-to-end deployment for a self-hosted single-user VPS. The dashboard is reachable via Tailscale only; the MCP server is protected by a bearer token (`MCP_API_KEY`).
 
