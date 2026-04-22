@@ -3,16 +3,7 @@ import { db } from "@/lib/db/client";
 import { tags } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeTag(t: typeof tags.$inferSelect) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    name: t.name,
-    color: t.color,
-    created_at: t.createdAt,
-  };
-}
+import { serializeTag } from "@/lib/mcp/queries/tags";
 
 export async function GET() {
   const userId = getUserId();
@@ -36,7 +27,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { name, color } = body;
 
-  if (!name || typeof name !== "string") {
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 

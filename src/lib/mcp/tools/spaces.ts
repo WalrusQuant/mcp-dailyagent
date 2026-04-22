@@ -36,8 +36,8 @@ async function createSpace(
       .insert(spaces)
       .values({
         userId,
-        name: args.name,
-        description: args.description ?? null,
+        name: args.name.trim(),
+        description: args.description?.trim() ?? null,
         status: "active",
       })
       .returning();
@@ -53,8 +53,8 @@ function buildSpacePatch(args: {
   status?: string;
 }): Partial<typeof spaces.$inferInsert> {
   const patch: Partial<typeof spaces.$inferInsert> = {};
-  if (args.name !== undefined) patch.name = args.name;
-  if (args.description !== undefined) patch.description = args.description;
+  if (args.name !== undefined) patch.name = args.name.trim();
+  if (args.description !== undefined) patch.description = args.description?.trim();
   if (args.status !== undefined) patch.status = args.status as "active" | "paused" | "completed";
   return patch;
 }
@@ -112,7 +112,7 @@ export function registerSpaceTools(server: McpServer) {
     "create_space",
     "Create a new space (project) to organize tasks",
     {
-      name: z.string().describe("Space name"),
+      name: z.string().min(1).describe("Space name"),
       description: z.string().optional().describe("Space description"),
     },
     async (args, extra: Extra) => {
