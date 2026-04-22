@@ -3,23 +3,7 @@ import { db } from "@/lib/db/client";
 import { habits } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeHabit(h: typeof habits.$inferSelect) {
-  return {
-    id: h.id,
-    user_id: h.userId,
-    name: h.name,
-    description: h.description,
-    frequency: h.frequency,
-    target_days: h.targetDays,
-    color: h.color,
-    archived: h.archived,
-    sort_order: h.sortOrder,
-    goal_id: h.goalId,
-    created_at: h.createdAt,
-    updated_at: h.updatedAt,
-  };
-}
+import { serializeHabit } from "@/lib/mcp/queries/habits";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();

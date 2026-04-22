@@ -5,6 +5,23 @@ import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
 
+export function serializeHabit(h: typeof habits.$inferSelect) {
+  return {
+    id: h.id,
+    user_id: h.userId,
+    name: h.name,
+    description: h.description,
+    frequency: h.frequency,
+    target_days: h.targetDays,
+    color: h.color,
+    archived: h.archived,
+    sort_order: h.sortOrder,
+    goal_id: h.goalId,
+    created_at: h.createdAt,
+    updated_at: h.updatedAt,
+  };
+}
+
 export interface Habit {
   id: string;
   user_id: string;
