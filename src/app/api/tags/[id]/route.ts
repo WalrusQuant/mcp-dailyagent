@@ -3,16 +3,7 @@ import { db } from "@/lib/db/client";
 import { tags } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeTag(t: typeof tags.$inferSelect) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    name: t.name,
-    color: t.color,
-    created_at: t.createdAt,
-  };
-}
+import { serializeTag } from "@/lib/mcp/queries/tags";
 
 export async function PATCH(
   request: NextRequest,
@@ -23,7 +14,13 @@ export async function PATCH(
 
   const body = await request.json();
   const allowedFields: Partial<typeof tags.$inferInsert> = {};
-  if (typeof body.name === "string") allowedFields.name = body.name.trim();
+  if (typeof body.name === "string") {
+    const trimmed = body.name.trim();
+    if (trimmed.length === 0) {
+      return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
+    }
+    allowedFields.name = trimmed;
+  }
   if (typeof body.color === "string") allowedFields.color = body.color;
 
   if (Object.keys(allowedFields).length === 0) {

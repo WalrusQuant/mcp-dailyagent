@@ -5,20 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-
-function serializeSpace(s: typeof spaces.$inferSelect) {
-  return {
-    id: s.id,
-    user_id: s.userId,
-    name: s.name,
-    description: s.description,
-    status: s.status,
-    progress: s.progress,
-    deadline: s.deadline,
-    created_at: s.createdAt,
-    updated_at: s.updatedAt,
-  };
-}
+import { serializeSpace } from "@/lib/mcp/queries/spaces";
 
 export async function GET(
   _request: NextRequest,

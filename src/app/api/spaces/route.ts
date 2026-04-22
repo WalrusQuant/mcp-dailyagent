@@ -3,20 +3,7 @@ import { db } from "@/lib/db/client";
 import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeSpace(s: typeof spaces.$inferSelect) {
-  return {
-    id: s.id,
-    user_id: s.userId,
-    name: s.name,
-    description: s.description,
-    status: s.status,
-    progress: s.progress,
-    deadline: s.deadline,
-    created_at: s.createdAt,
-    updated_at: s.updatedAt,
-  };
-}
+import { serializeSpace } from "@/lib/mcp/queries/spaces";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -48,7 +35,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { name, description, status, deadline } = body;
 
-  if (!name || typeof name !== "string") {
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
@@ -57,8 +44,8 @@ export async function POST(request: NextRequest) {
       .insert(spaces)
       .values({
         userId,
-        name,
-        description: description || null,
+        name: name.trim(),
+        description: description?.trim() || null,
         status: status || "active",
         deadline: deadline || null,
       })
