@@ -73,13 +73,14 @@ Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Stream
 
 - `src/lib/db/client.ts` — Drizzle + postgres.js client (lazy-init so build doesn't need DATABASE_URL)
 - `src/lib/db/schema.ts` — All table defs
+- `src/lib/db/optimistic.ts` — Optimistic concurrency helper (version-based update)
 - `src/lib/auth.ts` — `getUserId()` reading `SELF_HOSTED_USER_ID`
 - `src/lib/dates.ts` — Date utilities
 - `src/lib/theme.tsx` — ThemeProvider (light/dark/system)
 - `src/lib/retry.ts` — Retry utility
 - `src/lib/token-validation.ts` — MCP bearer-token validation
 - `src/lib/oauth-scopes.ts` — Scope list + `all` expansion
-- `src/types/database.ts` — Legacy TS types still imported by some UI components (harmless; will be regenerated from Drizzle later)
+- `src/types/database.ts` — Serialized JSON shapes for dashboard API routes (snake_case); keep in sync with `schema.ts`
 
 ### Components
 
