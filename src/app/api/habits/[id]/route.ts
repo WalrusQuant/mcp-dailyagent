@@ -5,23 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-
-function serializeHabit(h: typeof habits.$inferSelect) {
-  return {
-    id: h.id,
-    user_id: h.userId,
-    name: h.name,
-    description: h.description,
-    frequency: h.frequency,
-    target_days: h.targetDays,
-    color: h.color,
-    archived: h.archived,
-    sort_order: h.sortOrder,
-    goal_id: h.goalId,
-    created_at: h.createdAt,
-    updated_at: h.updatedAt,
-  };
-}
+import { serializeHabit } from "@/lib/mcp/queries/habits";
 
 export async function GET(
   _request: NextRequest,
