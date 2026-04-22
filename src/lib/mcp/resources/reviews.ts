@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getAuth } from "@/lib/mcp/tools/helpers";
+import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getLatestReview } from "@/lib/mcp/queries/reviews";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
@@ -13,9 +13,10 @@ export function registerReviewResources(server: McpServer) {
       const auth = getAuth(extra);
       if (!auth) return { contents: [] };
 
-      if (!auth.scopes.includes("review:read")) {
+      const scopeError = checkScope(auth.scopes, "review:read");
+      if (scopeError) {
         return {
-          contents: [{ uri: uri.href, mimeType: "text/plain", text: "Insufficient scope: review:read" }],
+          contents: [{ uri: uri.href, mimeType: "text/plain", text: scopeError }],
         };
       }
 

@@ -36,10 +36,6 @@ export const OAUTH_SCOPES: ScopeDefinition[] = [
   { scope: "spaces:read", label: "Read your spaces", description: "View spaces and their details", category: "Spaces" },
   { scope: "spaces:write", label: "Manage your spaces", description: "Create and update spaces", category: "Spaces" },
 
-  // Profile
-  { scope: "profile:read", label: "Read your profile", description: "View profile and settings", category: "Profile" },
-  { scope: "profile:write", label: "Update your profile", description: "Modify profile settings", category: "Profile" },
-
   // Calendar
   { scope: "calendar:read", label: "Read your calendar", description: "View daily and weekly summaries", category: "Calendar" },
 
