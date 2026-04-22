@@ -5,61 +5,9 @@ import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-
-function serializeGoal(g: typeof goals.$inferSelect) {
-  return {
-    id: g.id,
-    user_id: g.userId,
-    title: g.title,
-    description: g.description,
-    category: g.category,
-    status: g.status,
-    progress: g.progress,
-    progress_mode: g.progressMode,
-    target_date: g.targetDate,
-    completed_at: g.completedAt,
-    sort_order: g.sortOrder,
-    created_at: g.createdAt,
-    updated_at: g.updatedAt,
-  };
-}
-
-function serializeTask(t: typeof tasks.$inferSelect) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    title: t.title,
-    notes: t.notes,
-    priority: t.priority,
-    sort_order: t.sortOrder,
-    done: t.done,
-    done_at: t.doneAt,
-    task_date: t.taskDate,
-    rolled_from: t.rolledFrom,
-    space_id: t.spaceId,
-    goal_id: t.goalId,
-    recurrence: t.recurrence,
-    created_at: t.createdAt,
-    updated_at: t.updatedAt,
-  };
-}
-
-function serializeHabit(h: typeof habits.$inferSelect) {
-  return {
-    id: h.id,
-    user_id: h.userId,
-    name: h.name,
-    description: h.description,
-    frequency: h.frequency,
-    target_days: h.targetDays,
-    color: h.color,
-    archived: h.archived,
-    sort_order: h.sortOrder,
-    goal_id: h.goalId,
-    created_at: h.createdAt,
-    updated_at: h.updatedAt,
-  };
-}
+import { serializeGoal } from "@/lib/mcp/queries/goals";
+import { serializeTask } from "@/lib/mcp/queries/tasks";
+import { serializeHabit } from "@/lib/mcp/queries/habits";
 
 export async function GET(
   _request: NextRequest,

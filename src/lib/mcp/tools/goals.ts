@@ -46,7 +46,7 @@ async function createGoal(
       .insert(goals)
       .values({
         userId,
-        title: args.title,
+        title: args.title.trim(),
         description: args.description ?? null,
         ...(args.category ? { category: args.category as "health" | "career" | "personal" | "financial" | "learning" | "relationships" | "other" } : {}),
         targetDate: args.target_date ?? null,
