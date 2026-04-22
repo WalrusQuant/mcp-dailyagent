@@ -4,6 +4,24 @@ import { eq, and, asc, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
+export function serializeGoal(g: typeof goals.$inferSelect) {
+  return {
+    id: g.id,
+    user_id: g.userId,
+    title: g.title,
+    description: g.description,
+    category: g.category,
+    status: g.status,
+    progress: g.progress,
+    progress_mode: g.progressMode,
+    target_date: g.targetDate,
+    completed_at: g.completedAt,
+    sort_order: g.sortOrder,
+    created_at: g.createdAt,
+    updated_at: g.updatedAt,
+  };
+}
+
 export interface Goal {
   id: string;
   user_id: string;
