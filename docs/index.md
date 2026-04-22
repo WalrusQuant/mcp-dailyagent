@@ -98,4 +98,4 @@ You if:
 
 ## License
 
-Personal use. Modify and self-host freely. No redistribution of source.
+Apache 2.0. Modify and self-host freely.
