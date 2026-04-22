@@ -5,47 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-
-function serializeTask(t: typeof tasks.$inferSelect) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    title: t.title,
-    notes: t.notes,
-    priority: t.priority,
-    sort_order: t.sortOrder,
-    done: t.done,
-    done_at: t.doneAt,
-    task_date: t.taskDate,
-    rolled_from: t.rolledFrom,
-    space_id: t.spaceId,
-    goal_id: t.goalId,
-    recurrence: t.recurrence,
-    created_at: t.createdAt,
-    updated_at: t.updatedAt,
-  };
-}
-
-function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: number[] }): string {
-  const d = new Date(taskDate + "T00:00:00");
-  switch (recurrence.type) {
-    case "daily":
-      d.setDate(d.getDate() + 1);
-      break;
-    case "weekdays": {
-      d.setDate(d.getDate() + 1);
-      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-      break;
-    }
-    case "weekly":
-      d.setDate(d.getDate() + 7);
-      break;
-    case "monthly":
-      d.setMonth(d.getMonth() + 1);
-      break;
-  }
-  return d.toISOString().split("T")[0];
-}
+import { serializeTask, getNextOccurrence } from "@/lib/mcp/queries/tasks";
 
 export async function GET(
   _request: NextRequest,

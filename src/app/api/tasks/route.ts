@@ -3,26 +3,7 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeTask(t: typeof tasks.$inferSelect) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    title: t.title,
-    notes: t.notes,
-    priority: t.priority,
-    sort_order: t.sortOrder,
-    done: t.done,
-    done_at: t.doneAt,
-    task_date: t.taskDate,
-    rolled_from: t.rolledFrom,
-    space_id: t.spaceId,
-    goal_id: t.goalId,
-    recurrence: t.recurrence,
-    created_at: t.createdAt,
-    updated_at: t.updatedAt,
-  };
-}
+import { serializeTask } from "@/lib/mcp/queries/tasks";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -38,7 +19,6 @@ export async function GET(request: NextRequest) {
     let rows;
 
     if (taskDate === today) {
-      // Today: also include incomplete tasks from previous days
       const conditions = and(
         eq(tasks.userId, userId),
         or(eq(tasks.taskDate, taskDate), and(lt(tasks.taskDate, taskDate), eq(tasks.done, false))),
