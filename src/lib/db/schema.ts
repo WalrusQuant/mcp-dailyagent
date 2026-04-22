@@ -23,14 +23,14 @@ export const profiles = pgTable("profiles", {
   email: text("email").notNull(),
   displayName: text("display_name"),
   avatarUrl: text("avatar_url"),
-  timezone: text("timezone").default("UTC"),
+  timezone: text("timezone").notNull().default("UTC"),
   isAdmin: boolean("is_admin").notNull().default(false),
   aiModelConfig: jsonb("ai_model_config"),
   toolCallingEnabled: boolean("tool_calling_enabled").notNull().default(true),
   briefingEnabled: boolean("briefing_enabled").notNull().default(true),
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -229,6 +229,7 @@ export const journalEntries = pgTable(
   },
   (t) => [
     index("idx_journal_user_date").on(t.userId, t.entryDate),
+    uniqueIndex("journal_entries_user_date_unique").on(t.userId, t.entryDate),
     index("idx_journal_search").using("gin", sql`to_tsvector('english', ${t.content})`),
     check("journal_mood_check", sql`${t.mood} >= 1 AND ${t.mood} <= 5`),
   ]
@@ -288,7 +289,10 @@ export const workoutLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("idx_workout_logs_user_date").on(t.userId, t.logDate)]
+  (t) => [
+    index("idx_workout_logs_user_date").on(t.userId, t.logDate),
+    index("idx_workout_logs_template").on(t.templateId),
+  ]
 );
 
 export const workoutLogExercises = pgTable(
@@ -366,8 +370,8 @@ export const dailyBriefings = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     briefingDate: date("briefing_date").notNull().defaultNow(),
     content: text("content").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("daily_briefings_user_date_unique").on(t.userId, t.briefingDate),
@@ -386,7 +390,7 @@ export const insightCache = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     cacheDate: date("cache_date").notNull().defaultNow(),
     insights: jsonb("insights").notNull().default(sql`'[]'::jsonb`),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("insight_cache_user_date_unique").on(t.userId, t.cacheDate),
