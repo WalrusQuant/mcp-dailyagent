@@ -3,6 +3,20 @@ import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 
+export function serializeSpace(s: typeof spaces.$inferSelect) {
+  return {
+    id: s.id,
+    user_id: s.userId,
+    name: s.name,
+    description: s.description,
+    status: s.status,
+    progress: s.progress,
+    deadline: s.deadline,
+    created_at: s.createdAt,
+    updated_at: s.updatedAt,
+  };
+}
+
 export interface Space {
   id: string;
   user_id: string;
