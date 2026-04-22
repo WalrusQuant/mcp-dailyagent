@@ -94,15 +94,6 @@ export async function validateMcpAuth(
 }
 
 /**
- * Check if the authenticated user has the required scope.
- */
-export function hasScope(auth: AuthResult, requiredScope: string): boolean {
-  // If they have the expanded "all" scopes, they have everything
-  // The expandScopes function already handled "all" → individual scopes
-  return auth.scopes.includes(requiredScope);
-}
-
-/**
  * Build a WWW-Authenticate header value per RFC 6750.
  */
 function buildWwwAuthenticate(error?: string, errorDescription?: string): string {

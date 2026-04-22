@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getAuth } from "@/lib/mcp/tools/helpers";
+import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getSpaces } from "@/lib/mcp/queries/spaces";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
@@ -13,9 +13,10 @@ export function registerSpaceResources(server: McpServer) {
       const auth = getAuth(extra);
       if (!auth) return { contents: [] };
 
-      if (!auth.scopes.includes("spaces:read")) {
+      const scopeError = checkScope(auth.scopes, "spaces:read");
+      if (scopeError) {
         return {
-          contents: [{ uri: uri.href, mimeType: "text/plain", text: "Insufficient scope: spaces:read" }],
+          contents: [{ uri: uri.href, mimeType: "text/plain", text: scopeError }],
         };
       }
 

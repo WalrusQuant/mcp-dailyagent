@@ -74,7 +74,6 @@ Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Stream
 - `src/lib/db/client.ts` — Drizzle + postgres.js client (lazy-init so build doesn't need DATABASE_URL)
 - `src/lib/db/schema.ts` — All table defs
 - `src/lib/auth.ts` — `getUserId()` reading `SELF_HOSTED_USER_ID`
-- `src/lib/admin.ts` — Admin access helpers (single-user: always true)
 - `src/lib/dates.ts` — Date utilities
 - `src/lib/theme.tsx` — ThemeProvider (light/dark/system)
 - `src/lib/retry.ts` — Retry utility

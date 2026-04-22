@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getAuth } from "@/lib/mcp/tools/helpers";
+import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getTodayFocusStats } from "@/lib/mcp/queries/focus";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
@@ -13,9 +13,10 @@ export function registerFocusResources(server: McpServer) {
       const auth = getAuth(extra);
       if (!auth) return { contents: [] };
 
-      if (!auth.scopes.includes("focus:read")) {
+      const scopeError = checkScope(auth.scopes, "focus:read");
+      if (scopeError) {
         return {
-          contents: [{ uri: uri.href, mimeType: "text/plain", text: "Insufficient scope: focus:read" }],
+          contents: [{ uri: uri.href, mimeType: "text/plain", text: scopeError }],
         };
       }
 

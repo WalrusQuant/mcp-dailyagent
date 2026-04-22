@@ -39,7 +39,7 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
   // Pass auth info so tool/resource handlers can access userId and scopes
   const response = await transport.handleRequest(request, {
     authInfo: {
-      token: authHeader?.replace(/^Bearer\s+/i, "") ?? "",
+      token: "",
       clientId: auth.clientId ?? "",
       scopes: auth.scopes,
       extra: {
