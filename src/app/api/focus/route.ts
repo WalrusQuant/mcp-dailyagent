@@ -3,21 +3,7 @@ import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeSession(s: typeof focusSessions.$inferSelect) {
-  return {
-    id: s.id,
-    user_id: s.userId,
-    task_id: s.taskId,
-    duration_minutes: s.durationMinutes,
-    break_minutes: s.breakMinutes,
-    started_at: s.startedAt,
-    completed_at: s.completedAt,
-    status: s.status,
-    notes: s.notes,
-    updated_at: s.updatedAt,
-  };
-}
+import { serializeSession } from "@/lib/mcp/queries/focus";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();

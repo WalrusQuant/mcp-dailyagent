@@ -5,21 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-
-function serializeSession(s: typeof focusSessions.$inferSelect) {
-  return {
-    id: s.id,
-    user_id: s.userId,
-    task_id: s.taskId,
-    duration_minutes: s.durationMinutes,
-    break_minutes: s.breakMinutes,
-    started_at: s.startedAt,
-    completed_at: s.completedAt,
-    status: s.status,
-    notes: s.notes,
-    updated_at: s.updatedAt,
-  };
-}
+import { serializeSession } from "@/lib/mcp/queries/focus";
 
 export async function PATCH(
   request: NextRequest,
