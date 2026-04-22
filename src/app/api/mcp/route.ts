@@ -5,7 +5,7 @@ import { authenticateMcpRequest } from "@/lib/mcp/auth";
 
 /**
  * MCP Server endpoint — handles all MCP communication via Streamable HTTP.
- * Auth: Bearer token (API key with da_sk_ prefix).
+ * Auth: Bearer token must match MCP_API_KEY env var.
  * Stateless: each request is independently authenticated.
  */
 
