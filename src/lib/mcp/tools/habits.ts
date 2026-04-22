@@ -2,10 +2,10 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
-import { eq, and, gte, lte, asc } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, habitFrequencySchema } from "./validators";
-import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
+import { getHabitStats } from "@/lib/mcp/queries/habits";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -19,61 +19,6 @@ async function getHabits(userId: string, includeArchived = false) {
 
     const rows = await db.select().from(habits).where(conditions).orderBy(asc(habits.createdAt));
     return { data: rows, error: null };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
-async function getHabitStats(userId: string, habitId: string, days = 30) {
-  try {
-    const safeDays = Math.max(1, days);
-    const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - (safeDays - 1));
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = today.toISOString().split("T")[0];
-
-    const habitRows = await db
-      .select({ id: habits.id, name: habits.name, color: habits.color, targetDays: habits.targetDays })
-      .from(habits)
-      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)));
-
-    if (habitRows.length === 0) return { data: null, error: "Habit not found" };
-    const habit = habitRows[0];
-
-    const logRows = await db
-      .select({ logDate: habitLogs.logDate })
-      .from(habitLogs)
-      .where(
-        and(
-          eq(habitLogs.habitId, habitId),
-          gte(habitLogs.logDate, startDateStr),
-          lte(habitLogs.logDate, endDateStr)
-        )
-      );
-
-    const habitLogDates = logRows.map((l) => l.logDate);
-    const targetDays: number[] =
-      Array.isArray(habit.targetDays) && habit.targetDays.length > 0
-        ? habit.targetDays
-        : [1, 2, 3, 4, 5, 6, 7];
-
-    const streak = calculateStreak(habitLogDates, targetDays);
-    const applicableDays = getApplicableDays(startDate, today, targetDays);
-    const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
-    const recentLogs = [...new Set(habitLogDates)].sort().reverse();
-
-    return {
-      data: {
-        id: habit.id,
-        name: habit.name,
-        color: habit.color ?? null,
-        streak,
-        completionRate: Math.min(1, completionRate),
-        recentLogs,
-      },
-      error: null,
-    };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
