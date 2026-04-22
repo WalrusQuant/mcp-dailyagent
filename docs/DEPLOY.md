@@ -43,42 +43,18 @@ Edit `.env` to make the `POSTGRES_PASSWORD` match the password in `DATABASE_URL`
 
 Compose auto-loads `.env`, so no `--env-file` flag needed.
 
-### 3. Start Postgres
+### 3. Build + start everything
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --build
 ```
 
-Wait until healthy (a few seconds):
+On first boot the app container's entrypoint waits for Postgres to be healthy, runs any pending Drizzle migrations, and seeds the `profiles` row for `SELF_HOSTED_USER_ID` (idempotent — safe on every restart). No manual migrate/seed step needed.
+
+Watch the logs until you see `Ready in Xms`:
 
 ```bash
-docker compose ps postgres
-# STATUS should show "healthy"
-```
-
-### 4. Apply schema migrations
-
-```bash
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
-```
-
-### 5. Seed the single-user profile
-
-```bash
-source .env
-docker compose exec -T postgres psql -U dailyagent -d dailyagent <<EOF
-INSERT INTO profiles (id, email, display_name, is_admin)
-VALUES ('$SELF_HOSTED_USER_ID', 'you@example.com', 'You', true)
-ON CONFLICT (id) DO NOTHING;
-EOF
-```
-
-(Swap the email/display name for your own if you want the dashboard to show them.)
-
-### 6. Build + start the app
-
-```bash
-docker compose up -d --build app
+docker compose logs -f app
 ```
 
 Verify:
@@ -88,7 +64,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/dashboard
 # 200
 ```
 
-### 7. Tailscale
+### 4. Tailscale
 
 ```bash
 sudo tailscale up
@@ -143,9 +119,10 @@ You should get back a JSON-RPC response listing server capabilities.
 ```bash
 cd mcp-dailyagent
 git pull
-docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
 docker compose up -d --build app
 ```
+
+The entrypoint runs any pending migrations on container start.
 
 **View logs:**
 
@@ -184,4 +161,4 @@ EOF
 - **App can't reach Postgres** — check `DATABASE_URL` hostname is `postgres` (the compose service name), not `localhost`.
 - **`SELF_HOSTED_USER_ID is not set`** — the app container didn't pick up `.env`. Make sure the file is named exactly `.env` (not `.env.local`) in the same directory as `docker-compose.yml`, or use `docker compose --env-file <path> up`.
 - **MCP 401** — `MCP_API_KEY` in `.env` doesn't match the `Authorization: Bearer` header from the client.
-- **Dashboard shows no data after wipe** — check `profiles` row still exists (`docker compose exec postgres psql -U dailyagent -c "SELECT * FROM profiles"`). Re-run the seed step if it's gone.
+- **Dashboard shows no data after wipe** — check `profiles` row still exists (`docker compose exec postgres psql -U dailyagent -c "SELECT * FROM profiles"`). If it's gone, `docker compose restart app` — the entrypoint re-seeds it.
