@@ -6,6 +6,7 @@ import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, prioritySchema, priorityDescription } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
+import { getNextOccurrence } from "@/lib/mcp/queries/tasks";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -261,6 +262,8 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
+      let row: typeof tasks.$inferSelect | null = null;
+
       if (args.expected_updated_at) {
         const result = await updateWithVersion<typeof tasks.$inferSelect>({
           table: tasks,
@@ -269,16 +272,34 @@ export function registerTaskTools(server: McpServer) {
           expectedUpdatedAt: args.expected_updated_at,
           patch: { done: true, doneAt: new Date() },
         });
-        if (result.ok) return textResult(result.row);
-        if (result.reason === "not_found") return errorResult("Task not found");
-        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-        return conflictResult(result.current);
+        if (!result.ok) {
+          if (result.reason === "not_found") return errorResult("Task not found");
+          if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+          return conflictResult(result.current);
+        }
+        row = result.row;
+      } else {
+        const result = await completeTaskLegacy(auth.userId, args.task_id);
+        if (result.error) return errorResult(`Error: ${result.error}`);
+        row = result.data;
       }
 
-      const result = await completeTaskLegacy(auth.userId, args.task_id);
-      if (result.error) return errorResult(`Error: ${result.error}`);
+      if (row?.recurrence && row.taskDate) {
+        const recurrence = row.recurrence as { type: string; days?: number[] };
+        const nextDate = getNextOccurrence(row.taskDate, recurrence);
+        await db.insert(tasks).values({
+          userId: auth.userId,
+          title: row.title,
+          notes: row.notes,
+          priority: row.priority,
+          taskDate: nextDate,
+          spaceId: row.spaceId,
+          recurrence: row.recurrence,
+          sortOrder: row.sortOrder,
+        });
+      }
 
-      return textResult(result.data);
+      return textResult(row);
     }
   );
 

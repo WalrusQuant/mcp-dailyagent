@@ -44,7 +44,7 @@ export interface UpdateTaskFields {
   sort_order?: number;
 }
 
-function rowToTask(row: typeof tasks.$inferSelect): Task {
+export function serializeTask(row: typeof tasks.$inferSelect): Task {
   return {
     id: row.id,
     user_id: row.userId,
@@ -62,6 +62,27 @@ function rowToTask(row: typeof tasks.$inferSelect): Task {
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
+}
+
+export function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: number[] }): string {
+  const d = new Date(taskDate + "T00:00:00");
+  switch (recurrence.type) {
+    case "daily":
+      d.setDate(d.getDate() + 1);
+      break;
+    case "weekdays": {
+      d.setDate(d.getDate() + 1);
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+      break;
+    }
+    case "weekly":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "monthly":
+      d.setMonth(d.getMonth() + 1);
+      break;
+  }
+  return d.toISOString().split("T")[0];
 }
 
 export async function getTasksForDate(
@@ -87,7 +108,7 @@ export async function getTasksForDate(
         )
         .orderBy(asc(tasks.priority), asc(tasks.sortOrder));
 
-      return { data: rows.map(rowToTask), error: null };
+      return { data: rows.map(serializeTask), error: null };
     }
 
     const rows = await db
@@ -96,7 +117,7 @@ export async function getTasksForDate(
       .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, taskDate)))
       .orderBy(asc(tasks.priority), asc(tasks.sortOrder));
 
-    return { data: rows.map(rowToTask), error: null };
+    return { data: rows.map(serializeTask), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -116,7 +137,7 @@ export async function getOverdueTasks(
       )
       .orderBy(asc(tasks.priority), asc(tasks.sortOrder));
 
-    return { data: rows.map(rowToTask), error: null };
+    return { data: rows.map(serializeTask), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -144,7 +165,7 @@ export async function createTask(
       })
       .returning();
 
-    return { data: rowToTask(row), error: null };
+    return { data: serializeTask(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -181,7 +202,7 @@ export async function updateTask(
       .returning();
 
     if (!row) return { data: null, error: "Task not found" };
-    return { data: rowToTask(row), error: null };
+    return { data: serializeTask(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -199,7 +220,7 @@ export async function completeTask(
       .returning();
 
     if (!row) return { data: null, error: "Task not found" };
-    return { data: rowToTask(row), error: null };
+    return { data: serializeTask(row), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
