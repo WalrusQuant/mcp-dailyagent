@@ -3,6 +3,58 @@ import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } 
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 
+export function serializeLogExercise(e: typeof workoutLogExercises.$inferSelect) {
+  return {
+    id: e.id,
+    log_id: e.logId,
+    exercise_name: e.exerciseName,
+    exercise_type: e.exerciseType,
+    sort_order: e.sortOrder,
+    sets: e.sets,
+  };
+}
+
+export function serializeLog(l: typeof workoutLogs.$inferSelect, exercises: typeof workoutLogExercises.$inferSelect[]) {
+  return {
+    id: l.id,
+    user_id: l.userId,
+    template_id: l.templateId,
+    name: l.name,
+    log_date: l.logDate,
+    duration_minutes: l.durationMinutes,
+    notes: l.notes,
+    created_at: l.createdAt,
+    updated_at: l.updatedAt,
+    workout_log_exercises: exercises.map(serializeLogExercise),
+  };
+}
+
+export function serializeExercise(e: typeof workoutExercises.$inferSelect) {
+  return {
+    id: e.id,
+    template_id: e.templateId,
+    name: e.name,
+    exercise_type: e.exerciseType,
+    sort_order: e.sortOrder,
+    default_sets: e.defaultSets,
+    default_reps: e.defaultReps,
+    default_weight: e.defaultWeight,
+    default_duration: e.defaultDuration,
+    notes: e.notes,
+  };
+}
+
+export function serializeTemplate(t: typeof workoutTemplates.$inferSelect, exercises: typeof workoutExercises.$inferSelect[]) {
+  return {
+    id: t.id,
+    user_id: t.userId,
+    name: t.name,
+    description: t.description,
+    created_at: t.createdAt,
+    workout_exercises: exercises.map(serializeExercise),
+  };
+}
+
 export interface WorkoutLogExercise {
   id: string;
   log_id: string;
@@ -152,7 +204,6 @@ export async function getWorkoutTemplates(
     if (templates.length === 0) return { data: [], error: null };
 
     const templateIds = templates.map((t) => t.id);
-    const { inArray } = await import("drizzle-orm");
     const exercises = await db
       .select()
       .from(workoutExercises)
