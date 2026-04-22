@@ -3,24 +3,7 @@ import { db } from "@/lib/db/client";
 import { goals, tasks, habits, habitLogs, goalProgressLogs } from "@/lib/db/schema";
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeGoal(g: typeof goals.$inferSelect) {
-  return {
-    id: g.id,
-    user_id: g.userId,
-    title: g.title,
-    description: g.description,
-    category: g.category,
-    status: g.status,
-    progress: g.progress,
-    progress_mode: g.progressMode,
-    target_date: g.targetDate,
-    completed_at: g.completedAt,
-    sort_order: g.sortOrder,
-    created_at: g.createdAt,
-    updated_at: g.updatedAt,
-  };
-}
+import { serializeGoal } from "@/lib/mcp/queries/goals";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
