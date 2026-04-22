@@ -145,10 +145,11 @@ async function logWorkout(
       .returning();
 
     if (exercises.length > 0) {
-      const exerciseRows = exercises.map((ex) => ({
+      const exerciseRows = exercises.map((ex, i) => ({
         logId: log.id,
         exerciseName: ex.name,
         exerciseType: ex.type ?? "strength",
+        sortOrder: i,
         sets:
           ex.sets != null
             ? Array.from({ length: ex.sets }, () => ({

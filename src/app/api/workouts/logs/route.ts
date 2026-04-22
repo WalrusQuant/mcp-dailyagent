@@ -3,32 +3,7 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeLogExercise(e: typeof workoutLogExercises.$inferSelect) {
-  return {
-    id: e.id,
-    log_id: e.logId,
-    exercise_name: e.exerciseName,
-    exercise_type: e.exerciseType,
-    sort_order: e.sortOrder,
-    sets: e.sets,
-  };
-}
-
-function serializeLog(l: typeof workoutLogs.$inferSelect, exercises: typeof workoutLogExercises.$inferSelect[]) {
-  return {
-    id: l.id,
-    user_id: l.userId,
-    template_id: l.templateId,
-    name: l.name,
-    log_date: l.logDate,
-    duration_minutes: l.durationMinutes,
-    notes: l.notes,
-    created_at: l.createdAt,
-    updated_at: l.updatedAt,
-    workout_log_exercises: exercises.map(serializeLogExercise),
-  };
-}
+import { serializeLog } from "@/lib/mcp/queries/workouts";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();

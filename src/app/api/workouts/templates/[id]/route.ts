@@ -3,32 +3,7 @@ import { db } from "@/lib/db/client";
 import { workoutTemplates, workoutExercises } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeExercise(e: typeof workoutExercises.$inferSelect) {
-  return {
-    id: e.id,
-    template_id: e.templateId,
-    name: e.name,
-    exercise_type: e.exerciseType,
-    sort_order: e.sortOrder,
-    default_sets: e.defaultSets,
-    default_reps: e.defaultReps,
-    default_weight: e.defaultWeight,
-    default_duration: e.defaultDuration,
-    notes: e.notes,
-  };
-}
-
-function serializeTemplate(t: typeof workoutTemplates.$inferSelect, exercises: typeof workoutExercises.$inferSelect[]) {
-  return {
-    id: t.id,
-    user_id: t.userId,
-    name: t.name,
-    description: t.description,
-    created_at: t.createdAt,
-    workout_exercises: exercises.map(serializeExercise),
-  };
-}
+import { serializeTemplate } from "@/lib/mcp/queries/workouts";
 
 async function getTemplateWithExercises(id: string, userId: string) {
   const rows = await db
