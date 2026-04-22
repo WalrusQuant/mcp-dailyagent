@@ -94,7 +94,7 @@ async function startFocusSession(
         userId,
         durationMinutes: args.duration_minutes,
         taskId: args.task_id ?? null,
-        breakMinutes: args.break_minutes ?? 5,
+        breakMinutes: args.break_minutes ?? 0,
         startedAt: new Date(),
         completedAt: null,
         status: "active",

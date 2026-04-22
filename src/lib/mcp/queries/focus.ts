@@ -4,6 +4,21 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
+export function serializeSession(s: typeof focusSessions.$inferSelect) {
+  return {
+    id: s.id,
+    user_id: s.userId,
+    task_id: s.taskId,
+    duration_minutes: s.durationMinutes,
+    break_minutes: s.breakMinutes,
+    started_at: s.startedAt,
+    completed_at: s.completedAt,
+    status: s.status,
+    notes: s.notes,
+    updated_at: s.updatedAt,
+  };
+}
+
 export interface FocusSession {
   id: string;
   user_id: string;
