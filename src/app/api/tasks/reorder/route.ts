@@ -28,7 +28,7 @@ export async function PATCH(request: NextRequest) {
       for (const item of taskItems as { id: string; sort_order: number }[]) {
         await tx
           .update(tasks)
-          .set({ sortOrder: item.sort_order })
+          .set({ sortOrder: item.sort_order, updatedAt: new Date() })
           .where(and(eq(tasks.id, item.id), eq(tasks.userId, userId)));
       }
     });
