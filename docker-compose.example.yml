@@ -42,7 +42,6 @@ services:
       MCP_API_KEY: ${MCP_API_KEY}
       NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Daily Agent MCP}
       NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
-      NODE_ENV: production
     ports:
       # Localhost by default. If you're fronting this with Tailscale or a reverse
       # proxy, replace "127.0.0.1" with your Tailscale IP (e.g. "100.x.y.z:3000:3000").
