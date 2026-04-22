@@ -2,7 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc, ilike } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
@@ -71,7 +71,7 @@ async function searchJournal(userId: string, query: string) {
       .where(
         and(
           eq(journalEntries.userId, userId),
-          ilike(journalEntries.content, `%${query}%`)
+          sql`to_tsvector('english', ${journalEntries.content}) @@ plainto_tsquery('english', ${query})`
         )
       )
       .orderBy(desc(journalEntries.entryDate))
@@ -100,13 +100,13 @@ async function createOrUpdateJournalEntry(
       .values({
         userId,
         entryDate,
-        content: args.content,
+        content: args.content.trim(),
         mood: args.mood ?? null,
       })
       .onConflictDoUpdate({
         target: [journalEntries.userId, journalEntries.entryDate],
         set: {
-          content: args.content,
+          content: args.content.trim(),
           mood: args.mood ?? null,
           updatedAt: new Date(),
         },

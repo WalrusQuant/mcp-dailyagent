@@ -4,6 +4,18 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
 
+export function serializeEntry(e: typeof journalEntries.$inferSelect) {
+  return {
+    id: e.id,
+    user_id: e.userId,
+    entry_date: e.entryDate,
+    content: e.content,
+    mood: e.mood,
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+  };
+}
+
 export interface JournalEntry {
   id: string;
   user_id: string;

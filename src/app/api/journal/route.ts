@@ -3,18 +3,7 @@ import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-
-function serializeEntry(e: typeof journalEntries.$inferSelect) {
-  return {
-    id: e.id,
-    user_id: e.userId,
-    entry_date: e.entryDate,
-    content: e.content,
-    mood: e.mood,
-    created_at: e.createdAt,
-    updated_at: e.updatedAt,
-  };
-}
+import { serializeEntry } from "@/lib/mcp/queries/journal";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
