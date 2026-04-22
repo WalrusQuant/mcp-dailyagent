@@ -294,6 +294,7 @@ export function registerTaskTools(server: McpServer) {
           priority: row.priority,
           taskDate: nextDate,
           spaceId: row.spaceId,
+          goalId: row.goalId,
           recurrence: row.recurrence,
           sortOrder: row.sortOrder,
         });

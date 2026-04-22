@@ -40,9 +40,16 @@ export async function PATCH(
   const body = await request.json();
 
   const allowedFields: Partial<typeof spaces.$inferInsert> = {};
-  if (typeof body.name === "string") allowedFields.name = body.name;
-  if (typeof body.description === "string" || body.description === null)
-    allowedFields.description = body.description;
+  if (typeof body.name === "string") {
+    const trimmed = body.name.trim();
+    if (trimmed.length === 0) {
+      return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
+    }
+    allowedFields.name = trimmed;
+  }
+  if (typeof body.description === "string")
+    allowedFields.description = body.description.trim();
+  else if (body.description === null) allowedFields.description = null;
   if (typeof body.status === "string" && ["active", "paused", "completed"].includes(body.status))
     allowedFields.status = body.status as "active" | "paused" | "completed";
   if (typeof body.progress === "number" && body.progress >= 0 && body.progress <= 100)
