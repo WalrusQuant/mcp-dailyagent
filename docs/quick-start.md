@@ -110,16 +110,16 @@ That's it. Migrations run automatically on container start.
 Pulled by default from GHCR:
 
 ```
-ghcr.io/walrusquant/mcp-dailyagent:v1
+ghcr.io/walrusquant/mcp-dailyagent:latest
 ```
 
 Mirrored to Docker Hub if you prefer:
 
 ```
-docker.io/walrusquant/mcp-dailyagent:v1
+docker.io/walrusquant/mcp-dailyagent:latest
 ```
 
-Available tags: `:latest`, `:v1`, `:v1.2`, `:v1.2.3`, `:sha-<short>`. Pin to `:v1` for safe auto-upgrades within the major version.
+Available tags: `:latest` (tracks `main`) and `:sha-<short>` for an exact commit pin. Once a semver release is cut, floating tags like `:v1`, `:v1.2`, and exact pins like `:v1.2.3` will also be published — pin to `:v1` for safe auto-upgrades within the major version.
 
 ## What next
 

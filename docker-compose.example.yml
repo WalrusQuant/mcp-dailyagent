@@ -16,8 +16,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-dailyagent}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyagent}
       POSTGRES_DB: ${POSTGRES_DB:-dailyagent}
-    ports:
-      - "127.0.0.1:5432:5432"
+    # The app container reaches Postgres over the internal Docker network,
+    # so you don't need to publish 5432 on the host. Uncomment only if you
+    # want to connect from the host (e.g. with `psql` or a GUI client).
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - dailyagent_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,9 +30,11 @@ services:
       retries: 5
 
   app:
-    # Pin to a major version (:v1) for safe auto-upgrades, or use :latest.
-    # Alternatives: docker.io/walrusquant/mcp-dailyagent:v1
-    image: ghcr.io/walrusquant/mcp-dailyagent:v1
+    # Tracks the latest build from `main`. Once a semver release (e.g. v1.0.0)
+    # is published, you can pin to `:v1` for safe auto-upgrades within a major
+    # version, or `:v1.0.0` for an exact pin.
+    # Alternatives: docker.io/walrusquant/mcp-dailyagent:latest
+    image: ghcr.io/walrusquant/mcp-dailyagent:latest
     container_name: dailyagent-app
     restart: unless-stopped
     depends_on:
