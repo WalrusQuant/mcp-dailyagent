@@ -30,9 +30,9 @@ services:
       retries: 5
 
   app:
-    # Tracks the latest build from `main`. Once a semver release (e.g. v1.0.0)
-    # is published, you can pin to `:v1` for safe auto-upgrades within a major
-    # version, or `:v1.0.0` for an exact pin.
+    # Tracks the latest build from `main`. For a stable pin, use `:1` (floats
+    # within the v1 major, safe for `docker compose pull` auto-upgrades) or
+    # `:1.0.0` for an exact version pin.
     # Alternatives: docker.io/walrusquant/mcp-dailyagent:latest
     image: ghcr.io/walrusquant/mcp-dailyagent:latest
     container_name: dailyagent-app

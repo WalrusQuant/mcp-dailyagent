@@ -119,7 +119,7 @@ Mirrored to Docker Hub if you prefer:
 docker.io/walrusquant/mcp-dailyagent:latest
 ```
 
-Available tags: `:latest` (tracks `main`) and `:sha-<short>` for an exact commit pin. Once a semver release is cut, floating tags like `:v1`, `:v1.2`, and exact pins like `:v1.2.3` will also be published — pin to `:v1` for safe auto-upgrades within the major version.
+Available tags: `:latest` (tracks `main`), `:1` / `:1.0` / `:1.0.0` (semver — `:1` floats within the v1 major, `:1.0` within v1.0, `:1.0.0` is an exact pin), and `:sha-<short>` for a pin to a specific commit. Pin to `:1` for safe auto-upgrades within the major version.
 
 ## What next
 
