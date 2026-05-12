@@ -1,12 +1,18 @@
 /**
- * Drift detector — fails when an interface in `src/types/database.ts` has a
- * field that doesn't correspond to a SQL column in `src/lib/db/schema.ts`.
+ * Drift detector — bidirectional structural cross-check between the
+ * wire-format types in `src/types/database.ts` and the Drizzle tables in
+ * `src/lib/db/schema.ts`.
  *
- * Catches the cheap, common breakage mode: someone adds a column in
- * `schema.ts` and forgets to mirror it in `database.ts` (or renames a column
- * and breaks the wire format). Does NOT attempt to generate the types —
- * serializers still do real work (Date → ISO, nullable coalescing,
- * computed shapes). This is only a structural cross-check.
+ * Catches both directions:
+ *   1. A field in `database.ts` with no matching SQL column (renamed
+ *      column, removed column, hallucinated field).
+ *   2. A SQL column with no field in the corresponding interface (a new
+ *      column got added to the schema but nobody mirrored it to the wire
+ *      type).
+ *
+ * Does NOT attempt to generate the types — serializers still do real work
+ * (Date → ISO, nullable coalescing, computed shapes). This is only a
+ * structural cross-check.
  */
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -41,10 +47,16 @@ const INTERFACE_TO_TABLE: Record<string, keyof typeof schema> = {
 // Payload/JSON shapes — not derived from a table, not subject to drift check.
 const PAYLOAD_ONLY = new Set(["TaskRecurrence", "WorkoutSet", "Insight"]);
 
-// Per-interface allowlist for fields that don't correspond to a SQL column
-// (e.g. nested joined rows, computed flags). Empty for now — extend as the
-// serializer surface grows.
+// Per-interface allowlist for interface fields that don't correspond to a
+// SQL column (e.g. nested joined rows, computed flags). Empty for now —
+// extend as the serializer surface grows.
 const COMPUTED_FIELDS: Record<string, string[]> = {};
+
+// Per-interface allowlist for SQL columns intentionally omitted from the
+// wire-format interface (e.g. internal sort orders never sent to clients).
+// Add an entry to silence the reverse-drift check when the omission is
+// deliberate.
+const OMITTED_COLUMNS: Record<string, string[]> = {};
 
 const databaseTsPath = path.resolve(
   __dirname,
@@ -122,6 +134,20 @@ describe("database.ts ↔ schema.ts drift", () => {
         drift,
         `${name} has fields not present as SQL columns on ${String(tableKey)}: ${drift.join(", ")}.\n` +
           `Either add the column to schema.ts, fix the interface, or add the field to COMPUTED_FIELDS["${name}"] in this test.`
+      ).toEqual([]);
+    });
+
+    it(`${String(tableKey)} columns are all mirrored on ${name} (or omitted on purpose)`, () => {
+      const sqlNames = getSqlColumnNames(tableKey);
+      const fieldSet = new Set(fields);
+      const omitted = new Set(OMITTED_COLUMNS[name] ?? []);
+      const missing = [...sqlNames].filter(
+        (col) => !fieldSet.has(col) && !omitted.has(col)
+      );
+      expect(
+        missing,
+        `${String(tableKey)} has SQL columns not mirrored on ${name}: ${missing.join(", ")}.\n` +
+          `Either add the field to the interface, or add the column name to OMITTED_COLUMNS["${name}"] in this test if it's intentionally not exposed.`
       ).toEqual([]);
     });
   }

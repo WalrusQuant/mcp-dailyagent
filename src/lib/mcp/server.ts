@@ -22,6 +22,7 @@ import { registerBriefingTools } from "./tools/briefings";
 import { registerInsightTools } from "./tools/insights";
 import { registerReviewTools } from "./tools/reviews";
 import { registerPrompts } from "./prompts";
+import pkg from "../../../package.json";
 
 /**
  * Cached count of registered tools/prompts/resources, built once on first call.
@@ -54,7 +55,7 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     {
       name: "Daily Agent MCP",
-      version: "1.0.0",
+      version: pkg.version,
     },
     {
       capabilities: {

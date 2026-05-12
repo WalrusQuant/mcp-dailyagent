@@ -27,6 +27,8 @@ After changes: `docker compose up -d db-backup` to apply.
 
 **Important:** the sidecar only protects you against DB-side data loss. **Copy `./backups` off the VPS regularly** — rsync, rclone, restic, whatever you trust. Local-only backups don't survive a stolen or dead VPS.
 
+> **Ownership:** the backup image writes as root, so `./backups/` on the host will be root-owned. If you need to read dumps as a non-root user, `sudo chown -R you:you backups/` once after the first run, or replace the bind mount with a Docker-managed named volume.
+
 To disable, comment out the `db-backup` service block in `docker-compose.yml`.
 
 ## What to back up
@@ -83,7 +85,9 @@ Copy that UUID into `.env` as `SELF_HOSTED_USER_ID` and restart the app:
 docker compose up -d --force-recreate app
 ```
 
-## Scheduled backups
+## Manual cron-based backups (alternative)
+
+If you disabled the `db-backup` sidecar (or run an older deploy that doesn't include it), you can replicate the same behavior with a host cron. Most users won't need this — the sidecar already runs nightly with retention.
 
 Simple cron on the VPS, one per day, keeps 30 days locally:
 
