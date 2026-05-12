@@ -2,6 +2,33 @@
 
 Your entire productivity life lives in this one Postgres database. Back it up.
 
+## Automatic backups (on by default)
+
+The default compose stack ships with a `db-backup` sidecar that runs nightly `pg_dump` with retention. Dumps land in `./backups` next to your `docker-compose.yml`:
+
+```
+backups/
+├── daily/    last 14 days
+├── weekly/   last 4 weeks
+├── monthly/  last 6 months
+└── last/     the most recent dump (overwritten each run)
+```
+
+Tune via `.env`:
+
+| Var | Default | Notes |
+|---|---|---|
+| `BACKUP_SCHEDULE` | `@daily` | Cron (`0 3 * * *`) or shorthand (`@hourly`, `@every 1h`) |
+| `BACKUP_KEEP_DAYS` | `14` | Daily backups to retain |
+| `BACKUP_KEEP_WEEKS` | `4` | Weekly snapshots |
+| `BACKUP_KEEP_MONTHS` | `6` | Monthly snapshots |
+
+After changes: `docker compose up -d db-backup` to apply.
+
+**Important:** the sidecar only protects you against DB-side data loss. **Copy `./backups` off the VPS regularly** — rsync, rclone, restic, whatever you trust. Local-only backups don't survive a stolen or dead VPS.
+
+To disable, comment out the `db-backup` service block in `docker-compose.yml`.
+
 ## What to back up
 
 - **The Postgres volume** (`dailyagent_pgdata`) — all of your data

@@ -52,5 +52,28 @@ services:
       # proxy, replace "127.0.0.1" with your Tailscale IP (e.g. "100.x.y.z:3000:3000").
       - "127.0.0.1:3000:3000"
 
+  db-backup:
+    # Daily pg_dump with retention. Dumps land in ./backups next to this file
+    # so you can `ls` them and rsync offsite. Disable by commenting out the
+    # whole service — the rest of the stack is unaffected.
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: dailyagent-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-dailyagent}
+      POSTGRES_USER: ${POSTGRES_USER:-dailyagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyagent}
+      SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - ./backups:/backups
+
 volumes:
   dailyagent_pgdata:
