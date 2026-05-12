@@ -58,7 +58,44 @@ docker compose logs -f app
 
 You should see `Ready in Xms`.
 
-## 4. Tailscale + firewall
+## 4. Verify it's alive
+
+Two curls confirm the stack is healthy before you touch OpenClaw config.
+
+**Health endpoint** (no auth, no body):
+
+```bash
+curl -s http://localhost:3000/api/mcp/health | jq
+```
+
+Expected — `ok: true`, the transport name, and surface counts:
+
+```json
+{
+  "ok": true,
+  "transport": "streamable-http",
+  "tools": 34,
+  "prompts": 13,
+  "resources": 15,
+  "version": "0.1.0"
+}
+```
+
+**Authenticated `tools/list`** (uses the bearer token from `.env`):
+
+```bash
+source .env
+curl -s -X POST http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '.result.tools | length'
+```
+
+Expected output: a number matching `tools` from the health endpoint (e.g. `34`). If you get `null` or an error, double-check `MCP_API_KEY` matches what's in `.env`.
+
+## 5. Tailscale + firewall
 
 ```bash
 sudo tailscale up          # follow the auth link
@@ -76,7 +113,7 @@ To expose the dashboard on your tailnet IP instead of localhost, edit the `app.p
 
 Then `docker compose up -d`.
 
-## 5. Hook OpenClaw up
+## 6. Hook OpenClaw up
 
 Add this block to your OpenClaw MCP config (alongside any other MCP servers you've registered):
 
