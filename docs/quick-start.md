@@ -78,7 +78,21 @@ Then `docker compose up -d`.
 
 ## 5. Hook OpenClaw up
 
-Point OpenClaw at `http://<tailscale-name>:3000/api/mcp` with `Authorization: Bearer <MCP_API_KEY>`. Drop the [skill file](openclaw-skill.md) into OpenClaw's skills directory so the agent knows what tools are available.
+Add this block to your OpenClaw MCP config (alongside any other MCP servers you've registered):
+
+```json
+"dailyagent": {
+  "url": "http://<tailscale-name>:3000/api/mcp",
+  "transport": "streamable-http",
+  "headers": {
+    "Authorization": "Bearer <MCP_API_KEY>"
+  }
+}
+```
+
+> **Transport must be `streamable-http`.** The server does not implement the legacy SSE transport — configuring `"transport": "sse"` will silently fail to discover tools.
+
+Then drop the [skill file](openclaw-skill.md) into OpenClaw's skills directory so the agent knows what tools are available, and restart the gateway.
 
 Verify from another tailnet device:
 
