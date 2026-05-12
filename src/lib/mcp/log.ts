@@ -1,4 +1,4 @@
-type Outcome = "ok" | "auth_failed" | "error";
+type Outcome = "ok" | "auth_failed" | "rate_limited" | "error";
 
 export interface McpLogFields {
   http_method: string;

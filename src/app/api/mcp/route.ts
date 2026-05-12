@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { createMcpServer } from "@/lib/mcp/server";
 import { authenticateMcpRequest } from "@/lib/mcp/auth";
 import { extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
+import { consumeToken } from "@/lib/mcp/rate-limit";
 
 /**
  * MCP Server endpoint — handles all MCP communication via Streamable HTTP.
@@ -49,6 +50,30 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
   }
 
   const { auth } = authResult.result;
+
+  // Abuse-guard rate limit. Bucket is keyed by userId because the bearer
+  // token is constant in a single-user self-host — keying by token would
+  // be equivalent. Ceiling is high enough to never trip real usage.
+  const decision = consumeToken(auth.userId);
+  if (!decision.allowed) {
+    const response = new Response(JSON.stringify({ error: "rate_limited" }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(decision.retryAfterSeconds),
+      },
+    });
+    logMcpRequest({
+      http_method: request.method,
+      status: 429,
+      duration_ms: Date.now() - startedAt,
+      outcome: "rate_limited",
+      user_id: auth.userId,
+      client_id: auth.clientId,
+      ...rpcInfo,
+    });
+    return response;
+  }
 
   // Create stateless transport and server per request
   const transport = new WebStandardStreamableHTTPServerTransport({
