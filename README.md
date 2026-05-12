@@ -40,6 +40,8 @@ docker compose up -d
 
 The container waits for Postgres, runs migrations, seeds the profile row, and starts the app — all on first boot. Dashboard lands at <http://localhost:3000>.
 
+A `db-backup` sidecar also starts by default and writes nightly `pg_dump` files to `./backups/` next to your compose file, with 14d / 4w / 6m retention. Tune with `BACKUP_SCHEDULE`, `BACKUP_KEEP_DAYS`, etc. in `.env`. **You still need to copy `./backups` offsite** — see [docs/backup-restore.md](docs/backup-restore.md).
+
 For a VPS install, do the same thing on the box and add Tailscale + a firewall rule on port 3000. If you'd rather build the image yourself, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ## Update
@@ -115,7 +117,11 @@ Full tool reference lives in **[docs/openclaw-skill.md](docs/openclaw-skill.md)*
 
 **Resources** (read-only URIs): `dailyagent://dashboard`, `dailyagent://tasks/today`, `dailyagent://tasks/overdue`, `dailyagent://habits/today`, `dailyagent://journal/recent`, `dailyagent://goals/active`, and more.
 
-Transport: Streamable HTTP, stateless, `Authorization: Bearer <MCP_API_KEY>` per request.
+Transport: Streamable HTTP, stateless, `Authorization: Bearer <MCP_API_KEY>` per request. SSE transport is **not** supported — point clients at `streamable-http`.
+
+Companion **`GET /api/mcp/health`** endpoint, unauthenticated, returns `{ ok, transport, tools, prompts, resources, version }`. Use it as a liveness probe and as the first thing to curl when a gateway reports zero tools.
+
+Every `/api/mcp` request emits one structured JSON log line (method, tool, status, duration, outcome). Tool names are logged; arguments are not. An abuse-guard token bucket caps the endpoint at roughly 600 req/min — invisible in normal use, kicks in on runaway agent loops with a `429 rate_limited`.
 
 ---
 

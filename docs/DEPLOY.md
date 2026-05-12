@@ -133,6 +133,10 @@ docker compose logs -f postgres
 
 **Back up the database:**
 
+The default compose includes a `db-backup` sidecar that runs nightly `pg_dump` into `./backups/` with retention — you don't need to do anything to get scheduled backups. See [backup-restore.md](backup-restore.md) for tuning and restore instructions.
+
+For an ad-hoc on-demand dump:
+
 ```bash
 docker compose exec -T postgres pg_dump -U dailyagent dailyagent | gzip > backup-$(date +%F).sql.gz
 ```

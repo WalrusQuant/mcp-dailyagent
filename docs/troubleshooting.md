@@ -4,6 +4,41 @@ When something breaks, start here. Most failures fall into one of a handful of b
 
 ## MCP server
 
+### First-line check: `/api/mcp/health`
+
+Before chasing anything specific, hit the unauthenticated health endpoint. It tells you the server is up, what transport it speaks, and how much surface it exposes — without needing the bearer token:
+
+```bash
+curl -s http://localhost:3000/api/mcp/health | jq
+```
+
+Expected:
+
+```json
+{
+  "ok": true,
+  "transport": "streamable-http",
+  "tools": 34,
+  "prompts": 13,
+  "resources": 15,
+  "version": "..."
+}
+```
+
+If this fails, the rest of the agent stack is irrelevant — the app container isn't running or isn't reachable. See the *App container* section below.
+
+If it returns the body but your gateway still sees no tools, the issue is on the client side. The single most common cause: your MCP client config has `"transport": "sse"` instead of `"streamable-http"`. This server only implements Streamable HTTP.
+
+### Watching MCP traffic
+
+Every `/api/mcp` request writes one structured JSON line to stdout. Filter the app logs for them:
+
+```bash
+docker compose logs -f app | grep '"component":"mcp"'
+```
+
+Each line carries `http_method`, `rpc_method`, `tool` (when applicable), `status`, `duration_ms`, and `outcome` (`ok`, `auth_failed`, `rate_limited`, `error`). Tool *arguments* and auth headers are never logged.
+
 ### `401 Unauthorized` from `/api/mcp`
 
 The bearer token OpenClaw is sending doesn't match `MCP_API_KEY` in the app's `.env`.
@@ -64,6 +99,16 @@ If a tool argument is rejected before hitting the DB, the error names the field.
 | `status: Invalid enum value` | Goal/space status restricted to a fixed set. `paused` is valid for spaces, not goals. `archived` is not valid anywhere. |
 | `frequency: Invalid enum value` | Habits are `daily` or `weekly` only. There's no `custom`. |
 | `category: Invalid enum value` | Goal categories: `health`, `career`, `personal`, `financial`, `learning`, `relationships`, `other`. |
+
+### `429 rate_limited` from `/api/mcp`
+
+The abuse-guard rate limit fired. By default it caps `/api/mcp` at a burst of 100 with a 10/sec refill (~600 requests/minute). Real OpenClaw traffic should never hit it — if you're seeing 429s in normal use, suspect a runaway agent loop calling the same tool repeatedly. Check the structured log lines for the offending `tool` name:
+
+```bash
+docker compose logs --since 5m app | grep rate_limited
+```
+
+The response includes a `Retry-After: <seconds>` header; the bucket refills at 10 tokens/sec.
 
 ### Tool returned a Postgres CHECK constraint error
 

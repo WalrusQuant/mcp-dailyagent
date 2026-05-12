@@ -124,10 +124,18 @@ flowchart TD
 
 The `depends_on: postgres service_healthy` clause in `docker-compose.yml` makes the app wait for Postgres to pass its `pg_isready` healthcheck before starting. Data survives container restarts via the named `dailyagent_pgdata` volume.
 
+The default compose also includes a `db-backup` sidecar (`prodrigestivill/postgres-backup-local`) that runs `pg_dump` on a schedule into a bind-mounted `./backups/` directory. See [backup-restore.md](backup-restore.md).
+
+## Observability
+
+`/api/mcp` emits one structured JSON log line per request (method, tool, status, duration, outcome). Tool names are logged; tool arguments are not. `outcome` is one of `ok` / `auth_failed` / `rate_limited` / `error`.
+
+`GET /api/mcp/health` is unauthenticated and returns the transport name plus tool/prompt/resource counts. Used as a liveness probe and as the first-line debug step when the gateway can't see tools.
+
 ## Things that are deliberately missing
 
 - **No app-level authentication.** Tailscale is the perimeter.
-- **No rate limiting on MCP.** Single user, single agent — not a public API.
+- **No quota-style rate limiting.** There's an abuse-guard token bucket on `/api/mcp` sized to break runaway loops only (~600 req/min ceiling) — not a fair-use quota.
 - **No multi-tenancy.** One user per deployment. `SELF_HOSTED_USER_ID` hard-scopes everything.
 - **No AI provider keys, no chat, no image generation.** All of that lives in OpenClaw.
 - **No email, no notifications.** OpenClaw's gateway handles message delivery.

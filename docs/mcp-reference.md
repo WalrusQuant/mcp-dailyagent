@@ -2,8 +2,13 @@
 
 34 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
 
+There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns `{ ok, transport, tools, prompts, resources, version }`. Use it to confirm the server is up and speaking the right protocol before troubleshooting auth, and to discover how many tools the running build exposes.
+
 !!! note "Validation rules"
     Every constrained field is validated **twice** — once by the tool's Zod schema (at the transport layer) and again by a Postgres `CHECK` constraint (at the DB). Rules are kept in sync via `src/lib/mcp/tools/validators.ts`.
+
+!!! note "Rate limit"
+    `/api/mcp` is protected by an abuse-guard token-bucket rate limit (burst 100, refill 10/sec ≈ 600 req/min). Normal agent traffic never trips it; a runaway loop gets a `429 rate_limited` with a `Retry-After` header.
 
 ## Shared value formats
 
