@@ -32,7 +32,7 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
         <ChevronLeft className="w-4 h-4" />
       </button>
       <span
-        className="text-sm font-medium min-w-[140px] text-center"
+        className="text-sm font-medium text-center sm:min-w-[140px]"
         style={{ color: "var(--text-primary)" }}
       >
         {displayText}

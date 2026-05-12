@@ -75,7 +75,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
         onToggleCollapse={() => setCollapsed((c) => !c)}
       />
 
-      <div className="flex-1 flex flex-col min-h-0 relative">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
         <main className="flex-1 flex flex-col min-h-0 pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
