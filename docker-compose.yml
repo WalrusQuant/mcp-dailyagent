@@ -1,21 +1,21 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: dailyagent-postgres
+    container_name: cadence-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dailyagent}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyagent}
-      POSTGRES_DB: ${POSTGRES_DB:-dailyagent}
+      POSTGRES_USER: ${POSTGRES_USER:-cadence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cadence}
+      POSTGRES_DB: ${POSTGRES_DB:-cadence}
     # The app container reaches Postgres over the internal Docker network,
     # so you don't need to publish 5432 on the host. Uncomment only if you
     # want to connect from the host (e.g. with `psql` or a GUI client).
     # ports:
     #   - "127.0.0.1:5432:5432"
     volumes:
-      - dailyagent_pgdata:/var/lib/postgresql/data
+      - cadence_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dailyagent}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cadence}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,17 +24,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dailyagent-app
+    container_name: cadence-app
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-dailyagent}:${POSTGRES_PASSWORD:-dailyagent}@postgres:5432/${POSTGRES_DB:-dailyagent}
+      DATABASE_URL: postgres://${POSTGRES_USER:-cadence}:${POSTGRES_PASSWORD:-cadence}@postgres:5432/${POSTGRES_DB:-cadence}
       SELF_HOSTED_USER_ID: ${SELF_HOSTED_USER_ID}
       SELF_HOSTED_USER_EMAIL: ${SELF_HOSTED_USER_EMAIL:-user@localhost}
       MCP_API_KEY: ${MCP_API_KEY}
-      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Daily Agent MCP}
+      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Cadence}
       NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
     ports:
       # Bind to loopback only — Tailscale / reverse proxy handles external access
@@ -45,16 +45,16 @@ services:
     # so you can `ls` them and rsync offsite. Disable by commenting out the
     # whole service — the rest of the stack is unaffected.
     image: prodrigestivill/postgres-backup-local:16
-    container_name: dailyagent-backup
+    container_name: cadence-backup
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_DB: ${POSTGRES_DB:-dailyagent}
-      POSTGRES_USER: ${POSTGRES_USER:-dailyagent}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dailyagent}
+      POSTGRES_DB: ${POSTGRES_DB:-cadence}
+      POSTGRES_USER: ${POSTGRES_USER:-cadence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cadence}
       SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
@@ -64,4 +64,4 @@ services:
       - ./backups:/backups
 
 volumes:
-  dailyagent_pgdata:
+  cadence_pgdata:

@@ -8,7 +8,7 @@ export function registerCalendarResources(server: McpServer) {
   // --- calendar-today ---
   server.resource(
     "calendar-today",
-    "dailyagent://calendar/today",
+    "cadence://calendar/today",
     { description: "Detailed view of today: tasks, habits, journal, workouts, and focus sessions" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
@@ -38,7 +38,7 @@ export function registerCalendarResources(server: McpServer) {
   // --- calendar-week ---
   server.resource(
     "calendar-week",
-    "dailyagent://calendar/week",
+    "cadence://calendar/week",
     { description: "Aggregated summary for the current week (Monday–Sunday)" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

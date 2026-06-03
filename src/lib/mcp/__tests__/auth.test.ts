@@ -28,7 +28,7 @@ describe("authenticateMcpRequest", () => {
       error: {
         error: "Missing Authorization header",
         status: 401,
-        wwwAuthenticate: 'Bearer realm="dailyagent"',
+        wwwAuthenticate: 'Bearer realm="cadence"',
       },
     });
 
@@ -48,7 +48,7 @@ describe("authenticateMcpRequest", () => {
       error: {
         error: "Token is expired or revoked",
         status: 401,
-        wwwAuthenticate: 'Bearer realm="dailyagent", error="invalid_token"',
+        wwwAuthenticate: 'Bearer realm="cadence", error="invalid_token"',
       },
     });
 

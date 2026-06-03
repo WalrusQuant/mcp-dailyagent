@@ -1,6 +1,6 @@
-# Daily Agent MCP
+# Cadence
 
-> 📖 **Full documentation:** <https://dailyagent.dev/>
+> 📖 **Full documentation:** <https://walrusquant.github.io/cadence/>
 
 **Self-hosted productivity data layer for [OpenClaw](https://openclaw.ai).** Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Single-user, Tailscale-gated.
 
@@ -26,12 +26,12 @@ OpenClaw owns everything about the agent: model choice, scheduling, message deli
 Prebuilt multi-arch image on GHCR (and Docker Hub). Same commands work on a VPS, your laptop, a Raspberry Pi — anywhere with Docker. Full walkthrough in **[docs/quick-start.md](docs/quick-start.md)**.
 
 ```bash
-mkdir mcp-dailyagent && cd mcp-dailyagent
+mkdir cadence && cd cadence
 
 curl -o docker-compose.yml \
-  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/docker-compose.example.yml
+  https://raw.githubusercontent.com/WalrusQuant/cadence/main/docker-compose.example.yml
 curl -o .env \
-  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/.env.example
+  https://raw.githubusercontent.com/WalrusQuant/cadence/main/.env.example
 
 # Edit .env: set SELF_HOSTED_USER_ID (uuidgen), MCP_API_KEY (openssl rand -hex 32), POSTGRES_PASSWORD
 
@@ -61,8 +61,8 @@ Point an MCP server entry at `http://<host>:3000/api/mcp` with `Authorization: B
 For contributors who want to modify the dashboard or MCP server itself (not just self-host an instance):
 
 ```bash
-git clone https://github.com/WalrusQuant/mcp-dailyagent.git
-cd mcp-dailyagent
+git clone https://github.com/WalrusQuant/cadence.git
+cd cadence
 
 # .env.local with DATABASE_URL, SELF_HOSTED_USER_ID, MCP_API_KEY
 npm install
@@ -115,7 +115,7 @@ Full tool reference lives in **[docs/openclaw-skill.md](docs/openclaw-skill.md)*
 
 **Prompts** (loadable templates OpenClaw fills with data and generates against): `daily_planning`, `morning_briefing`, `end_of_day_review`, `weekly_review`, `weekly_trends`, `productivity_report`, `habit_analysis`, `goal_check_in`, `goal_planning`, `space_planning`, `week_planning`, `journal_prompt`, `workout_suggestion`.
 
-**Resources** (read-only URIs): `dailyagent://dashboard`, `dailyagent://tasks/today`, `dailyagent://tasks/overdue`, `dailyagent://habits/today`, `dailyagent://journal/recent`, `dailyagent://goals/active`, and more.
+**Resources** (read-only URIs): `cadence://dashboard`, `cadence://tasks/today`, `cadence://tasks/overdue`, `cadence://habits/today`, `cadence://journal/recent`, `cadence://goals/active`, and more.
 
 Transport: Streamable HTTP, stateless, `Authorization: Bearer <MCP_API_KEY>` per request. SSE transport is **not** supported — point clients at `streamable-http`.
 

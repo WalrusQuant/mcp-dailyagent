@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dailyagent.dev/sitemap.xml
+Sitemap: https://walrusquant.github.io/cadence/sitemap.xml

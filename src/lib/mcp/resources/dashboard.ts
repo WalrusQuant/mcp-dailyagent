@@ -7,7 +7,7 @@ export function registerDashboardResources(server: McpServer) {
   // --- dashboard ---
   server.resource(
     "dashboard",
-    "dailyagent://dashboard",
+    "cadence://dashboard",
     { description: "Today's aggregated productivity snapshot: tasks, habits, journal, workouts, focus, and goals" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

@@ -8,7 +8,7 @@ export function registerJournalResources(server: McpServer) {
   // --- journal-today ---
   server.resource(
     "journal-today",
-    "dailyagent://journal/today",
+    "cadence://journal/today",
     { description: "Today's journal entry, or null if none has been written" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
@@ -38,7 +38,7 @@ export function registerJournalResources(server: McpServer) {
   // --- journal-recent ---
   server.resource(
     "journal-recent",
-    "dailyagent://journal/recent",
+    "cadence://journal/recent",
     { description: "The 7 most recent journal entries, newest first" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

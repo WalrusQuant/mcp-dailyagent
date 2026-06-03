@@ -1,5 +1,5 @@
 #!/bin/sh
-# Container entrypoint for mcp-dailyagent.
+# Container entrypoint for cadence.
 #
 # 1. Wait for Postgres to accept connections (up to ~60s)
 # 2. Run any pending Drizzle migrations

@@ -79,7 +79,7 @@ Common causes:
 The MCP config in OpenClaw is wrong. Verify:
 
 ```bash
-openclaw mcp show dailyagent
+openclaw mcp show cadence
 ```
 
 The URL, headers, and transport (`streamable-http`) must match what you wrote in `.env`. After any edit, restart the OpenClaw gateway:
@@ -142,7 +142,7 @@ Fix: align them in `.env`, then recreate Postgres to pick up the new password:
 
 ```bash
 docker compose down
-docker volume rm mcp-dailyagent_dailyagent_pgdata   # ⚠️ wipes DB data
+docker volume rm cadence_cadence_pgdata   # ⚠️ wipes DB data
 docker compose up -d
 ```
 
@@ -175,7 +175,7 @@ Similar fix. The Postgres port only matters if you want to connect from the host
 You've run migrations against a DB that already has the schema applied manually (or by a previous migration that wasn't tracked). The fix depends on which side is truthful. Easiest recovery:
 
 ```bash
-docker compose exec postgres psql -U dailyagent -d dailyagent -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker compose exec postgres psql -U cadence -d cadence -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 docker compose run --rm app node node_modules/drizzle-kit/bin.cjs migrate
 ```
 
@@ -208,7 +208,7 @@ The `profiles` row got deleted along with everything else. Re-seed it:
 
 ```bash
 source .env
-docker compose exec -T postgres psql -U dailyagent -d dailyagent <<EOF
+docker compose exec -T postgres psql -U cadence -d cadence <<EOF
 INSERT INTO profiles (id, email, display_name, is_admin)
 VALUES ('$SELF_HOSTED_USER_ID', 'you@example.com', 'You', true)
 ON CONFLICT (id) DO NOTHING;

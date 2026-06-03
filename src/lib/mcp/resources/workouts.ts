@@ -8,7 +8,7 @@ export function registerWorkoutResources(server: McpServer) {
   // --- workouts-recent ---
   server.resource(
     "workouts-recent",
-    "dailyagent://workouts/recent",
+    "cadence://workouts/recent",
     { description: "Workout logs from the last 7 days, newest first" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

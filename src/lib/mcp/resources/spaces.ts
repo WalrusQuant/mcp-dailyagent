@@ -7,7 +7,7 @@ export function registerSpaceResources(server: McpServer) {
   // --- spaces-list ---
   server.resource(
     "spaces-list",
-    "dailyagent://spaces",
+    "cadence://spaces",
     { description: "All spaces (projects), ordered by last updated" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

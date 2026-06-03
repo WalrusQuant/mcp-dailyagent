@@ -7,7 +7,7 @@ export function registerReviewResources(server: McpServer) {
   // --- review-latest ---
   server.resource(
     "review-latest",
-    "dailyagent://review/latest",
+    "cadence://review/latest",
     { description: "The most recent weekly review, or null if none exists" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

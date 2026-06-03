@@ -1,13 +1,13 @@
 ---
-name: dailyagent
-description: Productivity data layer. Call the dailyagent MCP server to read and write tasks, habits, journal entries, workouts, focus sessions, goals, spaces, weekly reviews, daily briefings, and insights. Use this any time the user mentions any of those.
+name: cadence
+description: Productivity data layer. Call the cadence MCP server to read and write tasks, habits, journal entries, workouts, focus sessions, goals, spaces, weekly reviews, daily briefings, and insights. Use this any time the user mentions any of those.
 ---
 
-# Daily Agent MCP — OpenClaw Skill
+# Cadence — OpenClaw Skill
 
 ## What this is
 
-`dailyagent` is the user's personal productivity database, exposed as an MCP server. It is the **single source of truth** for:
+`cadence` is the user's personal productivity database, exposed as an MCP server. It is the **single source of truth** for:
 
 - **Tasks** (Franklin Covey priority A1-C9, with rollover, spaces, goals, recurrence)
 - **Habits** and habit logs
@@ -22,7 +22,7 @@ The server runs on the user's VPS behind Tailscale. Reads and writes go straight
 
 ## Connection
 
-The MCP server is already registered in the user's OpenClaw config as `dailyagent`. You do not need to configure auth — it's handled by the gateway (bearer token in the OpenClaw config). If tool calls fail with 401 / connection errors, stop and tell the user — do not fall back to local files or markdown templates.
+The MCP server is already registered in the user's OpenClaw config as `cadence`. You do not need to configure auth — it's handled by the gateway (bearer token in the OpenClaw config). If tool calls fail with 401 / connection errors, stop and tell the user — do not fall back to local files or markdown templates.
 
 ## Core rules
 
@@ -148,17 +148,17 @@ All other prompts take no args.
 
 For quick contextual reads you can fetch resources instead of calling tools:
 
-- `dailyagent://dashboard` — today at a glance
-- `dailyagent://tasks/today`, `dailyagent://tasks/overdue`
-- `dailyagent://habits/today`, `dailyagent://habits/streaks`
-- `dailyagent://journal/today`, `dailyagent://journal/recent`
-- `dailyagent://workouts/recent`
-- `dailyagent://focus/today`
-- `dailyagent://goals/active`
-- `dailyagent://spaces/list`
-- `dailyagent://briefing/today`
-- `dailyagent://calendar/today`, `dailyagent://calendar/week`
-- `dailyagent://review/latest`
+- `cadence://dashboard` — today at a glance
+- `cadence://tasks/today`, `cadence://tasks/overdue`
+- `cadence://habits/today`, `cadence://habits/streaks`
+- `cadence://journal/today`, `cadence://journal/recent`
+- `cadence://workouts/recent`
+- `cadence://focus/today`
+- `cadence://goals/active`
+- `cadence://spaces/list`
+- `cadence://briefing/today`
+- `cadence://calendar/today`, `cadence://calendar/week`
+- `cadence://review/latest`
 
 ## Common patterns
 

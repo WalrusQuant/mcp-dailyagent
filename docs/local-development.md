@@ -13,8 +13,8 @@ Setup for running the dashboard + MCP server on your laptop against a local Post
 ## 1. Install deps
 
 ```bash
-git clone https://github.com/WalrusQuant/mcp-dailyagent.git
-cd mcp-dailyagent
+git clone https://github.com/WalrusQuant/cadence.git
+cd cadence
 npm install
 ```
 
@@ -22,18 +22,18 @@ npm install
 
 ```bash
 cat > .env.local <<EOF
-DATABASE_URL=postgres://dailyagent:dailyagent@localhost:5432/dailyagent
+DATABASE_URL=postgres://cadence:cadence@localhost:5432/cadence
 SELF_HOSTED_USER_ID=$(node -e "console.log(require('crypto').randomUUID())")
 MCP_API_KEY=$(openssl rand -hex 32)
 EOF
 ```
 
-If you already have Postgres running but not the `dailyagent` user/database, create them:
+If you already have Postgres running but not the `cadence` user/database, create them:
 
 ```bash
-createuser dailyagent
-createdb -O dailyagent dailyagent
-psql -d dailyagent -c "ALTER USER dailyagent WITH PASSWORD 'dailyagent';"
+createuser cadence
+createdb -O cadence cadence
+psql -d cadence -c "ALTER USER cadence WITH PASSWORD 'cadence';"
 ```
 
 Or just run the compose `postgres` service and point `DATABASE_URL` at it:
@@ -156,7 +156,7 @@ With the compose Postgres service:
 
 ```bash
 docker compose down
-docker volume rm mcp-dailyagent_dailyagent_pgdata
+docker volume rm cadence_cadence_pgdata
 docker compose up -d postgres
 npm run db:migrate
 # re-seed profile

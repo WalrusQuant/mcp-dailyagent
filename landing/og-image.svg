@@ -46,7 +46,7 @@
 
     <!-- Title -->
     <text x="400" y="275" font-size="64" font-weight="700" letter-spacing="-1">
-      Daily Agent MCP
+      Cadence
     </text>
 
     <!-- Subtitle -->
@@ -67,7 +67,7 @@
 
     <!-- Domain at bottom -->
     <text x="400" y="540" font-size="20" font-weight="600" fill="#d4a574">
-      dailyagent.dev
+      walrusquant.github.io/cadence
     </text>
   </g>
 </svg>

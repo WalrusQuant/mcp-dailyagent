@@ -33,7 +33,7 @@ To disable, comment out the `db-backup` service block in `docker-compose.yml`.
 
 ## What to back up
 
-- **The Postgres volume** (`dailyagent_pgdata`) — all of your data
+- **The Postgres volume** (`cadence_pgdata`) — all of your data
 - **`.env`** — the secrets that make the app work. Regenerating loses access until you manually reset the MCP key in OpenClaw and the `SELF_HOSTED_USER_ID` has to match the profile row
 
 That's it. The code is in git. Images are rebuilt from the Dockerfile. The only irreplaceable things are the DB volume and the `.env`.
@@ -43,14 +43,14 @@ That's it. The code is in git. Images are rebuilt from the Dockerfile. The only 
 From the VPS:
 
 ```bash
-docker compose exec -T postgres pg_dump -U dailyagent dailyagent | gzip > backup-$(date +%F).sql.gz
+docker compose exec -T postgres pg_dump -U cadence cadence | gzip > backup-$(date +%F).sql.gz
 ```
 
 Produces something like `backup-2026-04-20.sql.gz`. Copy it off the VPS:
 
 ```bash
 # From your laptop
-scp you@vps:/path/to/mcp-dailyagent/backup-2026-04-20.sql.gz ./
+scp you@vps:/path/to/cadence/backup-2026-04-20.sql.gz ./
 ```
 
 Put it somewhere you trust. Tarsnap, a USB drive, an encrypted cloud backup — anywhere that isn't the same VPS.
@@ -61,13 +61,13 @@ Fresh deploy, blank DB:
 
 ```bash
 # On the VPS, after docker compose up -d postgres
-gunzip -c backup-YYYY-MM-DD.sql.gz | docker compose exec -T postgres psql -U dailyagent dailyagent
+gunzip -c backup-YYYY-MM-DD.sql.gz | docker compose exec -T postgres psql -U cadence cadence
 ```
 
 Or from your laptop, piping over SSH:
 
 ```bash
-gunzip -c backup-YYYY-MM-DD.sql.gz | ssh you@vps "cd /path/to/mcp-dailyagent && docker compose exec -T postgres psql -U dailyagent dailyagent"
+gunzip -c backup-YYYY-MM-DD.sql.gz | ssh you@vps "cd /path/to/cadence && docker compose exec -T postgres psql -U cadence cadence"
 ```
 
 ### Important: the user ID must match
@@ -76,7 +76,7 @@ The DB is scoped by `SELF_HOSTED_USER_ID`. If you restore to a new deploy with a
 
 ```bash
 # Peek at the profile in the restored DB
-docker compose exec postgres psql -U dailyagent -c "SELECT id FROM profiles"
+docker compose exec postgres psql -U cadence -c "SELECT id FROM profiles"
 ```
 
 Copy that UUID into `.env` as `SELF_HOSTED_USER_ID` and restart the app:
@@ -92,15 +92,15 @@ If you disabled the `db-backup` sidecar (or run an older deploy that doesn't inc
 Simple cron on the VPS, one per day, keeps 30 days locally:
 
 ```cron
-# /etc/cron.d/dailyagent-backup
-0 3 * * * root cd /opt/mcp-dailyagent && /usr/bin/docker compose exec -T postgres pg_dump -U dailyagent dailyagent | /bin/gzip > /var/backups/dailyagent/backup-$(date +\%F).sql.gz && find /var/backups/dailyagent -name "backup-*.sql.gz" -mtime +30 -delete
+# /etc/cron.d/cadence-backup
+0 3 * * * root cd /opt/cadence && /usr/bin/docker compose exec -T postgres pg_dump -U cadence cadence | /bin/gzip > /var/backups/cadence/backup-$(date +\%F).sql.gz && find /var/backups/cadence -name "backup-*.sql.gz" -mtime +30 -delete
 ```
 
 First make the directory and check it's writable:
 
 ```bash
-sudo mkdir -p /var/backups/dailyagent
-sudo chown root:root /var/backups/dailyagent
+sudo mkdir -p /var/backups/cadence
+sudo chown root:root /var/backups/cadence
 ```
 
 For off-site copies, layer rclone, rsync, or any backup tool you like on top of that directory.
@@ -112,7 +112,7 @@ If you'd rather snapshot the full volume (faster, larger, binary):
 ```bash
 docker compose down
 docker run --rm \
-  -v mcp-dailyagent_dailyagent_pgdata:/data \
+  -v cadence_cadence_pgdata:/data \
   -v "$(pwd)":/backup \
   alpine tar czf /backup/pgdata-$(date +%F).tar.gz -C /data .
 docker compose up -d
@@ -122,10 +122,10 @@ Restore:
 
 ```bash
 docker compose down
-docker volume rm mcp-dailyagent_dailyagent_pgdata
-docker volume create mcp-dailyagent_dailyagent_pgdata
+docker volume rm cadence_cadence_pgdata
+docker volume create cadence_cadence_pgdata
 docker run --rm \
-  -v mcp-dailyagent_dailyagent_pgdata:/data \
+  -v cadence_cadence_pgdata:/data \
   -v "$(pwd)":/backup \
   alpine sh -c "cd /data && tar xzf /backup/pgdata-YYYY-MM-DD.tar.gz"
 docker compose up -d
@@ -140,15 +140,15 @@ Don't trust a backup you haven't restored at least once. Quickest dry run:
 ```bash
 # Spin up a throwaway Postgres with the dump
 docker run --rm -d --name pgverify \
-  -e POSTGRES_USER=dailyagent -e POSTGRES_PASSWORD=x -e POSTGRES_DB=dailyagent \
+  -e POSTGRES_USER=cadence -e POSTGRES_PASSWORD=x -e POSTGRES_DB=cadence \
   -p 55432:5432 postgres:16-alpine
 
 # Wait until ready, then load the dump
-gunzip -c backup-YYYY-MM-DD.sql.gz | docker exec -i pgverify psql -U dailyagent dailyagent
+gunzip -c backup-YYYY-MM-DD.sql.gz | docker exec -i pgverify psql -U cadence cadence
 
 # Spot-check
-docker exec -i pgverify psql -U dailyagent -c "SELECT COUNT(*) FROM tasks;"
-docker exec -i pgverify psql -U dailyagent -c "SELECT id, email FROM profiles;"
+docker exec -i pgverify psql -U cadence -c "SELECT COUNT(*) FROM tasks;"
+docker exec -i pgverify psql -U cadence -c "SELECT id, email FROM profiles;"
 
 # Tear down
 docker stop pgverify

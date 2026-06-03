@@ -1,4 +1,4 @@
-# Daily Agent MCP
+# Cadence
 
 **Self-hosted productivity data layer for [OpenClaw](https://openclaw.ai).**
 Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Single-user, Tailscale-gated.

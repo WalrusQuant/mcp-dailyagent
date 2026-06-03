@@ -7,7 +7,7 @@ export function registerFocusResources(server: McpServer) {
   // --- focus-today ---
   server.resource(
     "focus-today",
-    "dailyagent://focus/today",
+    "cadence://focus/today",
     { description: "Today's focus session totals: total minutes and session count" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

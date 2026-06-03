@@ -55,7 +55,7 @@ Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Stream
 - `types.ts` — Shared types (`McpContext`, `QueryResult`)
 - `db.ts` — Re-exports Drizzle instance
 - `tools/` — Read + write tools (tasks, habits, journal, workouts, focus, goals, spaces, reviews, briefings, **insights**, calendar)
-- `resources/` — Read-only resource URIs (`dailyagent://...`)
+- `resources/` — Read-only resource URIs (`cadence://...`)
 - `prompts/` — Versioned prompt templates (daily planning, morning briefing, weekly review, habit analysis, productivity report, weekly trends, journal prompt, workout suggestion, goal planning, space planning, etc.). **OpenClaw calls these** — they replace the markdown templates that used to live in OpenClaw skills.
 - `queries/` — Shared DB query helpers
 - `tools/helpers.ts` — `getAuth`, `checkScope`, `textResult`, `errorResult`, `NOT_AUTHENTICATED`
@@ -133,7 +133,7 @@ Optional:
 
 ## Deployment
 
-**Self-host install:** prebuilt multi-arch image lives at `ghcr.io/walrusquant/mcp-dailyagent` (and `docker.io/walrusquant/mcp-dailyagent`). Users follow `docs/quick-start.md` — download `docker-compose.example.yml` + `.env.example`, fill three env vars, `docker compose up -d`. The container's entrypoint (`docker-entrypoint.sh`) waits for Postgres, runs `drizzle-kit migrate`, seeds the profile row via `INSERT ... ON CONFLICT DO NOTHING`, then execs the Next.js standalone server.
+**Self-host install:** prebuilt multi-arch image lives at `ghcr.io/walrusquant/cadence` (and `docker.io/walrusquant/cadence`). Users follow `docs/quick-start.md` — download `docker-compose.example.yml` + `.env.example`, fill three env vars, `docker compose up -d`. The container's entrypoint (`docker-entrypoint.sh`) waits for Postgres, runs `drizzle-kit migrate`, seeds the profile row via `INSERT ... ON CONFLICT DO NOTHING`, then execs the Next.js standalone server.
 
 **Self-host update:** `docker compose pull && docker compose up -d`. Migrations run automatically on container start.
 

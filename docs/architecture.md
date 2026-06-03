@@ -118,11 +118,11 @@ docs/                         # This documentation
 flowchart TD
     TS[Tailscale wireguard iface] --> APPC["app container<br/>127.0.0.1:3000"]
     APPC --> PGC["postgres container<br/>127.0.0.1:5432"]
-    PGC --> Volume[(dailyagent_pgdata)]
+    PGC --> Volume[(cadence_pgdata)]
     Firewall{{ufw: 3000 denied publicly}} -.-> TS
 ```
 
-The `depends_on: postgres service_healthy` clause in `docker-compose.yml` makes the app wait for Postgres to pass its `pg_isready` healthcheck before starting. Data survives container restarts via the named `dailyagent_pgdata` volume.
+The `depends_on: postgres service_healthy` clause in `docker-compose.yml` makes the app wait for Postgres to pass its `pg_isready` healthcheck before starting. Data survives container restarts via the named `cadence_pgdata` volume.
 
 The default compose also includes a `db-backup` sidecar (`prodrigestivill/postgres-backup-local`) that runs `pg_dump` on a schedule into a bind-mounted `./backups/` directory. See [backup-restore.md](backup-restore.md).
 

@@ -54,7 +54,7 @@ export function getMcpCounts(): { tools: number; prompts: number; resources: num
 export function createMcpServer(): McpServer {
   const server = new McpServer(
     {
-      name: "Daily Agent MCP",
+      name: "Cadence",
       version: pkg.version,
     },
     {

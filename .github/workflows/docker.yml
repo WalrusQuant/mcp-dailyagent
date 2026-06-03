@@ -42,7 +42,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mcp-dailyagent
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/cadence
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}

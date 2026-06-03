@@ -11,13 +11,13 @@ Stand up your instance in about five minutes using the prebuilt container image.
 ## 1. Grab the compose + env files
 
 ```bash
-mkdir mcp-dailyagent && cd mcp-dailyagent
+mkdir cadence && cd cadence
 
 curl -o docker-compose.yml \
-  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/docker-compose.example.yml
+  https://raw.githubusercontent.com/WalrusQuant/cadence/main/docker-compose.example.yml
 
 curl -o .env \
-  https://raw.githubusercontent.com/WalrusQuant/mcp-dailyagent/main/.env.example
+  https://raw.githubusercontent.com/WalrusQuant/cadence/main/.env.example
 ```
 
 ## 2. Fill in `.env`
@@ -118,7 +118,7 @@ Then `docker compose up -d`.
 Add this block to your OpenClaw MCP config (alongside any other MCP servers you've registered):
 
 ```json
-"dailyagent": {
+"cadence": {
   "url": "http://<tailscale-name>:3000/api/mcp",
   "transport": "streamable-http",
   "headers": {
@@ -161,13 +161,13 @@ That's it. Migrations run automatically on container start.
 Pulled by default from GHCR:
 
 ```
-ghcr.io/walrusquant/mcp-dailyagent:latest
+ghcr.io/walrusquant/cadence:latest
 ```
 
 Mirrored to Docker Hub if you prefer:
 
 ```
-docker.io/walrusquant/mcp-dailyagent:latest
+docker.io/walrusquant/cadence:latest
 ```
 
 Available tags: `:latest` (tracks `main`), `:1` / `:1.0` / `:1.0.0` (semver — `:1` floats within the v1 major, `:1.0` within v1.0, `:1.0.0` is an exact pin), and `:sha-<short>` for a pin to a specific commit. Pin to `:1` for safe auto-upgrades within the major version.

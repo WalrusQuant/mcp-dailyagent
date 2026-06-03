@@ -7,7 +7,7 @@ export function registerTaskResources(server: McpServer) {
   // --- tasks-today ---
   server.resource(
     "tasks-today",
-    "dailyagent://tasks/today",
+    "cadence://tasks/today",
     { description: "Today's tasks, including any incomplete tasks from previous days" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
@@ -37,7 +37,7 @@ export function registerTaskResources(server: McpServer) {
   // --- tasks-overdue ---
   server.resource(
     "tasks-overdue",
-    "dailyagent://tasks/overdue",
+    "cadence://tasks/overdue",
     { description: "Incomplete tasks with a date before today" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

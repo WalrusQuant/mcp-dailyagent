@@ -1,6 +1,6 @@
 {
-  "name": "Daily Agent MCP",
-  "short_name": "Daily Agent",
+  "name": "Cadence",
+  "short_name": "Cadence",
   "description": "Self-hosted productivity data layer",
   "id": "/dashboard",
   "start_url": "/dashboard",

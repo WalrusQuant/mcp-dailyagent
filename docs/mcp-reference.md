@@ -351,19 +351,19 @@ Prompts are loaded via MCP's `prompts/get` endpoint and returned as ready-to-fil
 
 ## Resources
 
-Read-only URIs under the `dailyagent://` scheme. Use these for fast contextual reads when calling a tool would be overkill.
+Read-only URIs under the `cadence://` scheme. Use these for fast contextual reads when calling a tool would be overkill.
 
-- `dailyagent://dashboard` — today at a glance
-- `dailyagent://tasks/today`, `dailyagent://tasks/overdue`
-- `dailyagent://habits/today`, `dailyagent://habits/streaks`
-- `dailyagent://journal/today`, `dailyagent://journal/recent`
-- `dailyagent://workouts/recent`
-- `dailyagent://focus/today`
-- `dailyagent://goals/active`
-- `dailyagent://spaces/list`
-- `dailyagent://briefing/today`
-- `dailyagent://calendar/today`, `dailyagent://calendar/week`
-- `dailyagent://review/latest`
+- `cadence://dashboard` — today at a glance
+- `cadence://tasks/today`, `cadence://tasks/overdue`
+- `cadence://habits/today`, `cadence://habits/streaks`
+- `cadence://journal/today`, `cadence://journal/recent`
+- `cadence://workouts/recent`
+- `cadence://focus/today`
+- `cadence://goals/active`
+- `cadence://spaces/list`
+- `cadence://briefing/today`
+- `cadence://calendar/today`, `cadence://calendar/week`
+- `cadence://review/latest`
 
 ---
 

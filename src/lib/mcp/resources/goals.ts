@@ -7,7 +7,7 @@ export function registerGoalResources(server: McpServer) {
   // --- goals-active ---
   server.resource(
     "goals-active",
-    "dailyagent://goals/active",
+    "cadence://goals/active",
     { description: "All active goals, ordered by sort order and creation date" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);

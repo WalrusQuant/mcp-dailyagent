@@ -96,7 +96,7 @@ export async function GET() {
       },
     };
 
-    const filename = `dailyagent-export-${new Date().toISOString().split("T")[0]}.json`;
+    const filename = `cadence-export-${new Date().toISOString().split("T")[0]}.json`;
 
     return new NextResponse(JSON.stringify(payload, null, 2), {
       status: 200,

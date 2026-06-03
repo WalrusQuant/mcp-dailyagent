@@ -5,7 +5,7 @@ export default {
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgres://dailyagent:dailyagent@localhost:5432/dailyagent",
+    url: process.env.DATABASE_URL || "postgres://cadence:cadence@localhost:5432/cadence",
   },
   strict: true,
   verbose: true,

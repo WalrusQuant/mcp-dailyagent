@@ -97,7 +97,7 @@ export async function validateMcpAuth(
  * Build a WWW-Authenticate header value per RFC 6750.
  */
 function buildWwwAuthenticate(error?: string, errorDescription?: string): string {
-  const parts = [`Bearer realm="dailyagent"`];
+  const parts = [`Bearer realm="cadence"`];
   if (error) {
     parts.push(`error="${error}"`);
   }

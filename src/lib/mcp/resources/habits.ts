@@ -12,7 +12,7 @@ export function registerHabitResources(server: McpServer) {
   // --- habits-today ---
   server.resource(
     "habits-today",
-    "dailyagent://habits/today",
+    "cadence://habits/today",
     { description: "All active habits with today's completion status" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
@@ -42,7 +42,7 @@ export function registerHabitResources(server: McpServer) {
   // --- habits-streaks ---
   server.resource(
     "habits-streaks",
-    "dailyagent://habits/streaks",
+    "cadence://habits/streaks",
     { description: "Streak and completion rate stats for all active habits (last 30 days)" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
