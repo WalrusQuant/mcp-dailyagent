@@ -4,6 +4,7 @@ import { workoutTemplates, workoutExercises } from "@/lib/db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTemplate } from "@/lib/mcp/queries/workouts";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET() {
   const userId = getUserId();
@@ -47,7 +48,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, description, exercises } = body;
 
   if (!name || typeof name !== "string") {
@@ -60,33 +65,33 @@ export async function POST(request: NextRequest) {
     const template = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(workoutTemplates)
-        .values({ userId, name, description: description ?? null })
+        .values({ userId, name: name as string, description: (description as string) ?? null })
         .returning();
 
-      if (Array.isArray(exercises) && exercises.length > 0) {
+      type TemplateExerciseInput = {
+        name: string;
+        exercise_type?: string;
+        sort_order?: number;
+        default_sets?: number;
+        default_reps?: number;
+        default_weight?: number;
+        default_duration?: number;
+        notes?: string;
+      };
+      const exerciseList = exercises as TemplateExerciseInput[];
+      if (Array.isArray(exerciseList) && exerciseList.length > 0) {
         await tx.insert(workoutExercises).values(
-          exercises.map(
-            (ex: {
-              name: string;
-              exercise_type?: string;
-              sort_order?: number;
-              default_sets?: number;
-              default_reps?: number;
-              default_weight?: number;
-              default_duration?: number;
-              notes?: string;
-            }) => ({
-              templateId: created.id,
-              name: ex.name,
-              exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
-              sortOrder: ex.sort_order ?? 0,
-              defaultSets: ex.default_sets ?? null,
-              defaultReps: ex.default_reps ?? null,
-              defaultWeight: ex.default_weight?.toString() ?? null,
-              defaultDuration: ex.default_duration ?? null,
-              notes: ex.notes ?? null,
-            })
-          )
+          exerciseList.map((ex) => ({
+            templateId: created.id,
+            name: ex.name,
+            exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
+            sortOrder: ex.sort_order ?? 0,
+            defaultSets: ex.default_sets ?? null,
+            defaultReps: ex.default_reps ?? null,
+            defaultWeight: ex.default_weight?.toString() ?? null,
+            defaultDuration: ex.default_duration ?? null,
+            notes: ex.notes ?? null,
+          }))
         );
       }
 

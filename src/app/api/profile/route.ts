@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET() {
   try {
@@ -37,17 +38,20 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   try {
     const userId = getUserId();
-    const body = await request.json();
     const allowed: Partial<typeof profiles.$inferInsert> = {};
 
     if (typeof body.displayName === "string" || body.displayName === null) {
-      allowed.displayName = body.displayName || null;
+      allowed.displayName = (body.displayName as string) || null;
     }
 
     if (typeof body.avatarUrl === "string" || body.avatarUrl === null) {
-      allowed.avatarUrl = body.avatarUrl || null;
+      allowed.avatarUrl = (body.avatarUrl as string) || null;
     }
 
     if (typeof body.timezone === "string") {
@@ -64,7 +68,7 @@ export async function PATCH(request: NextRequest) {
 
     if (body.aiModelConfig !== undefined) {
       if (body.aiModelConfig === null || typeof body.aiModelConfig === "object") {
-        allowed.aiModelConfig = body.aiModelConfig;
+        allowed.aiModelConfig = body.aiModelConfig as object | null;
       }
     }
 

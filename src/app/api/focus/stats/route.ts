@@ -9,7 +9,14 @@ export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
-  const days = Math.max(1, parseInt(searchParams.get("days") || "7"));
+  const daysParam = searchParams.get("days");
+  if (daysParam !== null) {
+    const parsed = parseInt(daysParam, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return NextResponse.json({ error: "Invalid days parameter" }, { status: 400 });
+    }
+  }
+  const days = Math.max(1, parseInt(daysParam ?? "7", 10));
 
   const from = new Date();
   from.setDate(from.getDate() - (days - 1));

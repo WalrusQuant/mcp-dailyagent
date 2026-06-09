@@ -166,7 +166,7 @@ export function registerTaskTools(server: McpServer) {
     "list_tasks",
     "List tasks for a given date (defaults to today). Incomplete tasks from previous days are included when viewing today.",
     {
-      date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       space_id: z.string().optional().describe("Filter by space/project ID"),
     },
     async (args, extra: Extra) => {

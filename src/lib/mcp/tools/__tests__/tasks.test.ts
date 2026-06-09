@@ -367,3 +367,13 @@ describe("delete_task", () => {
     expect(list).toHaveLength(1);
   });
 });
+
+describe("list_tasks — date validation", () => {
+  it("rejects a malformed date string via zod", async () => {
+    await expect(h.call("list_tasks", { date: "junk" }, ctx)).rejects.toThrow();
+  });
+
+  it("rejects a partial date string", async () => {
+    await expect(h.call("list_tasks", { date: "2026-06" }, ctx)).rejects.toThrow();
+  });
+});

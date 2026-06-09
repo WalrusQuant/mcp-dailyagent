@@ -5,6 +5,7 @@ import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
 import { getToday } from "@/lib/dates";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -143,14 +144,42 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const VALID_GOAL_CATEGORIES = new Set(["health", "career", "personal", "financial", "learning", "relationships", "other"]);
+const VALID_PROGRESS_MODES = new Set(["auto", "manual"]);
+
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { title, description, category, target_date, progress_mode, progress, sort_order } = body;
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
+  }
+
+  if (category !== undefined && !VALID_GOAL_CATEGORIES.has(category as string)) {
+    return NextResponse.json(
+      { error: "category must be one of: health, career, personal, financial, learning, relationships, other" },
+      { status: 400 }
+    );
+  }
+
+  if (target_date !== undefined && (typeof target_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(target_date as string))) {
+    return NextResponse.json({ error: "target_date must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+
+  if (progress_mode !== undefined && !VALID_PROGRESS_MODES.has(progress_mode as string)) {
+    return NextResponse.json({ error: "progress_mode must be one of: auto, manual" }, { status: 400 });
+  }
+
+  if (progress !== undefined) {
+    if (typeof progress !== "number" || !Number.isInteger(progress) || progress < 0 || progress > 100) {
+      return NextResponse.json({ error: "progress must be an integer between 0 and 100" }, { status: 400 });
+    }
   }
 
   try {
@@ -159,10 +188,10 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         title: title.trim(),
-        ...(description ? { description } : {}),
-        ...(category ? { category } : {}),
-        ...(target_date ? { targetDate: target_date } : {}),
-        ...(progress_mode ? { progressMode: progress_mode } : {}),
+        ...(description ? { description: description as string } : {}),
+        ...(category ? { category: category as string } : {}),
+        ...(target_date ? { targetDate: target_date as string } : {}),
+        ...(progress_mode ? { progressMode: progress_mode as string } : {}),
         ...(typeof progress === "number" ? { progress } : {}),
         ...(typeof sort_order === "number" ? { sortOrder: sort_order } : {}),
       })

@@ -8,6 +8,7 @@ import { conflictResponse } from "@/lib/api-conflict";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(
   _request: NextRequest,
@@ -57,18 +58,55 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const VALID_CATEGORIES = new Set(["health", "career", "personal", "financial", "learning", "relationships", "other"]);
+  const VALID_STATUSES = new Set(["active", "completed", "abandoned"]);
+  const VALID_MODES = new Set(["auto", "manual"]);
+
+  if (body.category !== undefined && !VALID_CATEGORIES.has(body.category as string)) {
+    return NextResponse.json(
+      { error: "category must be one of: health, career, personal, financial, learning, relationships, other" },
+      { status: 400 }
+    );
+  }
+
+  if (body.status !== undefined && !VALID_STATUSES.has(body.status as string)) {
+    return NextResponse.json(
+      { error: "status must be one of: active, completed, abandoned" },
+      { status: 400 }
+    );
+  }
+
+  if (body.progress !== undefined) {
+    if (typeof body.progress !== "number" || !Number.isInteger(body.progress) || body.progress < 0 || body.progress > 100) {
+      return NextResponse.json({ error: "progress must be an integer between 0 and 100" }, { status: 400 });
+    }
+  }
+
+  if (body.progress_mode !== undefined && !VALID_MODES.has(body.progress_mode as string)) {
+    return NextResponse.json({ error: "progress_mode must be one of: auto, manual" }, { status: 400 });
+  }
+
+  if (body.target_date !== undefined && body.target_date !== null &&
+      (typeof body.target_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.target_date as string))) {
+    return NextResponse.json({ error: "target_date must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+
   const allowedFields: Partial<typeof goals.$inferInsert> = {};
 
   if (typeof body.title === "string") allowedFields.title = body.title;
   if (typeof body.description === "string" || body.description === null)
-    allowedFields.description = body.description;
+    allowedFields.description = body.description as string | null;
   if (typeof body.category === "string") allowedFields.category = body.category;
   if (typeof body.status === "string") allowedFields.status = body.status as "active" | "completed" | "abandoned";
   if (typeof body.progress === "number") allowedFields.progress = body.progress;
   if (typeof body.progress_mode === "string") allowedFields.progressMode = body.progress_mode as "auto" | "manual";
   if (typeof body.target_date === "string" || body.target_date === null)
-    allowedFields.targetDate = body.target_date;
+    allowedFields.targetDate = body.target_date as string | null;
   if (typeof body.sort_order === "number") allowedFields.sortOrder = body.sort_order;
 
   if (body.status === "completed") {

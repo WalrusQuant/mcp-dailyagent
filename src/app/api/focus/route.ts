@@ -4,6 +4,7 @@ import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeSession } from "@/lib/mcp/queries/focus";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -38,7 +39,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { task_id, duration_minutes, break_minutes, notes } = body;
 
   if (typeof duration_minutes !== "number" || duration_minutes <= 0) {
@@ -53,10 +58,10 @@ export async function POST(request: NextRequest) {
       .insert(focusSessions)
       .values({
         userId,
-        taskId: task_id ?? null,
+        taskId: (task_id as string) ?? null,
         durationMinutes: duration_minutes,
         breakMinutes: typeof break_minutes === "number" ? break_minutes : 0,
-        notes: notes ?? null,
+        notes: (notes as string) ?? null,
         startedAt: new Date(),
         status: "active",
       })

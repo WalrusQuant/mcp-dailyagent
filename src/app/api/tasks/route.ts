@@ -5,6 +5,7 @@ import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -49,14 +50,38 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const VALID_RECURRENCE_TYPES = new Set(["daily", "weekdays", "weekly", "monthly"]);
+
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { title, notes, priority, task_date, space_id, goal_id, recurrence, sort_order } = body;
 
   if (!title || typeof title !== "string") {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
+  }
+
+  if (priority !== undefined && (typeof priority !== "string" || !/^[A-C][1-9]$/.test(priority as string))) {
+    return NextResponse.json({ error: "Invalid priority: must match A1-C9" }, { status: 400 });
+  }
+
+  if (task_date !== undefined && (typeof task_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(task_date as string))) {
+    return NextResponse.json({ error: "task_date must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+
+  if (recurrence !== undefined && recurrence !== null) {
+    const rec = recurrence as Record<string, unknown>;
+    if (typeof rec !== "object" || Array.isArray(rec) || !VALID_RECURRENCE_TYPES.has(rec.type as string)) {
+      return NextResponse.json(
+        { error: "recurrence.type must be one of: daily, weekdays, weekly, monthly" },
+        { status: 400 }
+      );
+    }
   }
 
   const today = getToday();
@@ -66,13 +91,13 @@ export async function POST(request: NextRequest) {
       .insert(tasks)
       .values({
         userId,
-        title,
-        notes: notes || null,
+        title: title as string,
+        notes: (notes as string) || null,
         priority: typeof priority === "string" ? priority : "B1",
-        taskDate: task_date || today,
-        spaceId: space_id || null,
-        goalId: goal_id || null,
-        recurrence: recurrence || null,
+        taskDate: (task_date as string) || today,
+        spaceId: (space_id as string) || null,
+        goalId: (goal_id as string) || null,
+        recurrence: recurrence !== undefined ? (recurrence as object | null) : null,
         sortOrder: typeof sort_order === "number" ? sort_order : 0,
       })
       .returning();

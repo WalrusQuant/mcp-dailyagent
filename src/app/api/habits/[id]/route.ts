@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(
   _request: NextRequest,
@@ -37,25 +38,30 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   const allowedFields: Partial<typeof habits.$inferInsert> = {};
 
   if (typeof body.name === "string") allowedFields.name = body.name;
   if (typeof body.description === "string" || body.description === null)
-    allowedFields.description = body.description;
+    allowedFields.description = body.description as string | null;
   if (typeof body.frequency === "string" || body.frequency === null)
-    allowedFields.frequency = body.frequency ?? undefined;
-  if (Array.isArray(body.target_days) || body.target_days === null)
-    allowedFields.targetDays = body.target_days;
+    allowedFields.frequency = (body.frequency as string) ?? undefined;
+  if (Array.isArray(body.target_days))
+    allowedFields.targetDays = body.target_days as number[];
+  else if (body.target_days === null)
+    allowedFields.targetDays = undefined;
   if (typeof body.color === "string" || body.color === null)
-    allowedFields.color = body.color ?? undefined;
+    allowedFields.color = (body.color as string) ?? undefined;
   if (typeof body.archived === "boolean")
     allowedFields.archived = body.archived;
   if (typeof body.sort_order === "number" || body.sort_order === null)
-    allowedFields.sortOrder = body.sort_order ?? undefined;
+    allowedFields.sortOrder = (body.sort_order as number) ?? undefined;
   if (typeof body.goal_id === "string" || body.goal_id === null)
-    allowedFields.goalId = body.goal_id;
+    allowedFields.goalId = body.goal_id as string | null;
 
   if (Object.keys(allowedFields).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

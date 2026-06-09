@@ -199,6 +199,18 @@ describe("log_goal_progress", () => {
     const goal = await seedGoal({ title: "Mine" });
     await expect(h.call("log_goal_progress", { goal_id: goal.id, progress: 150 }, ctx)).rejects.toThrow();
   });
+
+  it("rejects a float progress value at the zod layer", async () => {
+    const goal = await seedGoal({ title: "Mine" });
+    await expect(h.call("log_goal_progress", { goal_id: goal.id, progress: 50.5 }, ctx)).rejects.toThrow();
+  });
+});
+
+describe("update_goal — progress float rejection", () => {
+  it("rejects a float progress value at the zod layer", async () => {
+    const goal = await seedGoal({ title: "Float test" });
+    await expect(h.call("update_goal", { goal_id: goal.id, progress: 33.3 }, ctx)).rejects.toThrow();
+  });
 });
 
 describe("delete_goal", () => {

@@ -6,6 +6,7 @@ import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
 import { isUniqueViolation } from "@/lib/api-conflict";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -66,15 +67,23 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { content, entry_date, mood } = body;
 
   if (!content || typeof content !== "string" || content.trim() === "") {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
+  if (entry_date !== undefined && (typeof entry_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry_date as string))) {
+    return NextResponse.json({ error: "entry_date must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+
   if (mood !== undefined && mood !== null) {
-    if (typeof mood !== "number" || mood < 1 || mood > 5) {
+    if (typeof mood !== "number" || !Number.isInteger(mood) || mood < 1 || mood > 5) {
       return NextResponse.json(
         { error: "mood must be an integer between 1 and 5, or null" },
         { status: 400 }
@@ -90,8 +99,8 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         content: content.trim(),
-        entryDate: entry_date || today,
-        mood: mood ?? null,
+        entryDate: (entry_date as string) || today,
+        mood: (mood as number) ?? null,
       })
       .returning();
 

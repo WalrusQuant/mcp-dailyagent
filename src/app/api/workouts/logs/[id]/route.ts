@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeLog } from "@/lib/mcp/queries/workouts";
+import { readJsonBody } from "@/lib/api-body";
 
 async function getLogWithExercises(id: string, userId: string) {
   const rows = await db
@@ -49,14 +50,22 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   const allowedFields: Partial<typeof workoutLogs.$inferInsert> = {};
-  if (typeof body.name === "string" || body.name === null) allowedFields.name = body.name ?? undefined;
-  if (typeof body.log_date === "string") allowedFields.logDate = body.log_date;
+  if (typeof body.name === "string" || body.name === null) allowedFields.name = (body.name as string) ?? undefined;
+  if (typeof body.log_date === "string") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.log_date)) {
+      return NextResponse.json({ error: "log_date must be in YYYY-MM-DD format" }, { status: 400 });
+    }
+    allowedFields.logDate = body.log_date;
+  }
   if (typeof body.duration_minutes === "number" || body.duration_minutes === null)
-    allowedFields.durationMinutes = body.duration_minutes;
-  if (typeof body.notes === "string" || body.notes === null) allowedFields.notes = body.notes;
+    allowedFields.durationMinutes = body.duration_minutes as number | null;
+  if (typeof body.notes === "string" || body.notes === null) allowedFields.notes = body.notes as string | null;
 
   if (Object.keys(allowedFields).length === 0 && !Array.isArray(body.exercises)) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
@@ -78,7 +87,7 @@ export async function PATCH(
         table: workoutLogs,
         id,
         userId,
-        expectedUpdatedAt: body.expected_updated_at,
+        expectedUpdatedAt: body.expected_updated_at as string,
         patch: allowedFields,
       });
       if (!result.ok) {
@@ -99,34 +108,34 @@ export async function PATCH(
         .where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId)));
     }
 
-    if (Array.isArray(body.exercises)) {
+    type ExerciseInput = {
+      exercise_name: string;
+      exercise_type?: string;
+      sort_order?: number;
+      sets?: Array<{
+        set_number?: number;
+        reps?: number;
+        weight?: number;
+        duration_seconds?: number;
+        notes?: string;
+      }>;
+    };
+    const bodyExercises = body.exercises as ExerciseInput[];
+    if (Array.isArray(bodyExercises)) {
       // Replace atomically: if the insert fails, the delete rolls back and
       // the previous exercises survive.
       await db.transaction(async (tx) => {
         await tx.delete(workoutLogExercises).where(eq(workoutLogExercises.logId, id));
 
-        if (body.exercises.length > 0) {
+        if (bodyExercises.length > 0) {
           await tx.insert(workoutLogExercises).values(
-            body.exercises.map(
-              (ex: {
-                exercise_name: string;
-                exercise_type?: string;
-                sort_order?: number;
-                sets?: Array<{
-                  set_number?: number;
-                  reps?: number;
-                  weight?: number;
-                  duration_seconds?: number;
-                  notes?: string;
-                }>;
-              }) => ({
-                logId: id,
-                exerciseName: ex.exercise_name,
-                exerciseType: ex.exercise_type ?? "strength",
-                sortOrder: ex.sort_order ?? 0,
-                sets: ex.sets ?? [],
-              })
-            )
+            bodyExercises.map((ex) => ({
+              logId: id,
+              exerciseName: ex.exercise_name,
+              exerciseType: ex.exercise_type ?? "strength",
+              sortOrder: ex.sort_order ?? 0,
+              sets: ex.sets ?? [],
+            }))
           );
         }
       });

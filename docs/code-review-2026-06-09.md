@@ -379,14 +379,21 @@ in `.env` does nothing. They're only read in a server component
 ## Low
 
 ### L1. Malformed JSON returns 500, not 400
-- [ ] Fixed
+- [x] Fixed — new `readJsonBody` helper (`src/lib/api-body.ts`) returns null on
+  missing/malformed/non-object bodies; all 22 POST/PATCH routes now respond 400.
+  wipe-data kept its own hardened parse (C3 semantics preserved).
 
 Every POST/PATCH except `profile` calls `await request.json()` outside try/catch
 (~20 sites, e.g. `tasks/route.ts:54`, `habits/[id]/route.ts:40`,
 `journal/route.ts:67`, `tasks/reorder/route.ts:10`).
 
 ### L2. Unvalidated values surface as raw PG 500s
-- [ ] Fixed
+- [x] Fixed — 400s with clear messages for: task priority (`^[A-C][1-9]$`),
+  task/goal/journal/workout date strings (YYYY-MM-DD), recurrence shape
+  (type ∈ daily|weekdays|weekly|monthly), goal category/status/progress
+  (integer 0-100)/progress_mode, journal mood (integer 1-5, floats rejected),
+  focus timestamp validity. MCP: `list_tasks.date` uses `dateSchema`; goal
+  `progress` schemas gained `.int()`. Covered by new zod-layer tests.
 
 Task `priority` (must match `^[A-C][1-9]$`, `schema.ts:162`) unvalidated at
 `tasks/route.ts:70` / `tasks/[id]/route.ts:46`; goal `category`/`status`/`progress`
@@ -442,7 +449,8 @@ twice; StrictMode does) and `.catch(() => {})` silently desyncs order on failure
 `null` in the guard then coerce `?? undefined` — returns 200, changes nothing.
 
 ### L9. `parseInt` without NaN check → 500
-- [ ] Fixed
+- [x] Fixed — habits/focus/workouts stats routes return 400 when `?days=` is
+  present but not a positive integer; defaults preserved when absent.
 
 `habits/stats/route.ts:12-18`, `focus/stats/route.ts:11-15`,
 `workouts/stats/route.ts:16`: `?days=abc` → NaN → Invalid Date → throw.
@@ -465,7 +473,8 @@ boundaries server-local but bucket sessions by UTC (`route.ts:149`), inconsisten
 with `dashboard/route.ts:78`.
 
 ### L12. Workout multi-statement writes (MCP) untransacted
-- [ ] Fixed
+- [x] Fixed — covered by M3 as noted: verified `logWorkout`, `createWorkoutTemplate`,
+  and `updateWorkoutLog` all wrap parent+children in `db.transaction`.
 
 Covered by M3's fix — listed separately to ensure MCP `logWorkout` /
 `createWorkoutTemplate` / `updateWorkoutLog` get the same `db.transaction` treatment.

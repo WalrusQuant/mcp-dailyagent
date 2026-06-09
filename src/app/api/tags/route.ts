@@ -5,6 +5,7 @@ import { eq, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTag } from "@/lib/mcp/queries/tags";
 import { isUniqueViolation } from "@/lib/api-conflict";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET() {
   const userId = getUserId();
@@ -25,7 +26,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, color } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         name: name.trim(),
-        color: color || "#94a3b8",
+        color: (color as string) || "#94a3b8",
       })
       .returning();
 

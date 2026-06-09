@@ -4,6 +4,7 @@ import { tags } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTag } from "@/lib/mcp/queries/tags";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function PATCH(
   request: NextRequest,
@@ -12,7 +13,10 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const allowedFields: Partial<typeof tags.$inferInsert> = {};
   if (typeof body.name === "string") {
     const trimmed = body.name.trim();
