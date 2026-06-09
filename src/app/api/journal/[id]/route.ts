@@ -4,7 +4,7 @@ import { journalEntries } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
-import { conflictResponse } from "@/lib/api-conflict";
+import { conflictResponse, isUniqueViolation } from "@/lib/api-conflict";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
 
 export async function GET(
@@ -104,6 +104,12 @@ export async function PATCH(
 
     return NextResponse.json(serializeEntry(row));
   } catch (err) {
+    if (isUniqueViolation(err)) {
+      return NextResponse.json(
+        { error: "A journal entry already exists for that date" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
 }

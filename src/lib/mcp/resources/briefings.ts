@@ -21,6 +21,7 @@ export function registerBriefingResources(server: McpServer) {
       }
 
       const result = await getTodayBriefing(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

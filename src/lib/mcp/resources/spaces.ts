@@ -21,6 +21,7 @@ export function registerSpaceResources(server: McpServer) {
       }
 
       const result = await getSpaces(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

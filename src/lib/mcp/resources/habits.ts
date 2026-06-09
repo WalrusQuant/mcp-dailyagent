@@ -26,6 +26,7 @@ export function registerHabitResources(server: McpServer) {
       }
 
       const result = await getHabitsWithTodayStatus(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

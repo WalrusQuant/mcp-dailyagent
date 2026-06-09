@@ -15,6 +15,7 @@ export function registerDashboardResources(server: McpServer) {
 
       // Dashboard is accessible to any authenticated user — no specific scope required
       const result = await getDashboardSnapshot(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

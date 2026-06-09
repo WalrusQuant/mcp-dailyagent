@@ -212,14 +212,18 @@ data with mixed types.
 ### MCP correctness
 
 ### M8. Duplicate-day journal POST returns raw 500
-- [ ] Fixed
+- [x] Fixed — new `isUniqueViolation` helper (checks PG code 23505) maps duplicate
+  dates to 409 with a clear message in journal POST and journal/[id] PATCH; tags
+  route upgraded from message-sniffing to the same helper.
 
 `src/app/api/journal/route.ts:86-96` doesn't upsert or map the unique
 `(user_id, entry_date)` violation to 409 (the way `tags` does); same for
 `journal/[id]` PATCH of `entry_date`. Leaks constraint name in the error.
 
 ### M9. `getWeekSummary` computes expected habits from the current month's grid
-- [ ] Fixed
+- [x] Fixed — expected counts derive from `getDateRange(weekStart, weekEnd)` with
+  TZ-safe `getDayOfWeek`; regression test covers a week months outside the current
+  grid (daily + weekday habits).
 
 `src/lib/mcp/queries/calendar.ts:160,255`:
 `getCalendarGridDates(today.slice(0, 7))` builds the grid around **today**, then
@@ -227,14 +231,18 @@ filters to the requested week — any week outside the current month's grid gets
 expected habits. Derive from `getDateRange(weekStart, weekEnd)` instead.
 
 ### M10. `weekly_review` prompt journal stats wrong for past weeks
-- [ ] Fixed
+- [x] Fixed — new `fetchJournalForRange` queries the requested week directly;
+  "Entries written" is now correct for any `week_start`.
 
 `src/lib/mcp/prompts/index.ts:704-716`: fetches the 7 most recent entries overall,
 then filters to the week — for a past week (the documented use), "Entries written"
 reports 0. Query the date range directly.
 
 ### M11. `habit_analysis` prompt mislabels partial-week habits
-- [ ] Fixed
+- [x] Fixed — `fetchAllHabitsWithStats` rates against `getApplicableDays` over the
+  habit's `target_days` (window corrected to 30 days inclusive, capped at 100%), so
+  a perfect 3×/week habit reads 100%, not ~43%. Benefits both habit_analysis and
+  the weekly-planning prompt that share the helper.
 
 `src/lib/mcp/prompts/index.ts:115-141`: `completionRate = completions / 30` ignores
 `target_days`/frequency (a perfect 3×/week habit caps at ~43% → labeled
@@ -242,7 +250,9 @@ reports 0. Query the date range directly.
 `getApplicableDays` like `getHabitStats` (`queries/habits.ts`).
 
 ### M12. MCP resources swallow query errors
-- [ ] Fixed
+- [x] Fixed — all 14 resource read handlers now `throw new Error(result.error)`
+  when the query fails, which the MCP SDK surfaces as a JSON-RPC error instead of
+  fake-empty data.
 
 All of `src/lib/mcp/resources/*.ts` return `result.data ?? []/null` and never inspect
 `result.error` — DB failure is indistinguishable from "no data". Surface errors like

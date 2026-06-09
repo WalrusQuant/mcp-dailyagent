@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday, startOfWeek, endOfWeek, getCalendarGridDates, toLocalDate } from "@/lib/dates";
+import { getToday, startOfWeek, endOfWeek, toLocalDate, getDateRange, getDayOfWeek } from "@/lib/dates";
 
 export interface DayTask {
   id: string;
@@ -157,8 +157,6 @@ export async function getWeekSummary(
     const weekStart = weekStartParam || startOfWeek(today);
     const weekEnd = endOfWeek(weekStart);
 
-    const gridDates = getCalendarGridDates(today.slice(0, 7));
-
     const [tasksRows, habitLogsRows, habitsRows, journalRows, workoutsRows, focusRows] =
       await Promise.all([
         db
@@ -252,9 +250,8 @@ export async function getWeekSummary(
       }
     }
 
-    for (const date of gridDates.filter((d) => d >= weekStart && d <= weekEnd)) {
-      const d = new Date(date + "T00:00:00");
-      const dow = d.getDay() === 0 ? 7 : d.getDay();
+    for (const date of getDateRange(weekStart, weekEnd)) {
+      const dow = getDayOfWeek(date);
       let expectedCount = 0;
       for (const [, habit] of habitMap) {
         if (habit.targetDays.includes(dow)) expectedCount++;

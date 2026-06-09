@@ -1,4 +1,5 @@
 import { getToday, addDays, startOfWeek } from "@/lib/dates";
+import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -107,13 +108,16 @@ async function fetchAllHabitsWithStats(userId: string) {
       name: habitsTable.name,
       description: habitsTable.description,
       frequency: habitsTable.frequency,
+      targetDays: habitsTable.targetDays,
     })
     .from(habitsTable)
     .where(and(eq(habitsTable.userId, userId), eq(habitsTable.archived, false)));
 
   if (habits.length === 0) return [];
 
-  const fromDate = addDays(getToday(), -30);
+  // 30-day window inclusive of today.
+  const today = getToday();
+  const fromDate = addDays(today, -29);
 
   const logs = await db
     .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
@@ -124,7 +128,8 @@ async function fetchAllHabitsWithStats(userId: string) {
           habitLogs.habitId,
           habits.map((h) => h.id)
         ),
-        gte(habitLogs.logDate, fromDate)
+        gte(habitLogs.logDate, fromDate),
+        lte(habitLogs.logDate, today)
       )
     );
 
@@ -133,11 +138,19 @@ async function fetchAllHabitsWithStats(userId: string) {
     logsByHabit[log.habitId] = (logsByHabit[log.habitId] ?? 0) + 1;
   }
 
-  return habits.map((h) => ({
-    ...h,
-    completionsLast30Days: logsByHabit[h.id] ?? 0,
-    completionRate: Math.round(((logsByHabit[h.id] ?? 0) / 30) * 100),
-  }));
+  // Rate against the days the habit was actually scheduled (target_days), not
+  // a flat 30 — otherwise a perfect 3x/week habit caps at ~43% and gets
+  // mislabeled as struggling.
+  return habits.map((h) => {
+    const targetDays = Array.isArray(h.targetDays) && h.targetDays.length > 0 ? h.targetDays : [1, 2, 3, 4, 5, 6, 7];
+    const applicable = getApplicableDays(fromDate, today, targetDays);
+    const completions = logsByHabit[h.id] ?? 0;
+    return {
+      ...h,
+      completionsLast30Days: completions,
+      completionRate: applicable > 0 ? Math.min(100, Math.round((completions / applicable) * 100)) : 0,
+    };
+  });
 }
 
 async function fetchTodayFocusStats(userId: string) {
@@ -164,6 +177,20 @@ async function fetchTodayFocusStats(userId: string) {
     completedSessions: completed.length,
     totalFocusMinutes: totalMinutes,
   };
+}
+
+async function fetchJournalForRange(userId: string, from: string, to: string) {
+  const rows = await db
+    .select({
+      id: journalEntries.id,
+      entry_date: journalEntries.entryDate,
+      content: journalEntries.content,
+      mood: journalEntries.mood,
+    })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.userId, userId), gte(journalEntries.entryDate, from), lte(journalEntries.entryDate, to)))
+    .orderBy(desc(journalEntries.entryDate));
+  return rows;
 }
 
 async function fetchRecentJournal(userId: string, limit = 7) {
@@ -679,15 +706,13 @@ Please:
         fetchTasksForRange(userId, weekStart, weekEnd),
         fetchHabitLogsForRange(userId, weekStart, weekEnd),
         fetchFocusSessionsForRange(userId, weekStart, weekEnd),
-        fetchRecentJournal(userId, 7),
+        fetchJournalForRange(userId, weekStart, weekEnd),
       ]);
 
       const completedTasks = tasks.filter((t) => t.done);
       const completedFocus = focusRows.filter((s) => s.completed_at);
       const totalFocusMin = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-      const weekJournal = journal.filter(
-        (e) => (e.entry_date as string) >= weekStart! && (e.entry_date as string) <= weekEnd
-      );
+      const weekJournal = journal;
 
       const userText = `Generate a structured weekly review for the week of ${weekStart}.
 

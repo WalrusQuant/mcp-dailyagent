@@ -22,6 +22,7 @@ export function registerCalendarResources(server: McpServer) {
       }
 
       const result = await getDaySummary(auth.userId, getToday());
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [
@@ -52,6 +53,7 @@ export function registerCalendarResources(server: McpServer) {
       }
 
       const result = await getWeekSummary(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

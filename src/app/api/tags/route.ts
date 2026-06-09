@@ -4,6 +4,7 @@ import { tags } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTag } from "@/lib/mcp/queries/tags";
+import { isUniqueViolation } from "@/lib/api-conflict";
 
 export async function GET() {
   const userId = getUserId();
@@ -43,8 +44,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeTag(row));
   } catch (err) {
-    // Unique constraint violation
-    if (err instanceof Error && err.message.includes("unique")) {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Tag already exists" }, { status: 409 });
     }
     return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });

@@ -22,6 +22,7 @@ export function registerJournalResources(server: McpServer) {
       }
 
       const result = await getJournalEntry(auth.userId, getToday());
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [
@@ -52,6 +53,7 @@ export function registerJournalResources(server: McpServer) {
       }
 
       const result = await getRecentJournalEntries(auth.userId, 7);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

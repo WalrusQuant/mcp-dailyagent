@@ -21,6 +21,7 @@ export function registerTaskResources(server: McpServer) {
       }
 
       const result = await getTasksForDate(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [
@@ -51,6 +52,7 @@ export function registerTaskResources(server: McpServer) {
       }
 
       const result = await getOverdueTasks(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

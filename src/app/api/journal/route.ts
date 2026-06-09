@@ -5,6 +5,7 @@ import { journalEntries } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
+import { isUniqueViolation } from "@/lib/api-conflict";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -96,6 +97,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeEntry(row), { status: 201 });
   } catch (err) {
+    if (isUniqueViolation(err)) {
+      return NextResponse.json(
+        { error: "A journal entry already exists for this date" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
   }
 }
