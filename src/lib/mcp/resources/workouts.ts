@@ -24,6 +24,7 @@ export function registerWorkoutResources(server: McpServer) {
       const today = getToday();
       const from = addDays(today, -7);
       const result = await getWorkoutLogs(auth.userId, { from, to: today });
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

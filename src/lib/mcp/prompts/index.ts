@@ -1,5 +1,8 @@
+import { getToday, addDays, startOfWeek } from "@/lib/dates";
+import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getAuth, checkScopes } from "@/lib/mcp/tools/helpers";
 import { db } from "@/lib/db/client";
 import {
   tasks as tasksTable,
@@ -23,9 +26,21 @@ type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 // Auth helper
 // ---------------------------------------------------------------------------
 
-function getUserId(extra: Extra): string | null {
-  const authInfo = (extra as unknown as { authInfo?: { extra?: Record<string, unknown> } }).authInfo;
-  return (authInfo?.extra?.userId as string) ?? null;
+/**
+ * Extract user ID and check required scopes for a prompt handler.
+ * Returns null if not authenticated or a missing-scope error string.
+ * Callers: `const auth = getPromptAuth(extra, [...scopes]); if (!auth.userId) return notAuthMsg;`
+ */
+function getPromptAuth(extra: Extra, requiredScopes: string[]): { userId: string | null; scopeError: string | null } {
+  const auth = getAuth(extra);
+  if (!auth) return { userId: null, scopeError: null };
+  const scopeError = checkScopes(auth.scopes, requiredScopes);
+  return { userId: auth.userId, scopeError };
+}
+
+const NOT_AUTHENTICATED_MSG = { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+function insufficientScopeMsg(err: string) {
+  return { messages: [{ role: "user" as const, content: { type: "text" as const, text: err } }] };
 }
 
 // ---------------------------------------------------------------------------
@@ -33,7 +48,7 @@ function getUserId(extra: Extra): string | null {
 // ---------------------------------------------------------------------------
 
 async function fetchTodayTasks(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const rows = await db
     .select({
       id: tasksTable.id,
@@ -74,7 +89,7 @@ async function fetchActiveGoals(userId: string) {
 }
 
 async function fetchTodayHabits(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const habits = await db
     .select({ id: habitsTable.id, name: habitsTable.name, description: habitsTable.description })
     .from(habitsTable)
@@ -106,15 +121,16 @@ async function fetchAllHabitsWithStats(userId: string) {
       name: habitsTable.name,
       description: habitsTable.description,
       frequency: habitsTable.frequency,
+      targetDays: habitsTable.targetDays,
     })
     .from(habitsTable)
     .where(and(eq(habitsTable.userId, userId), eq(habitsTable.archived, false)));
 
   if (habits.length === 0) return [];
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const fromDate = thirtyDaysAgo.toISOString().split("T")[0];
+  // 30-day window inclusive of today.
+  const today = getToday();
+  const fromDate = addDays(today, -29);
 
   const logs = await db
     .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
@@ -125,7 +141,8 @@ async function fetchAllHabitsWithStats(userId: string) {
           habitLogs.habitId,
           habits.map((h) => h.id)
         ),
-        gte(habitLogs.logDate, fromDate)
+        gte(habitLogs.logDate, fromDate),
+        lte(habitLogs.logDate, today)
       )
     );
 
@@ -134,15 +151,23 @@ async function fetchAllHabitsWithStats(userId: string) {
     logsByHabit[log.habitId] = (logsByHabit[log.habitId] ?? 0) + 1;
   }
 
-  return habits.map((h) => ({
-    ...h,
-    completionsLast30Days: logsByHabit[h.id] ?? 0,
-    completionRate: Math.round(((logsByHabit[h.id] ?? 0) / 30) * 100),
-  }));
+  // Rate against the days the habit was actually scheduled (target_days), not
+  // a flat 30 — otherwise a perfect 3x/week habit caps at ~43% and gets
+  // mislabeled as struggling.
+  return habits.map((h) => {
+    const targetDays = Array.isArray(h.targetDays) && h.targetDays.length > 0 ? h.targetDays : [1, 2, 3, 4, 5, 6, 7];
+    const applicable = getApplicableDays(fromDate, today, targetDays);
+    const completions = logsByHabit[h.id] ?? 0;
+    return {
+      ...h,
+      completionsLast30Days: completions,
+      completionRate: applicable > 0 ? Math.min(100, Math.round((completions / applicable) * 100)) : 0,
+    };
+  });
 }
 
 async function fetchTodayFocusStats(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const rows = await db
     .select({
       id: focusSessions.id,
@@ -153,8 +178,8 @@ async function fetchTodayFocusStats(userId: string) {
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`)),
-        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999Z`))
+        gte(focusSessions.startedAt, new Date(`${today}T00:00:00`)),
+        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999`))
       )
     );
 
@@ -165,6 +190,20 @@ async function fetchTodayFocusStats(userId: string) {
     completedSessions: completed.length,
     totalFocusMinutes: totalMinutes,
   };
+}
+
+async function fetchJournalForRange(userId: string, from: string, to: string) {
+  const rows = await db
+    .select({
+      id: journalEntries.id,
+      entry_date: journalEntries.entryDate,
+      content: journalEntries.content,
+      mood: journalEntries.mood,
+    })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.userId, userId), gte(journalEntries.entryDate, from), lte(journalEntries.entryDate, to)))
+    .orderBy(desc(journalEntries.entryDate));
+  return rows;
 }
 
 async function fetchRecentJournal(userId: string, limit = 7) {
@@ -270,8 +309,8 @@ async function fetchFocusSessionsForRange(userId: string, from: string, to: stri
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`)),
-        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+        gte(focusSessions.startedAt, new Date(`${from}T00:00:00`)),
+        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
       )
     );
   return rows;
@@ -345,8 +384,9 @@ export function registerPrompts(server: McpServer) {
     "Plan my day based on tasks, habits, and calendar",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, goals] = await Promise.all([
         fetchTodayTasks(userId),
@@ -354,7 +394,7 @@ export function registerPrompts(server: McpServer) {
         fetchActiveGoals(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
 
       const systemText = `You are a productivity coach helping plan a focused, intentional day. Use the Franklin Covey A/B/C priority system to guide task ordering. A = must do today, B = should do, C = nice to have.`;
 
@@ -391,8 +431,9 @@ Based on this data, please:
     "Quick morning snapshot of what's ahead today",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, goals] = await Promise.all([
         fetchTodayTasks(userId),
@@ -400,7 +441,7 @@ Based on this data, please:
         fetchActiveGoals(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const pendingTasks = tasks.filter((t) => !t.done);
       const aCount = pendingTasks.filter((t) => t.priority.startsWith("A")).length;
 
@@ -433,8 +474,9 @@ Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence
     "Review what got done today and reflect on the day",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, focusStats] = await Promise.all([
         fetchTodayTasks(userId),
@@ -442,7 +484,7 @@ Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence
         fetchTodayFocusStats(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const completed = tasks.filter((t) => t.done);
       const incomplete = tasks.filter((t) => !t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
@@ -486,8 +528,9 @@ Please provide:
       to: z.string().describe("End date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [focusRows, tasks, habitData] = await Promise.all([
         fetchFocusSessionsForRange(userId, args.from, args.to),
@@ -538,8 +581,9 @@ Please provide:
     "Analyze habit patterns and suggest improvements",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["habits:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const habits = await fetchAllHabitsWithStats(userId);
 
@@ -577,8 +621,9 @@ Please:
     "Check progress on active goals and identify next actions",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const goals = await fetchActiveGoals(userId);
 
@@ -608,28 +653,14 @@ For each goal, please:
     "Compare this week vs last week across all productivity metrics",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-
-      const thisMonday = new Date(now);
-      thisMonday.setDate(now.getDate() + diffToMonday);
-      const thisWeekStart = thisMonday.toISOString().split("T")[0];
-
-      const thisSunday = new Date(thisMonday);
-      thisSunday.setDate(thisMonday.getDate() + 6);
-      const thisWeekEnd = thisSunday.toISOString().split("T")[0];
-
-      const lastMonday = new Date(thisMonday);
-      lastMonday.setDate(thisMonday.getDate() - 7);
-      const lastWeekStart = lastMonday.toISOString().split("T")[0];
-
-      const lastSunday = new Date(lastMonday);
-      lastSunday.setDate(lastMonday.getDate() + 6);
-      const lastWeekEnd = lastSunday.toISOString().split("T")[0];
+      const thisWeekStart = startOfWeek(getToday());
+      const thisWeekEnd = addDays(thisWeekStart, 6);
+      const lastWeekStart = addDays(thisWeekStart, -7);
+      const lastWeekEnd = addDays(lastWeekStart, 6);
 
       const [thisWeekTasks, lastWeekTasks, thisWeekFocus, lastWeekFocus, thisWeekHabits, lastWeekHabits] =
         await Promise.all([
@@ -685,35 +716,24 @@ Please:
       week_start: z.string().optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "journal:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
-      let weekStart = args.week_start;
-      if (!weekStart) {
-        const now = new Date();
-        const day = now.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        now.setDate(now.getDate() + diff);
-        weekStart = now.toISOString().split("T")[0];
-      }
-
-      const weekEndDate = new Date(weekStart);
-      weekEndDate.setDate(weekEndDate.getDate() + 6);
-      const weekEnd = weekEndDate.toISOString().split("T")[0];
+      const weekStart = args.week_start || startOfWeek(getToday());
+      const weekEnd = addDays(weekStart, 6);
 
       const [tasks, habitData, focusRows, journal] = await Promise.all([
         fetchTasksForRange(userId, weekStart, weekEnd),
         fetchHabitLogsForRange(userId, weekStart, weekEnd),
         fetchFocusSessionsForRange(userId, weekStart, weekEnd),
-        fetchRecentJournal(userId, 7),
+        fetchJournalForRange(userId, weekStart, weekEnd),
       ]);
 
       const completedTasks = tasks.filter((t) => t.done);
       const completedFocus = focusRows.filter((s) => s.completed_at);
       const totalFocusMin = completedFocus.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-      const weekJournal = journal.filter(
-        (e) => (e.entry_date as string) >= weekStart! && (e.entry_date as string) <= weekEnd
-      );
+      const weekJournal = journal;
 
       const userText = `Generate a structured weekly review for the week of ${weekStart}.
 
@@ -758,8 +778,9 @@ Please structure the review with:
     "Get a thoughtful, personalized journal prompt based on recent activity",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "journal:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [recentJournal, tasks, habits] = await Promise.all([
         fetchRecentJournal(userId, 5),
@@ -767,7 +788,7 @@ Please structure the review with:
         fetchTodayHabits(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const completedToday = tasks.filter((t) => t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
 
@@ -808,15 +829,16 @@ Follow with 2-3 shorter follow-up questions if they want to go deeper.`;
     "Suggest a workout based on recent training history and available templates",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["workouts:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [recentWorkouts, templates] = await Promise.all([
         fetchRecentWorkouts(userId, 7),
         fetchWorkoutTemplates(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
 
       const userText = `Suggest the best workout for me today (${today}).
 
@@ -849,8 +871,9 @@ Please:
       goal_id: z.string().describe("Goal ID to plan for"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const goal = await fetchGoalById(userId, args.goal_id);
 
@@ -890,8 +913,9 @@ Format tasks as: [PRIORITY: A/B/C] Task title`;
       space_id: z.string().optional().describe("Space ID to plan for (if omitted, shows all unassigned tasks)"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["spaces:read", "tasks:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, spaces] = await Promise.all([
         fetchSpaceTasks(userId, args.space_id),
@@ -928,8 +952,9 @@ Please:
     "Plan the upcoming week with priorities, goals alignment, and a day-by-day schedule",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "goals:read", "habits:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, goals, habits] = await Promise.all([
         fetchTodayTasks(userId),
@@ -937,16 +962,8 @@ Please:
         fetchAllHabitsWithStats(userId),
       ]);
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-      const nextMonday = new Date(now);
-      nextMonday.setDate(now.getDate() + diffToMonday);
-      const nextWeekStart = nextMonday.toISOString().split("T")[0];
-
-      const nextSunday = new Date(nextMonday);
-      nextSunday.setDate(nextMonday.getDate() + 6);
-      const nextWeekEnd = nextSunday.toISOString().split("T")[0];
+      const nextWeekStart = addDays(startOfWeek(getToday()), 7);
+      const nextWeekEnd = addDays(nextWeekStart, 6);
 
       const pendingTasks = tasks.filter((t) => !t.done);
 

@@ -13,6 +13,7 @@ import {
 import { Space, Task } from "@/types/database";
 import { SpaceFormModal } from "./SpaceFormModal";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
+import { useToast } from "@/lib/toast-context";
 
 const PRIORITY_COLORS: Record<string, string> = {
   A1: "var(--accent-negative, #ef4444)",
@@ -40,6 +41,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const router = useRouter();
+  const { addToast } = useToast();
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
@@ -67,12 +69,22 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   }, [loadAll]);
 
   const updateProgress = async (value: number) => {
+    const prev = progress;
     setProgress(value);
-    await fetch(`/api/spaces/${spaceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ progress: value }),
-    });
+    try {
+      const response = await fetch(`/api/spaces/${spaceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ progress: value }),
+      });
+      if (!response.ok) {
+        setProgress(prev);
+        addToast("Failed to update progress");
+      }
+    } catch {
+      setProgress(prev);
+      addToast("Failed to update progress");
+    }
   };
 
   const handleDelete = async () => {
@@ -83,14 +95,29 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
 
   const handleToggleTask = async (task: Task) => {
     const newDone = !task.done;
+    // Optimistic update
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, done: newDone } : t))
     );
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: newDone }),
-    });
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: newDone }),
+      });
+      if (!response.ok) {
+        // Revert on failure
+        setTasks((prev) =>
+          prev.map((t) => (t.id === task.id ? task : t))
+        );
+        addToast("Failed to update task");
+      }
+    } catch {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? task : t))
+      );
+      addToast("Failed to update task");
+    }
   };
 
   const handleTaskSaved = (task: Task) => {

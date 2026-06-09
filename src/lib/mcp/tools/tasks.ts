@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -6,14 +7,22 @@ import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, prioritySchema, priorityDescription } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
-import { getNextOccurrence } from "@/lib/mcp/queries/tasks";
+import { maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
+
+async function getPriorDone(userId: string, taskId: string): Promise<boolean> {
+  const [prior] = await db
+    .select({ done: tasks.done })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  return prior?.done ?? false;
+}
 
 // ---------------------------------------------------------------------------
 // Query helpers
 // ---------------------------------------------------------------------------
 
 async function getTasksForDate(userId: string, date?: string, spaceId?: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const taskDate = date ?? today;
 
   const baseConditions =
@@ -56,7 +65,7 @@ async function createTask(
     goal_id?: string;
   }
 ) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   try {
     const [row] = await db
       .insert(tasks)
@@ -157,7 +166,7 @@ export function registerTaskTools(server: McpServer) {
     "list_tasks",
     "List tasks for a given date (defaults to today). Incomplete tasks from previous days are included when viewing today.",
     {
-      date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
+      date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       space_id: z.string().optional().describe("Filter by space/project ID"),
     },
     async (args, extra: Extra) => {
@@ -203,7 +212,7 @@ export function registerTaskTools(server: McpServer) {
   // --- update_task (WRITE) ---
   server.tool(
     "update_task",
-    "Update an existing task. Pass expected_updated_at (from the last read of this task) to opt into concurrency-safe writes — the call will fail with a conflict if the task was modified in the meantime.",
+    "Update an existing task. Marking a recurring task done schedules its next occurrence (same as complete_task). Pass expected_updated_at (from the last read of this task) to opt into concurrency-safe writes — the call will fail with a conflict if the task was modified in the meantime.",
     {
       task_id: z.string().describe("Task ID"),
       expected_updated_at: z
@@ -224,6 +233,8 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
+      const wasAlreadyDone = args.done === true ? await getPriorDone(auth.userId, args.task_id) : false;
+
       if (args.expected_updated_at) {
         const patch = buildTaskPatch(args);
         const result = await updateWithVersion<typeof tasks.$inferSelect>({
@@ -233,14 +244,23 @@ export function registerTaskTools(server: McpServer) {
           expectedUpdatedAt: args.expected_updated_at,
           patch,
         });
-        if (result.ok) return textResult(result.row);
-        if (result.reason === "not_found") return errorResult("Task not found");
-        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-        return conflictResult(result.current);
+        if (!result.ok) {
+          if (result.reason === "not_found") return errorResult("Task not found");
+          if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+          return conflictResult(result.current);
+        }
+        if (args.done === true) {
+          await maybeSpawnNextOccurrence(auth.userId, result.row, wasAlreadyDone);
+        }
+        return textResult(result.row);
       }
 
       const result = await updateTaskLegacy(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
+
+      if (args.done === true && result.data) {
+        await maybeSpawnNextOccurrence(auth.userId, result.data, wasAlreadyDone);
+      }
 
       return textResult(result.data);
     }
@@ -265,6 +285,7 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
+      const wasAlreadyDone = await getPriorDone(auth.userId, args.task_id);
       let row: typeof tasks.$inferSelect | null = null;
 
       if (args.expected_updated_at) {
@@ -287,20 +308,8 @@ export function registerTaskTools(server: McpServer) {
         row = result.data;
       }
 
-      if (row?.recurrence && row.taskDate) {
-        const recurrence = row.recurrence as { type: string; days?: number[] };
-        const nextDate = getNextOccurrence(row.taskDate, recurrence);
-        await db.insert(tasks).values({
-          userId: auth.userId,
-          title: row.title,
-          notes: row.notes,
-          priority: row.priority,
-          taskDate: nextDate,
-          spaceId: row.spaceId,
-          goalId: row.goalId,
-          recurrence: row.recurrence,
-          sortOrder: row.sortOrder,
-        });
+      if (row) {
+        await maybeSpawnNextOccurrence(auth.userId, row, wasAlreadyDone);
       }
 
       return textResult(row);

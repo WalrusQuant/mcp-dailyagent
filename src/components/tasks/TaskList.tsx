@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
 import { Task, Space } from "@/types/database";
@@ -11,7 +11,11 @@ import { TaskFormModal } from "./TaskFormModal";
 import { getToday } from "@/lib/dates";
 import { useToast } from "@/lib/toast-context";
 
-function useDragReorder(tasks: Task[], setTasks: React.Dispatch<React.SetStateAction<Task[]>>) {
+function useDragReorder(
+  tasks: Task[],
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>,
+  addToast: (message: string) => void,
+) {
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
 
@@ -31,7 +35,7 @@ function useDragReorder(tasks: Task[], setTasks: React.Dispatch<React.SetStateAc
     setDragOverTaskId(null);
   };
 
-  const handleDrop = (targetTaskId: string) => (e: React.DragEvent) => {
+  const handleDrop = (targetTaskId: string) => async (e: React.DragEvent) => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData("text/plain");
     setDragOverTaskId(null);
@@ -39,35 +43,48 @@ function useDragReorder(tasks: Task[], setTasks: React.Dispatch<React.SetStateAc
 
     if (!sourceId || sourceId === targetTaskId) return;
 
-    setTasks((prev) => {
-      const sourceTask = prev.find((t) => t.id === sourceId);
-      const targetTask = prev.find((t) => t.id === targetTaskId);
-      if (!sourceTask || !targetTask) return prev;
+    // Compute the new order outside the updater — React may invoke updaters
+    // multiple times in StrictMode, so no side effects belong inside them.
+    const prev = tasks;
+    const sourceTask = prev.find((t) => t.id === sourceId);
+    const targetTask = prev.find((t) => t.id === targetTaskId);
+    if (!sourceTask || !targetTask) return;
 
-      // Only reorder within same priority group
-      if (sourceTask.priority[0] !== targetTask.priority[0]) return prev;
+    // Only reorder within same priority group
+    if (sourceTask.priority[0] !== targetTask.priority[0]) return;
 
-      const samePriority = prev.filter((t) => t.priority[0] === sourceTask.priority[0]);
-      const others = prev.filter((t) => t.priority[0] !== sourceTask.priority[0]);
+    const samePriority = prev.filter((t) => t.priority[0] === sourceTask.priority[0]);
+    const others = prev.filter((t) => t.priority[0] !== sourceTask.priority[0]);
 
-      const filtered = samePriority.filter((t) => t.id !== sourceId);
-      const targetIdx = filtered.findIndex((t) => t.id === targetTaskId);
-      filtered.splice(targetIdx, 0, sourceTask);
+    const filtered = samePriority.filter((t) => t.id !== sourceId);
+    const targetIdx = filtered.findIndex((t) => t.id === targetTaskId);
+    filtered.splice(targetIdx, 0, sourceTask);
 
-      // Assign new sort_orders and persist
-      const reordered = filtered.map((t, i) => ({ ...t, sort_order: i }));
-      const payload = reordered.map((t) => ({ id: t.id, sort_order: t.sort_order }));
-      fetch("/api/tasks/reorder", {
+    const reordered = filtered.map((t, i) => ({ ...t, sort_order: i }));
+    const newTasks = [...others, ...reordered].sort((a, b) => {
+      if (a.priority[0] !== b.priority[0]) return a.priority[0].localeCompare(b.priority[0]);
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+
+    // Apply optimistic update
+    setTasks(newTasks);
+
+    // Persist — revert to original order on failure
+    const payload = reordered.map((t) => ({ id: t.id, sort_order: t.sort_order }));
+    try {
+      const response = await fetch("/api/tasks/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tasks: payload }),
-      }).catch(() => {});
-
-      return [...others, ...reordered].sort((a, b) => {
-        if (a.priority[0] !== b.priority[0]) return a.priority[0].localeCompare(b.priority[0]);
-        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
       });
-    });
+      if (!response.ok) {
+        setTasks(prev);
+        addToast("Failed to save task order");
+      }
+    } catch {
+      setTasks(prev);
+      addToast("Failed to save task order");
+    }
   };
 
   const handleDragEnd = () => {
@@ -108,24 +125,27 @@ export function TaskList() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
-  const loadTasks = useCallback(async (d: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/tasks?date=${d}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
-      }
-    } catch (error) {
-      console.error("Failed to load tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadTasks(date);
-  }, [date, loadTasks]);
+    // Abort on date change/unmount so a slow response can't render a stale day.
+    const controller = new AbortController();
+    const loadTasks = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/tasks?date=${date}`, { signal: controller.signal });
+        if (response.ok) {
+          const data = await response.json();
+          setTasks(data);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load tasks:", error);
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+    loadTasks();
+    return () => controller.abort();
+  }, [date]);
 
   useEffect(() => {
     fetch("/api/spaces")
@@ -136,6 +156,8 @@ export function TaskList() {
 
   const handleToggle = async (task: Task) => {
     const newDone = !task.done;
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, done: newDone } : t));
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
@@ -146,21 +168,34 @@ export function TaskList() {
         const updated = await response.json();
         setTasks((prev) => prev.map((t) => t.id === task.id ? updated : t));
         addToast(newDone ? "Task completed" : "Task unchecked");
+      } else {
+        // Revert on non-ok response (e.g. 409 optimistic concurrency)
+        setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
+        addToast("Failed to update task");
       }
     } catch (error) {
       console.error("Failed to toggle task:", error);
+      setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
+      addToast("Failed to update task");
     }
   };
 
   const handleDelete = async (task: Task) => {
+    // Optimistic removal
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
     try {
       const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
       if (response.ok) {
-        setTasks((prev) => prev.filter((t) => t.id !== task.id));
         addToast("Task deleted");
+      } else {
+        // Revert — restore the removed task
+        setTasks((prev) => [...prev, task]);
+        addToast("Failed to delete task");
       }
     } catch (error) {
       console.error("Failed to delete task:", error);
+      setTasks((prev) => [...prev, task]);
+      addToast("Failed to delete task");
     }
   };
 
@@ -176,7 +211,7 @@ export function TaskList() {
   };
 
   const { addToast } = useToast();
-  const drag = useDragReorder(tasks, setTasks);
+  const drag = useDragReorder(tasks, setTasks, addToast);
   const priorityGroups = groupByPriority(tasks);
   const doneCount = tasks.filter((t) => t.done).length;
 

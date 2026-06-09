@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -10,12 +11,12 @@ vi.mock("@/lib/db/client", async () => {
 import { registerTaskTools } from "@/lib/mcp/tools/tasks";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
 import { resetDb, getTestDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
-import { tasks } from "@/lib/db/schema";
+import { tasks, goals } from "@/lib/db/schema";
 
 const SCOPES = ["tasks:read", "tasks:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 
-const TODAY = new Date().toISOString().split("T")[0];
+const TODAY = getToday();
 
 interface TaskRow {
   id: string;
@@ -250,6 +251,97 @@ describe("complete_task", () => {
   });
 });
 
+describe("recurrence — idempotency and field preservation", () => {
+  async function seedRecurring(overrides: Partial<typeof tasks.$inferInsert> = {}) {
+    const { db } = await getTestDb();
+    const [row] = await db
+      .insert(tasks)
+      .values({
+        userId: TEST_USER_ID,
+        title: "Daily standup",
+        taskDate: "2026-06-05",
+        recurrence: { type: "daily" },
+        done: false,
+        ...overrides,
+      })
+      .returning();
+    return row;
+  }
+
+  async function tasksOn(date: string) {
+    return expectOk<TaskRow[]>(await h.call("list_tasks", { date }, ctx));
+  }
+
+  it("completing a recurring task twice spawns only one next occurrence", async () => {
+    const recurring = await seedRecurring();
+    expectOk(await h.call("complete_task", { task_id: recurring.id }, ctx));
+    expectOk(await h.call("complete_task", { task_id: recurring.id }, ctx));
+
+    expect(await tasksOn("2026-06-06")).toHaveLength(1);
+  });
+
+  it("toggling done off and back on does not stack occurrences", async () => {
+    const recurring = await seedRecurring();
+    expectOk(await h.call("complete_task", { task_id: recurring.id }, ctx));
+    expectOk(await h.call("update_task", { task_id: recurring.id, done: false }, ctx));
+    expectOk(await h.call("update_task", { task_id: recurring.id, done: true }, ctx));
+
+    expect(await tasksOn("2026-06-06")).toHaveLength(1);
+  });
+
+  it("update_task(done: true) spawns the next occurrence like complete_task", async () => {
+    const recurring = await seedRecurring();
+    expectOk(await h.call("update_task", { task_id: recurring.id, done: true }, ctx));
+
+    const next = await tasksOn("2026-06-06");
+    expect(next).toHaveLength(1);
+    expect(next[0].recurrence).toEqual({ type: "daily" });
+  });
+
+  it("versioned complete_task is also idempotent", async () => {
+    const recurring = await seedRecurring();
+    const first = expectOk<TaskRow>(
+      await h.call("complete_task", { task_id: recurring.id, expected_updated_at: recurring.updatedAt.toISOString() }, ctx)
+    );
+    // Retry with a fresh token on the already-done task.
+    expectOk(await h.call("complete_task", { task_id: recurring.id, expected_updated_at: first.updatedAt }, ctx));
+
+    expect(await tasksOn("2026-06-06")).toHaveLength(1);
+  });
+
+  it("preserves the goal link on the spawned occurrence", async () => {
+    const { db } = await getTestDb();
+    const [goal] = await db
+      .insert(goals)
+      .values({ userId: TEST_USER_ID, title: "Ship project" })
+      .returning();
+    const recurring = await seedRecurring({ goalId: goal.id, spaceId: null, notes: "with goal" });
+
+    expectOk(await h.call("complete_task", { task_id: recurring.id }, ctx));
+
+    const next = await tasksOn("2026-06-06");
+    expect(next).toHaveLength(1);
+    expect(next[0].goalId).toBe(goal.id);
+    expect(next[0].notes).toBe("with goal");
+  });
+
+  it("does not spawn a same-day duplicate for an unknown recurrence type", async () => {
+    const recurring = await seedRecurring({ recurrence: { type: "fortnightly" } });
+    expectOk(await h.call("complete_task", { task_id: recurring.id }, ctx));
+
+    // Only the original (now done) task exists on its date; no copy was created.
+    const sameDay = await tasksOn("2026-06-05");
+    expect(sameDay).toHaveLength(1);
+    expect(sameDay[0].done).toBe(true);
+  });
+
+  it("completing a non-recurring task never spawns anything", async () => {
+    const task = await seedTask({ task_date: "2026-06-05" });
+    expectOk(await h.call("complete_task", { task_id: task.id }, ctx));
+    expect(await tasksOn("2026-06-06")).toHaveLength(0);
+  });
+});
+
 describe("delete_task", () => {
   it("deletes a task", async () => {
     const task = await seedTask({ task_date: "2026-06-04" });
@@ -273,5 +365,15 @@ describe("delete_task", () => {
 
     const list = expectOk<TaskRow[]>(await h.call("list_tasks", { date: "2026-06-04" }, ctx));
     expect(list).toHaveLength(1);
+  });
+});
+
+describe("list_tasks — date validation", () => {
+  it("rejects a malformed date string via zod", async () => {
+    await expect(h.call("list_tasks", { date: "junk" }, ctx)).rejects.toThrow();
+  });
+
+  it("rejects a partial date string", async () => {
+    await expect(h.call("list_tasks", { date: "2026-06" }, ctx)).rejects.toThrow();
   });
 });

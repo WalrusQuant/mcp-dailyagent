@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises } from "@/lib/db/schema";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { getToday, addDays } from "@/lib/dates";
 
 interface SetData {
   reps?: number;
@@ -13,11 +14,16 @@ export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
-  const days = Math.max(1, parseInt(searchParams.get("days") || "30", 10));
+  const daysParam = searchParams.get("days");
+  if (daysParam !== null) {
+    const parsed = parseInt(daysParam, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return NextResponse.json({ error: "Invalid days parameter" }, { status: 400 });
+    }
+  }
+  const days = Math.max(1, parseInt(daysParam ?? "30", 10));
 
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  const sinceDate = since.toISOString().split("T")[0];
+  const sinceDate = addDays(getToday(), -days);
 
   try {
     const logs = await db
@@ -94,6 +100,7 @@ export async function GET(request: NextRequest) {
       personalRecords,
     });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

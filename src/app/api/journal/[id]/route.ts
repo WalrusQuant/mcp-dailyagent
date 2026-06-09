@@ -4,8 +4,9 @@ import { journalEntries } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
-import { conflictResponse } from "@/lib/api-conflict";
+import { conflictResponse, isUniqueViolation } from "@/lib/api-conflict";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(
   _request: NextRequest,
@@ -26,7 +27,8 @@ export async function GET(
 
     return NextResponse.json(serializeEntry(rows[0]));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -37,7 +39,11 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const allowedFields: Partial<typeof journalEntries.$inferInsert> = {};
 
   if (typeof body.content === "string") {
@@ -48,7 +54,7 @@ export async function PATCH(
   }
 
   if (body.entry_date !== undefined) {
-    if (typeof body.entry_date !== "string") {
+    if (typeof body.entry_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.entry_date)) {
       return NextResponse.json(
         { error: "entry_date must be a string in YYYY-MM-DD format" },
         { status: 400 }
@@ -60,7 +66,7 @@ export async function PATCH(
   if (body.mood !== undefined) {
     if (body.mood === null) {
       allowedFields.mood = null;
-    } else if (typeof body.mood !== "number" || body.mood < 1 || body.mood > 5) {
+    } else if (typeof body.mood !== "number" || !Number.isInteger(body.mood) || body.mood < 1 || body.mood > 5) {
       return NextResponse.json(
         { error: "mood must be an integer between 1 and 5, or null" },
         { status: 400 }
@@ -104,7 +110,14 @@ export async function PATCH(
 
     return NextResponse.json(serializeEntry(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    if (isUniqueViolation(err)) {
+      return NextResponse.json(
+        { error: "A journal entry already exists for that date" },
+        { status: 409 }
+      );
+    }
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -122,6 +135,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

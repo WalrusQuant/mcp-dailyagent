@@ -4,6 +4,8 @@ import { goals, tasks, habits, habitLogs, goalProgressLogs } from "@/lib/db/sche
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
+import { getToday } from "@/lib/dates";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -27,7 +29,7 @@ export async function GET(request: NextRequest) {
     const autoGoals = goalRows.filter((g) => g.progressMode === "auto");
     if (autoGoals.length > 0) {
       const goalIds = autoGoals.map((g) => g.id);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getToday();
 
       const [taskRows, habitRows, habitLogRows] = await Promise.all([
         db
@@ -63,6 +65,22 @@ export async function GET(request: NextRequest) {
         habitsByGoal.set(h.goalId, counts);
       }
 
+      // Today's existing snapshots, so steady-state GETs issue no writes at all.
+      const existingLogs = await db
+        .select({ goalId: goalProgressLogs.goalId, progress: goalProgressLogs.progress })
+        .from(goalProgressLogs)
+        .where(
+          and(
+            eq(goalProgressLogs.userId, userId),
+            eq(goalProgressLogs.logDate, today),
+            inArray(goalProgressLogs.goalId, goalIds)
+          )
+        );
+      const loggedProgress = new Map(existingLogs.map((l) => [l.goalId, l.progress]));
+
+      const goalUpdates: { id: string; progress: number }[] = [];
+      const logUpserts: { goalId: string; progress: number }[] = [];
+
       for (const goal of autoGoals) {
         const taskCounts = tasksByGoal.get(goal.id);
         const habitCounts = habitsByGoal.get(goal.id);
@@ -84,50 +102,85 @@ export async function GET(request: NextRequest) {
           progress = Math.round((habitCounts.completed / habitCounts.total) * 100);
         }
 
-        if (hasLinked && progress !== goal.progress) {
+        // No linked items: nothing to recompute, and logging the goal's stored
+        // progress here would just write a stale snapshot.
+        if (!hasLinked) continue;
+
+        if (progress !== goal.progress) {
           goal.progress = progress;
-          await db
-            .update(goals)
-            .set({ progress, updatedAt: new Date() })
-            .where(eq(goals.id, goal.id));
+          goalUpdates.push({ id: goal.id, progress });
         }
-
-        // Upsert today's progress log
-        const existingLog = await db
-          .select()
-          .from(goalProgressLogs)
-          .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
-
-        if (existingLog.length > 0) {
-          await db
-            .update(goalProgressLogs)
-            .set({ progress: goal.progress })
-            .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
-        } else {
-          await db.insert(goalProgressLogs).values({
-            goalId: goal.id,
-            userId,
-            logDate: today,
-            progress: goal.progress,
-          });
+        if (loggedProgress.get(goal.id) !== progress) {
+          logUpserts.push({ goalId: goal.id, progress });
         }
+      }
+
+      if (goalUpdates.length > 0 || logUpserts.length > 0) {
+        await db.transaction(async (tx) => {
+          for (const u of goalUpdates) {
+            await tx
+              .update(goals)
+              .set({ progress: u.progress, updatedAt: new Date() })
+              .where(and(eq(goals.id, u.id), eq(goals.userId, userId)));
+          }
+          for (const l of logUpserts) {
+            // Atomic upsert on (goal_id, log_date): concurrent dashboard loads
+            // can no longer race a select-then-insert into a unique violation.
+            await tx
+              .insert(goalProgressLogs)
+              .values({ goalId: l.goalId, userId, logDate: today, progress: l.progress })
+              .onConflictDoUpdate({
+                target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
+                set: { progress: l.progress },
+              });
+          }
+        });
       }
     }
 
     return NextResponse.json(goalRows.map(serializeGoal));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+const VALID_GOAL_CATEGORIES = new Set(["health", "career", "personal", "financial", "learning", "relationships", "other"]);
+const VALID_PROGRESS_MODES = new Set(["auto", "manual"]);
 
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { title, description, category, target_date, progress_mode, progress, sort_order } = body;
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
+  }
+
+  if (category !== undefined && !VALID_GOAL_CATEGORIES.has(category as string)) {
+    return NextResponse.json(
+      { error: "category must be one of: health, career, personal, financial, learning, relationships, other" },
+      { status: 400 }
+    );
+  }
+
+  if (target_date !== undefined && (typeof target_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(target_date as string))) {
+    return NextResponse.json({ error: "target_date must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+
+  if (progress_mode !== undefined && !VALID_PROGRESS_MODES.has(progress_mode as string)) {
+    return NextResponse.json({ error: "progress_mode must be one of: auto, manual" }, { status: 400 });
+  }
+
+  if (progress !== undefined) {
+    if (typeof progress !== "number" || !Number.isInteger(progress) || progress < 0 || progress > 100) {
+      return NextResponse.json({ error: "progress must be an integer between 0 and 100" }, { status: 400 });
+    }
   }
 
   try {
@@ -136,10 +189,10 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         title: title.trim(),
-        ...(description ? { description } : {}),
-        ...(category ? { category } : {}),
-        ...(target_date ? { targetDate: target_date } : {}),
-        ...(progress_mode ? { progressMode: progress_mode } : {}),
+        ...(description ? { description: description as string } : {}),
+        ...(category ? { category: category as string } : {}),
+        ...(target_date ? { targetDate: target_date as string } : {}),
+        ...(progress_mode ? { progressMode: progress_mode as string } : {}),
         ...(typeof progress === "number" ? { progress } : {}),
         ...(typeof sort_order === "number" ? { sortOrder: sort_order } : {}),
       })
@@ -147,6 +200,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeGoal(row), { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

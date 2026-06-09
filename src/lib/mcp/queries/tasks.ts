@@ -1,8 +1,8 @@
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
-import { eq, and, or, lt, asc } from "drizzle-orm";
+import { eq, and, or, lt, asc, isNotNull } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getToday, addDays, getDayOfWeek } from "@/lib/dates";
 
 export interface Task {
   id: string;
@@ -65,24 +65,73 @@ export function serializeTask(row: typeof tasks.$inferSelect): Task {
 }
 
 export function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: number[] }): string {
-  const d = new Date(taskDate + "T00:00:00");
   switch (recurrence.type) {
     case "daily":
-      d.setDate(d.getDate() + 1);
-      break;
+      return addDays(taskDate, 1);
     case "weekdays": {
-      d.setDate(d.getDate() + 1);
-      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-      break;
+      let next = addDays(taskDate, 1);
+      while (getDayOfWeek(next) === 6 || getDayOfWeek(next) === 7) next = addDays(next, 1);
+      return next;
     }
     case "weekly":
-      d.setDate(d.getDate() + 7);
-      break;
-    case "monthly":
-      d.setMonth(d.getMonth() + 1);
-      break;
+      return addDays(taskDate, 7);
+    case "monthly": {
+      const [y, m, d] = taskDate.split("-").map(Number);
+      const next = new Date(Date.UTC(y, m, d));
+      return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+    }
   }
-  return d.toISOString().split("T")[0];
+  return taskDate;
+}
+
+/**
+ * After a task is marked done, create the next occurrence if it recurs.
+ * Idempotent: skips when the task was already done before this write, when the
+ * recurrence type is unknown (getNextOccurrence returns the input date), or
+ * when an occurrence of this recurring task already exists on the target date
+ * (covers retries and un-done/re-done toggles).
+ */
+export async function maybeSpawnNextOccurrence(
+  userId: string,
+  row: typeof tasks.$inferSelect,
+  wasAlreadyDone: boolean
+): Promise<typeof tasks.$inferSelect | null> {
+  if (wasAlreadyDone) return null;
+  if (!row.recurrence || !row.taskDate) return null;
+
+  const recurrence = row.recurrence as { type: string; days?: number[] };
+  const nextDate = getNextOccurrence(row.taskDate, recurrence);
+  if (nextDate <= row.taskDate) return null;
+
+  const existing = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.userId, userId),
+        eq(tasks.taskDate, nextDate),
+        eq(tasks.title, row.title),
+        isNotNull(tasks.recurrence)
+      )
+    )
+    .limit(1);
+  if (existing.length > 0) return null;
+
+  const [spawned] = await db
+    .insert(tasks)
+    .values({
+      userId,
+      title: row.title,
+      notes: row.notes,
+      priority: row.priority,
+      taskDate: nextDate,
+      spaceId: row.spaceId,
+      goalId: row.goalId,
+      recurrence: row.recurrence,
+      sortOrder: row.sortOrder,
+    })
+    .returning();
+  return spawned ?? null;
 }
 
 export async function getTasksForDate(

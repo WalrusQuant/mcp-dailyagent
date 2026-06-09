@@ -21,6 +21,7 @@ export function registerReviewResources(server: McpServer) {
       }
 
       const result = await getLatestReview(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

@@ -4,6 +4,8 @@ import { tags } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTag } from "@/lib/mcp/queries/tags";
+import { isUniqueViolation } from "@/lib/api-conflict";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function PATCH(
   request: NextRequest,
@@ -12,7 +14,10 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const allowedFields: Partial<typeof tags.$inferInsert> = {};
   if (typeof body.name === "string") {
     const trimmed = body.name.trim();
@@ -40,10 +45,11 @@ export async function PATCH(
 
     return NextResponse.json(serializeTag(row));
   } catch (err) {
-    if (err instanceof Error && err.message.includes("unique")) {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Tag name already exists" }, { status: 409 });
     }
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -58,6 +64,7 @@ export async function DELETE(
     await db.delete(tags).where(and(eq(tags.id, id), eq(tags.userId, userId)));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

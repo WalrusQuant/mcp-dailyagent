@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -16,7 +17,7 @@ const WRITE = ["briefing:write"];
 const ALL = [...READ, ...WRITE];
 const ctx = { userId: TEST_USER_ID, scopes: ALL };
 
-const TODAY = new Date().toISOString().split("T")[0];
+const TODAY = getToday();
 
 interface Briefing {
   id: string;

@@ -159,3 +159,43 @@ describe("get_week_summary", () => {
     expect(s.tasks.total).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// queries/calendar.ts getWeekSummary (used by the calendar-week resource):
+// expected habit counts must derive from the *requested* week, not the
+// current month's calendar grid — past weeks used to report 0 expected.
+// ---------------------------------------------------------------------------
+import { getWeekSummary as getWeekSummaryQuery } from "@/lib/mcp/queries/calendar";
+import { getTestDb } from "@/test/db-harness";
+import { habits } from "@/lib/db/schema";
+
+describe("queries getWeekSummary — expected habits for past weeks", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("reports expected habit totals for a week far outside the current month", async () => {
+    const { db } = await getTestDb();
+    await db.insert(habits).values({
+      userId: TEST_USER_ID,
+      name: "Daily habit",
+      targetDays: [1, 2, 3, 4, 5, 6, 7],
+    });
+    await db.insert(habits).values({
+      userId: TEST_USER_ID,
+      name: "Weekday habit",
+      targetDays: [1, 2, 3, 4, 5],
+    });
+
+    // 2026-03-02 is a Monday months away from "today".
+    const result = await getWeekSummaryQuery(TEST_USER_ID, "2026-03-02");
+    expect(result.error).toBeNull();
+    const days = result.data!.days as Record<string, { habits: { total: number } }>;
+
+    // Mon-Fri expect both habits, Sat/Sun only the daily one.
+    expect(days["2026-03-02"].habits.total).toBe(2);
+    expect(days["2026-03-06"].habits.total).toBe(2);
+    expect(days["2026-03-07"].habits.total).toBe(1);
+    expect(days["2026-03-08"].habits.total).toBe(1);
+  });
+});

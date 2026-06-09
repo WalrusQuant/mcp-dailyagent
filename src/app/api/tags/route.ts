@@ -4,6 +4,8 @@ import { tags } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTag } from "@/lib/mcp/queries/tags";
+import { isUniqueViolation } from "@/lib/api-conflict";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET() {
   const userId = getUserId();
@@ -17,14 +19,19 @@ export async function GET() {
 
     return NextResponse.json(rows.map(serializeTag));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, color } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -37,16 +44,16 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         name: name.trim(),
-        color: color || "#94a3b8",
+        color: (color as string) || "#94a3b8",
       })
       .returning();
 
-    return NextResponse.json(serializeTag(row));
+    return NextResponse.json(serializeTag(row), { status: 201 });
   } catch (err) {
-    // Unique constraint violation
-    if (err instanceof Error && err.message.includes("unique")) {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Tag already exists" }, { status: 409 });
     }
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

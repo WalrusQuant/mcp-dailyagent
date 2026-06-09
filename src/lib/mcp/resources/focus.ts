@@ -21,6 +21,7 @@ export function registerFocusResources(server: McpServer) {
       }
 
       const result = await getTodayFocusStats(auth.userId);
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

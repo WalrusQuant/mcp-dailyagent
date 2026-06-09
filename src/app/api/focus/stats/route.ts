@@ -3,12 +3,20 @@ import { db } from "@/lib/db/client";
 import { focusSessions, tasks } from "@/lib/db/schema";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { getToday, addDays, toLocalDate } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
-  const days = Math.max(1, parseInt(searchParams.get("days") || "7"));
+  const daysParam = searchParams.get("days");
+  if (daysParam !== null) {
+    const parsed = parseInt(daysParam, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return NextResponse.json({ error: "Invalid days parameter" }, { status: 400 });
+    }
+  }
+  const days = Math.max(1, parseInt(daysParam ?? "7", 10));
 
   const from = new Date();
   from.setDate(from.getDate() - (days - 1));
@@ -42,15 +50,13 @@ export async function GET(request: NextRequest) {
 
     // Build daily breakdown
     const dailyMap = new Map<string, { sessions: number; minutes: number }>();
+    const firstDay = addDays(getToday(), -(days - 1));
     for (let i = 0; i < days; i++) {
-      const d = new Date(from);
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
-      dailyMap.set(key, { sessions: 0, minutes: 0 });
+      dailyMap.set(addDays(firstDay, i), { sessions: 0, minutes: 0 });
     }
 
     for (const s of completedSessions) {
-      const key = s.startedAt.toISOString().slice(0, 10);
+      const key = toLocalDate(s.startedAt);
       const entry = dailyMap.get(key);
       if (entry) {
         entry.sessions += 1;
@@ -97,6 +103,7 @@ export async function GET(request: NextRequest) {
       topTasks,
     });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

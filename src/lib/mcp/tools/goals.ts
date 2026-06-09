@@ -177,7 +177,7 @@ export function registerGoalTools(server: McpServer) {
       title: z.string().optional().describe("New title"),
       description: z.string().optional().describe("New description"),
       status: goalStatusSchema.optional().describe("New status: active, completed, or abandoned"),
-      progress: z.number().min(0).max(100).optional().describe("Progress percentage (0-100)"),
+      progress: z.number().int().min(0).max(100).optional().describe("Progress percentage (0-100)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -214,7 +214,7 @@ export function registerGoalTools(server: McpServer) {
     "Update the progress percentage for a goal",
     {
       goal_id: z.string().describe("Goal ID"),
-      progress: z.number().min(0).max(100).describe("Progress percentage (0-100)"),
+      progress: z.number().int().min(0).max(100).describe("Progress percentage (0-100)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

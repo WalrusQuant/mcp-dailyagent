@@ -120,7 +120,8 @@ export async function createOrUpdateJournalEntry(
         target: [journalEntries.userId, journalEntries.entryDate],
         set: {
           content: input.content.trim(),
-          mood: input.mood ?? null,
+          // Omitted (undefined) mood preserves the existing one; explicit null clears it.
+          ...(input.mood !== undefined ? { mood: input.mood } : {}),
           updatedAt: new Date(),
         },
       })

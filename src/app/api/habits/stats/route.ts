@@ -4,18 +4,23 @@ import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
+import { getToday, addDays } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
-  const days = Math.max(1, parseInt(searchParams.get("days") || "30"));
+  const daysParam = searchParams.get("days");
+  if (daysParam !== null) {
+    const parsed = parseInt(daysParam, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return NextResponse.json({ error: "Invalid days parameter" }, { status: 400 });
+    }
+  }
+  const days = Math.max(1, parseInt(daysParam ?? "30", 10));
 
-  const today = new Date();
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - (days - 1));
-  const startDateStr = startDate.toISOString().split("T")[0];
-  const endDateStr = today.toISOString().split("T")[0];
+  const endDateStr = getToday();
+  const startDateStr = addDays(endDateStr, -(days - 1));
 
   try {
     const habitRows = await db
@@ -63,7 +68,7 @@ export async function GET(request: NextRequest) {
           : [1, 2, 3, 4, 5, 6, 7];
 
       const streak = calculateStreak(habitLogDates, targetDays);
-      const applicableDays = getApplicableDays(startDate, today, targetDays);
+      const applicableDays = getApplicableDays(startDateStr, endDateStr, targetDays);
       const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
       const recentLogs = [...new Set(habitLogDates)].sort().reverse();
 
@@ -79,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ habits: habitStats });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -7,8 +7,79 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Gate: lint + test + build must pass before any image is published.
+  # CI's own triggers don't cover tag pushes, so calling it here also gates
+  # v*.*.* releases.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # Boot the actual image against a real Postgres and require the health
+  # endpoint to come up — catches entrypoint/migration breakage (e.g. a
+  # missing runtime dependency of the migration runner) before it ships.
+  smoke-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cadence
+          POSTGRES_PASSWORD: cadence
+          POSTGRES_DB: cadence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cadence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (amd64, no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: cadence-smoke:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Boot container and wait for healthy
+        run: |
+          docker run -d --name cadence-app --network host \
+            -e DATABASE_URL=postgres://cadence:cadence@localhost:5432/cadence \
+            -e SELF_HOSTED_USER_ID=00000000-0000-0000-0000-000000000001 \
+            -e MCP_API_KEY=smoke-test-key \
+            cadence-smoke:test
+
+          ok=""
+          for i in $(seq 1 30); do
+            if ! docker ps -q --no-trunc | grep -q "$(docker inspect --format '{{.Id}}' cadence-app)"; then
+              echo "Container exited prematurely"; break
+            fi
+            if curl -fsS http://localhost:3000/api/mcp/health > /dev/null; then
+              ok=1; break
+            fi
+            sleep 2
+          done
+
+          docker logs cadence-app
+          if [ -z "$ok" ]; then
+            echo "::error::App container failed to become healthy"
+            exit 1
+          fi
+          echo "Smoke test passed: migrations ran and health endpoint responded."
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: [ci, smoke-test]
     permissions:
       contents: read
       packages: write

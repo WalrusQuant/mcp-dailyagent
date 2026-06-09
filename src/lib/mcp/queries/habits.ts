@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getToday, addDays } from "@/lib/dates";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
 
 export function serializeHabit(h: typeof habits.$inferSelect) {
@@ -188,11 +188,8 @@ export async function getHabitStats(
 ): Promise<QueryResult<HabitStats>> {
   try {
     const safeDays = Math.max(1, days);
-    const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - (safeDays - 1));
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = today.toISOString().split("T")[0];
+    const endDateStr = getToday();
+    const startDateStr = addDays(endDateStr, -(safeDays - 1));
 
     const habitRows = await db
       .select({ id: habits.id, name: habits.name, color: habits.color, targetDays: habits.targetDays })
@@ -220,7 +217,7 @@ export async function getHabitStats(
         : [1, 2, 3, 4, 5, 6, 7];
 
     const streak = calculateStreak(habitLogDates, targetDays);
-    const applicableDays = getApplicableDays(startDate, today, targetDays);
+    const applicableDays = getApplicableDays(startDateStr, endDateStr, targetDays);
     const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
     const recentLogs = [...new Set(habitLogDates)].sort().reverse();
 

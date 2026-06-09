@@ -30,6 +30,7 @@ export async function GET(
 
     return NextResponse.json(rows.map(serializeLog));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

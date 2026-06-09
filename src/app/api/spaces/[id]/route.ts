@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeSpace } from "@/lib/mcp/queries/spaces";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(
   _request: NextRequest,
@@ -26,7 +27,8 @@ export async function GET(
 
     return NextResponse.json(serializeSpace(rows[0]));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -37,7 +39,10 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   const allowedFields: Partial<typeof spaces.$inferInsert> = {};
   if (typeof body.name === "string") {
@@ -55,7 +60,7 @@ export async function PATCH(
   if (typeof body.progress === "number" && body.progress >= 0 && body.progress <= 100)
     allowedFields.progress = body.progress;
   if (typeof body.deadline === "string" || body.deadline === null)
-    allowedFields.deadline = body.deadline;
+    allowedFields.deadline = body.deadline as string | null;
 
   if (Object.keys(allowedFields).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
@@ -91,7 +96,8 @@ export async function PATCH(
 
     return NextResponse.json(serializeSpace(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -106,6 +112,7 @@ export async function DELETE(
     await db.delete(spaces).where(and(eq(spaces.id, id), eq(spaces.userId, userId)));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

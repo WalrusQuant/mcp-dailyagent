@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { Task, FocusSession } from "@/types/database";
@@ -47,15 +47,16 @@ export function FocusTimer() {
     loadData();
   }, [loadData]);
 
-  // Reload sessions when timer completes (isActive goes from true to false)
-  const [wasActive, setWasActive] = useState(timer.isActive);
+  // Reload sessions and toast only on natural work-session completion, not on
+  // cancel or reset. workSessionCompletedCount increments in completeWork().
+  const prevCompletedRef = useRef(timer.workSessionCompletedCount);
   useEffect(() => {
-    if (wasActive && !timer.isActive) {
+    if (timer.workSessionCompletedCount !== prevCompletedRef.current) {
+      prevCompletedRef.current = timer.workSessionCompletedCount;
       loadData();
       addToast("Focus session complete!");
     }
-    setWasActive(timer.isActive);
-  }, [timer.isActive, wasActive, loadData, addToast]);
+  }, [timer.workSessionCompletedCount, loadData, addToast]);
 
   const handleStart = () => {
     const task = tasks.find((t) => t.id === selectedTaskId);
@@ -117,7 +118,12 @@ export function FocusTimer() {
               </button>
             )}
             <button
-              onClick={timer.reset}
+              onClick={async () => {
+                // Refresh the session list so the cancelled session shows up,
+                // but without the completion toast (L5).
+                await timer.reset();
+                loadData();
+              }}
               className="p-3 rounded-full transition-opacity hover:opacity-90"
               style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
             >

@@ -25,10 +25,10 @@ cd cadence
 
 ```bash
 cat > .env <<EOF
-# Database (internal — only reachable inside the Docker network)
-DATABASE_URL=postgres://cadence:$(openssl rand -hex 16)@postgres:5432/cadence
+# Database password (the compose file builds DATABASE_URL from this —
+# Postgres is only reachable inside the Docker network)
 POSTGRES_USER=cadence
-POSTGRES_PASSWORD=<paste the password from DATABASE_URL>
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
 POSTGRES_DB=cadence
 
 # Single-user identity — fresh UUID
@@ -39,7 +39,7 @@ MCP_API_KEY=$(openssl rand -hex 32)
 EOF
 ```
 
-Edit `.env` to make the `POSTGRES_PASSWORD` match the password in `DATABASE_URL`, and save a copy of the file somewhere safe — it contains all your secrets.
+Save a copy of the file somewhere safe — it contains all your secrets. (You don't set `DATABASE_URL` yourself: `docker-compose.yml` constructs it from the `POSTGRES_*` values.)
 
 Compose auto-loads `.env`, so no `--env-file` flag needed.
 
@@ -70,16 +70,9 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/dashboard
 sudo tailscale up
 ```
 
-Follow the auth link. Once joined, the dashboard is reachable at `http://<vps-hostname>:3000` from any device on your tailnet. Magic DNS makes this a nice name like `http://vps:3000`.
+Follow the auth link. To reach the dashboard from your tailnet devices, change the `app.ports` bind in `docker-compose.yml` from `127.0.0.1` to your Tailscale IP (e.g. `"100.x.y.z:3000:3000"`) and `docker compose up -d`. Magic DNS then gives it a nice name like `http://vps:3000`.
 
-**Firewall the public port:**
-
-```bash
-sudo ufw deny 3000/tcp
-# or whatever firewall you use — just make sure 3000 is not publicly exposed
-```
-
-The compose file already binds Postgres and the app to `127.0.0.1`, so neither is reachable from outside the VPS unless you poke a hole in the firewall. Tailscale's wireguard interface sidesteps that restriction and only lets your tailnet in.
+**A note on firewalls:** don't rely on `ufw` to protect Docker-published ports — Docker inserts its own iptables rules ahead of ufw's, so `ufw deny 3000/tcp` has no effect on them. What keeps this deployment private is the port bind itself: Postgres isn't published at all, and the app is bound to `127.0.0.1` (or your Tailscale IP, which only tailnet devices can reach). Never bind to `0.0.0.0`.
 
 ## OpenClaw connection
 

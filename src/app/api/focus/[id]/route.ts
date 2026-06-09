@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeSession } from "@/lib/mcp/queries/focus";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function PATCH(
   request: NextRequest,
@@ -14,7 +15,10 @@ export async function PATCH(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   const allowedFields: Partial<typeof focusSessions.$inferInsert> = {};
 
@@ -26,19 +30,29 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    allowedFields.status = body.status;
+    allowedFields.status = body.status as "active" | "paused" | "completed" | "cancelled";
 
     if (body.status === "completed") {
-      allowedFields.completedAt = body.completed_at ? new Date(body.completed_at) : new Date();
+      if (body.completed_at !== undefined) {
+        if (typeof body.completed_at !== "string" || Number.isNaN(new Date(body.completed_at as string).getTime())) {
+          return NextResponse.json({ error: "completed_at must be a valid ISO timestamp" }, { status: 400 });
+        }
+        allowedFields.completedAt = new Date(body.completed_at as string);
+      } else {
+        allowedFields.completedAt = new Date();
+      }
     }
   }
 
   if (typeof body.completed_at === "string") {
+    if (Number.isNaN(new Date(body.completed_at).getTime())) {
+      return NextResponse.json({ error: "completed_at must be a valid ISO timestamp" }, { status: 400 });
+    }
     allowedFields.completedAt = new Date(body.completed_at);
   }
 
   if (typeof body.notes === "string" || body.notes === null) {
-    allowedFields.notes = body.notes;
+    allowedFields.notes = body.notes as string | null;
   }
 
   if (Object.keys(allowedFields).length === 0) {
@@ -51,7 +65,7 @@ export async function PATCH(
         table: focusSessions,
         id,
         userId,
-        expectedUpdatedAt: body.expected_updated_at,
+        expectedUpdatedAt: body.expected_updated_at as string,
         patch: allowedFields,
       });
       if (!result.ok) {
@@ -75,7 +89,8 @@ export async function PATCH(
 
     return NextResponse.json(serializeSession(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -93,6 +108,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

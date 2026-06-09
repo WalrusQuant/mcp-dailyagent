@@ -152,3 +152,45 @@ describe("database.ts ↔ schema.ts drift", () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Value-level invariants the structural check above can't see (it compares
+// field *names* only). Each of these encodes a drift bug that actually
+// shipped: a status union missing a value the schema allows, a nullable
+// column typed non-null, and a numeric column serialized as a string.
+// ---------------------------------------------------------------------------
+import type { FocusSession, Habit } from "@/types/database";
+import { serializeExercise } from "@/lib/mcp/queries/workouts";
+
+describe("value-level invariants", () => {
+  it("habits.target_days is NOT NULL in the schema, matching the non-null wire type", () => {
+    expect(getTableColumns(schema.habits).targetDays.notNull).toBe(true);
+    // Compile-time: the wire type must be non-nullable.
+    const days: Habit["target_days"] = [1, 2, 3];
+    expect(days).toBeTruthy();
+  });
+
+  it("FocusSession.status covers every value the schema check constraint allows", () => {
+    // Compile-time: each literal must be assignable to the wire union.
+    const statuses: FocusSession["status"][] = ["active", "paused", "completed", "cancelled"];
+    expect(new Set(statuses).size).toBe(4);
+  });
+
+  it("serializeExercise emits default_weight as number | null, not the driver's string", () => {
+    const row = {
+      id: "00000000-0000-0000-0000-000000000001",
+      templateId: "00000000-0000-0000-0000-000000000002",
+      name: "Bench press",
+      exerciseType: "strength",
+      sortOrder: 0,
+      defaultSets: 3,
+      defaultReps: 8,
+      defaultWeight: "82.5", // numeric columns arrive as strings from postgres.js
+      defaultDuration: null,
+      notes: null,
+    } as Parameters<typeof serializeExercise>[0];
+
+    expect(serializeExercise(row).default_weight).toBe(82.5);
+    expect(serializeExercise({ ...row, defaultWeight: null }).default_weight).toBeNull();
+  });
+});

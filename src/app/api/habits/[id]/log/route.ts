@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function POST(
   request: NextRequest,
@@ -11,15 +12,20 @@ export async function POST(
   const { id } = await params;
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { date } = body;
 
-  if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date as string)) {
     return NextResponse.json(
       { error: "date is required and must be in YYYY-MM-DD format" },
       { status: 400 }
     );
   }
+
+  const dateStr = date as string;
 
   try {
     // Verify the habit belongs to the user
@@ -36,7 +42,7 @@ export async function POST(
     const existingLogs = await db
       .select({ id: habitLogs.id })
       .from(habitLogs)
-      .where(and(eq(habitLogs.habitId, id), eq(habitLogs.logDate, date)));
+      .where(and(eq(habitLogs.habitId, id), eq(habitLogs.logDate, dateStr)));
 
     if (existingLogs.length > 0) {
       // Toggle off — delete the log
@@ -44,10 +50,11 @@ export async function POST(
       return NextResponse.json({ logged: false });
     } else {
       // Toggle on — create the log
-      await db.insert(habitLogs).values({ habitId: id, logDate: date, userId });
+      await db.insert(habitLogs).values({ habitId: id, logDate: dateStr, userId });
       return NextResponse.json({ logged: true });
     }
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

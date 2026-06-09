@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { createMcpServer } from "@/lib/mcp/server";
 import { authenticateMcpRequest } from "@/lib/mcp/auth";
 import { extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
-import { consumeToken } from "@/lib/mcp/rate-limit";
+import { consumeToken, consumeAuthFailToken } from "@/lib/mcp/rate-limit";
 
 /**
  * MCP Server endpoint — handles all MCP communication via Streamable HTTP.
@@ -32,18 +32,30 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
   const authResult = await authenticateMcpRequest(authHeader);
 
   if (!authResult.ok) {
-    const response = new Response(JSON.stringify(authResult.error.body), {
-      status: authResult.error.status,
-      headers: {
-        "Content-Type": "application/json",
-        ...authResult.error.headers,
-      },
+    // Throttle failed auth attempts by client IP to prevent bearer-token
+    // brute-force. x-forwarded-for is set by Tailscale/reverse-proxy; fall
+    // back to "unknown" so the bucket still applies (single-user self-host).
+    const rawIp = request.headers.get("x-forwarded-for") ?? "unknown";
+    const clientIp = rawIp.split(",")[0].trim();
+    const authFailDecision = consumeAuthFailToken(clientIp);
+
+    const status = authFailDecision.allowed ? authResult.error.status : 429;
+    const body = authFailDecision.allowed
+      ? authResult.error.body
+      : { error: "rate_limited" };
+    const extraHeaders: Record<string, string> = authFailDecision.allowed
+      ? (authResult.error.headers ?? {})
+      : { "Retry-After": String(authFailDecision.retryAfterSeconds) };
+
+    const response = new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", ...extraHeaders },
     });
     logMcpRequest({
       http_method: request.method,
       status: response.status,
       duration_ms: Date.now() - startedAt,
-      outcome: "auth_failed",
+      outcome: authFailDecision.allowed ? "auth_failed" : "rate_limited",
       ...rpcInfo,
     });
     return response;

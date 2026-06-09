@@ -5,6 +5,7 @@ import { CheckCircle2, Flame, Play } from "lucide-react";
 import Link from "next/link";
 import { Task } from "@/types/database";
 import { useFocusTimerContext } from "@/lib/focus-timer-context";
+import { useToast } from "@/lib/toast-context";
 
 interface DailyStartCardProps {
   tasks: { total: number; done: number; topPriorities: Task[] };
@@ -14,6 +15,7 @@ interface DailyStartCardProps {
 
 export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
   const timer = useFocusTimerContext();
+  const { addToast } = useToast();
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && sessionStorage.getItem("daily-start-dismissed") === "true"
   );
@@ -28,17 +30,21 @@ export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
 
   const handleCompleteTask = async () => {
     if (!topTask) return;
+    // Optimistic update
+    setTaskDone(true);
     try {
       const response = await fetch(`/api/tasks/${topTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ done: true }),
       });
-      if (response.ok) {
-        setTaskDone(true);
+      if (!response.ok) {
+        setTaskDone(false);
+        addToast("Failed to complete task");
       }
     } catch {
-      // ignore
+      setTaskDone(false);
+      addToast("Failed to complete task");
     }
   };
 

@@ -4,6 +4,7 @@ import { habits } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -24,14 +25,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(rows.map(serializeHabit));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, description, frequency, target_days, color, sort_order, goal_id } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -44,17 +50,18 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         name: name.trim(),
-        ...(description ? { description } : {}),
-        ...(frequency ? { frequency } : {}),
-        ...(target_days ? { targetDays: target_days } : {}),
-        ...(color ? { color } : {}),
+        ...(description ? { description: description as string } : {}),
+        ...(frequency ? { frequency: frequency as string } : {}),
+        ...(target_days ? { targetDays: target_days as number[] } : {}),
+        ...(color ? { color: color as string } : {}),
         ...(typeof sort_order === "number" ? { sortOrder: sort_order } : {}),
-        ...(goal_id !== undefined ? { goalId: goal_id || null } : {}),
+        ...(goal_id !== undefined ? { goalId: (goal_id as string) || null } : {}),
       })
       .returning();
 
     return NextResponse.json(serializeHabit(row), { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -37,7 +37,9 @@ export function useFocusTimer() {
   const [timerState, setTimerState] = useState<TimerState | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Incremented each time a work session naturally completes (not on cancel/reset).
+  // Consumers can watch this to show a "session complete" toast.
+  const [workSessionCompletedCount, setWorkSessionCompletedCount] = useState(0);
   const audioRef = useRef<AudioContext | null>(null);
   const completionHandledRef = useRef(false);
 
@@ -105,26 +107,30 @@ export function useFocusTimer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tick
+  // Tick — remaining time is always recomputed from the persisted wall-clock
+  // startTime, so throttled/suspended background tabs can't drift or stall the
+  // countdown; visibilitychange resyncs immediately when the tab wakes up.
   useEffect(() => {
-    if (isRunning && secondsLeft > 0) {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
+    if (!isRunning || !timerState || timerState.pausedAt !== null) return;
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    const sync = () => {
+      const elapsed = Math.floor((Date.now() - timerState.startTime) / 1000);
+      const remaining = Math.max(0, timerState.duration - elapsed);
+      setSecondsLeft(remaining);
+      if (remaining <= 0) setIsRunning(false);
     };
-  }, [isRunning, secondsLeft]);
+
+    sync();
+    const interval = setInterval(sync, 1000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) sync();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [isRunning, timerState]);
 
   const completeWork = useCallback(async () => {
     if (!timerState) return;
@@ -141,6 +147,8 @@ export function useFocusTimer() {
         // ignore
       }
     }
+
+    setWorkSessionCompletedCount((n) => n + 1);
 
     // Start break
     const breakState: TimerState = {
@@ -263,7 +271,7 @@ export function useFocusTimer() {
   const isActive = timerState !== null;
   const isBreak = timerState?.isBreak ?? false;
   const totalSeconds = timerState?.duration ?? 0;
-  const isPaused = timerState?.pausedAt !== null;
+  const isPaused = timerState !== null && timerState.pausedAt !== null;
 
   return {
     secondsLeft,
@@ -272,6 +280,7 @@ export function useFocusTimer() {
     isRunning,
     isBreak,
     isPaused,
+    workSessionCompletedCount,
     taskName: timerState?.taskName ?? null,
     start,
     pause,

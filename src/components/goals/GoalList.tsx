@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Crosshair } from "lucide-react";
 import { Goal } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -18,21 +18,24 @@ export function GoalList() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
-  const loadGoals = useCallback(async (status: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/goals?status=${status}`);
-      if (res.ok) setGoals(await res.json());
-    } catch (err) {
-      console.error("Failed to load goals:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadGoals(statusTab);
-  }, [statusTab, loadGoals]);
+    // Abort on tab change/unmount so a slow response can't render a stale tab.
+    const controller = new AbortController();
+    const loadGoals = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/goals?status=${statusTab}`, { signal: controller.signal });
+        if (res.ok) setGoals(await res.json());
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load goals:", err);
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+    loadGoals();
+    return () => controller.abort();
+  }, [statusTab]);
 
   const handleSave = (goal: Goal) => {
     if (editingGoal) {

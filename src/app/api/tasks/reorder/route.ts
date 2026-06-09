@@ -3,11 +3,15 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function PATCH(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { tasks: taskItems } = body;
 
   if (!Array.isArray(taskItems) || taskItems.length === 0) {

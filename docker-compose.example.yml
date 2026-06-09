@@ -45,12 +45,20 @@ services:
       SELF_HOSTED_USER_ID: ${SELF_HOSTED_USER_ID}
       SELF_HOSTED_USER_EMAIL: ${SELF_HOSTED_USER_EMAIL:-user@localhost}
       MCP_API_KEY: ${MCP_API_KEY}
-      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Cadence}
-      NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
+      # Your timezone (e.g. America/New_York). Controls when "today" rolls over
+      # for tasks, habits, journal, and briefings. Defaults to UTC.
+      TZ: ${TZ:-UTC}
     ports:
       # Localhost by default. If you're fronting this with Tailscale or a reverse
       # proxy, replace "127.0.0.1" with your Tailscale IP (e.g. "100.x.y.z:3000:3000").
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/mcp/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Entrypoint waits for Postgres and runs migrations before the server starts
+      start_period: 30s
 
   db-backup:
     # Daily pg_dump with retention. Dumps land in ./backups next to this file

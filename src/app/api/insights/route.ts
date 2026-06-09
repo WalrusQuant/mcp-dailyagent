@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { insightCache } from "@/lib/db/schema";
@@ -7,7 +8,7 @@ import { getUserId } from "@/lib/auth";
 export async function GET() {
   try {
     const userId = getUserId();
-    const today = new Date().toISOString().split("T")[0];
+    const today = getToday();
 
     const rows = await db
       .select()
@@ -20,9 +21,7 @@ export async function GET() {
       cache_date: row?.cacheDate ?? today,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status: 500 }
-    );
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -10,14 +10,17 @@ const defaultOptions: Required<RetryOptions> = {
   baseDelay: 1000,
   maxDelay: 10000,
   shouldRetry: (error) => {
-    // Retry on network errors and 5xx server errors
+    // Retry on network errors and 5xx server errors; never retry aborts or 4xx.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return false;
+    }
     if (error instanceof TypeError && error.message.includes("fetch")) {
       return true;
     }
     if (error instanceof Response) {
       return error.status >= 500;
     }
-    return true;
+    return false;
   },
 };
 

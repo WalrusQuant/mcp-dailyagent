@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { consumeToken, __resetForTests } from "@/lib/mcp/rate-limit";
+import { consumeToken, consumeAuthFailToken, __resetForTests } from "@/lib/mcp/rate-limit";
 
 beforeEach(() => __resetForTests());
 
@@ -50,5 +50,30 @@ describe("consumeToken", () => {
       expect(consumeToken("u1", t1).allowed).toBe(true);
     }
     expect(consumeToken("u1", t1).allowed).toBe(false);
+  });
+});
+
+describe("consumeAuthFailToken", () => {
+  it("allows up to 10 auth failures per IP", () => {
+    const t0 = 1_000_000;
+    for (let i = 0; i < 10; i++) {
+      expect(consumeAuthFailToken("1.2.3.4", t0).allowed).toBe(true);
+    }
+    expect(consumeAuthFailToken("1.2.3.4", t0).allowed).toBe(false);
+  });
+
+  it("keeps auth-fail buckets separate from post-auth buckets", () => {
+    const t0 = 1_000_000;
+    for (let i = 0; i < 10; i++) consumeAuthFailToken("1.2.3.4", t0);
+    // Post-auth bucket for same key should be unaffected.
+    expect(consumeToken("1.2.3.4", t0).allowed).toBe(true);
+  });
+
+  it("keeps auth-fail buckets independent per IP", () => {
+    const t0 = 1_000_000;
+    for (let i = 0; i < 10; i++) consumeAuthFailToken("1.2.3.4", t0);
+    expect(consumeAuthFailToken("1.2.3.4", t0).allowed).toBe(false);
+    // Different IP has its own full bucket.
+    expect(consumeAuthFailToken("5.6.7.8", t0).allowed).toBe(true);
   });
 });

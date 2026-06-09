@@ -4,6 +4,7 @@ import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeSpace } from "@/lib/mcp/queries/spaces";
+import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -25,14 +26,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(rows.map(serializeSpace));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { name, description, status, deadline } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -45,14 +51,15 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         name: name.trim(),
-        description: description?.trim() || null,
-        status: status || "active",
-        deadline: deadline || null,
+        description: (description as string)?.trim() || null,
+        status: (status as string) || "active",
+        deadline: (deadline as string) || null,
       })
       .returning();
 
-    return NextResponse.json(serializeSpace(row));
+    return NextResponse.json(serializeSpace(row), { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

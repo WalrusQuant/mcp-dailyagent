@@ -49,7 +49,11 @@ export function DangerZoneTab() {
     setIsWiping(true);
     setWipeError(null);
     try {
-      const res = await fetch("/api/wipe-data", { method: "POST" });
+      const res = await fetch("/api/wipe-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "WIPE" }),
+      });
       if (res.ok) {
         setWipeSuccess(true);
         setShowWipeConfirm(false);

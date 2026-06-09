@@ -21,6 +21,7 @@ export function registerGoalResources(server: McpServer) {
       }
 
       const result = await getGoals(auth.userId, "active");
+      if (result.error) throw new Error(result.error);
 
       return {
         contents: [

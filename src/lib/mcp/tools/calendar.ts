@@ -4,7 +4,7 @@ import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } 
 import { eq, and, gte, lte, or, lt } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
-import { getToday, startOfWeek } from "@/lib/dates";
+import { getToday, startOfWeek, addDays } from "@/lib/dates";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -43,8 +43,8 @@ async function getDaySummary(userId: string, date: string) {
         .where(
           and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${date}T00:00:00.000Z`)),
-            lte(focusSessions.startedAt, new Date(`${date}T23:59:59.999Z`))
+            gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
+            lte(focusSessions.startedAt, new Date(`${date}T23:59:59.999`))
           )
         ),
     ]);
@@ -88,10 +88,7 @@ async function getDaySummary(userId: string, date: string) {
 }
 
 async function getWeekSummary(userId: string, weekStart: string) {
-  const startDate = new Date(weekStart);
-  const endDate = new Date(startDate);
-  endDate.setDate(startDate.getDate() + 6);
-  const weekEnd = endDate.toISOString().split("T")[0];
+  const weekEnd = addDays(weekStart, 6);
 
   try {
     const [tasksRows, habitLogsRows, workoutsRows, focusRows, journalRows] = await Promise.all([
@@ -113,8 +110,8 @@ async function getWeekSummary(userId: string, weekStart: string) {
         .where(
           and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00.000Z`)),
-            lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59.999Z`))
+            gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00`)),
+            lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59.999`))
           )
         ),
       db
