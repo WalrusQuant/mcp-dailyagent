@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -112,7 +113,7 @@ async function deleteHabit(userId: string, habitId: string) {
 }
 
 async function toggleHabitLog(userId: string, habitId: string, date?: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const logDate = date ?? today;
 
   try {

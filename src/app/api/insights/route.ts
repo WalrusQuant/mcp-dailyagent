@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { insightCache } from "@/lib/db/schema";
@@ -7,7 +8,7 @@ import { getUserId } from "@/lib/auth";
 export async function GET() {
   try {
     const userId = getUserId();
-    const today = new Date().toISOString().split("T")[0];
+    const today = getToday();
 
     const rows = await db
       .select()

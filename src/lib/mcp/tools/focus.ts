@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -17,18 +18,18 @@ async function getFocusSessions(userId: string, from?: string, to?: string) {
       from && to
         ? and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`)),
-            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+            gte(focusSessions.startedAt, new Date(`${from}T00:00:00`)),
+            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
           )
         : from
         ? and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`))
+            gte(focusSessions.startedAt, new Date(`${from}T00:00:00`))
           )
         : to
         ? and(
             eq(focusSessions.userId, userId),
-            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
           )
         : eq(focusSessions.userId, userId);
 
@@ -47,7 +48,7 @@ async function getFocusSessions(userId: string, from?: string, to?: string) {
 }
 
 async function getTodayFocusStats(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
 
   try {
     const sessions = await db
@@ -56,8 +57,8 @@ async function getTodayFocusStats(userId: string) {
       .where(
         and(
           eq(focusSessions.userId, userId),
-          gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`)),
-          lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999Z`))
+          gte(focusSessions.startedAt, new Date(`${today}T00:00:00`)),
+          lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999`))
         )
       );
 

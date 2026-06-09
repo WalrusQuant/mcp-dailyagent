@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { formatRelativeDate, addDays, isToday, startOfWeek, endOfWeek, formatDate } from "@/lib/dates";
+import { formatRelativeDate, addDays, isToday, startOfWeek, endOfWeek, formatDate, getToday } from "@/lib/dates";
 
 interface DateNavigationProps {
   date: string;
@@ -46,7 +46,7 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
       </button>
       {!isToday(date) && mode === "day" && (
         <button
-          onClick={() => onDateChange(new Date().toISOString().split("T")[0])}
+          onClick={() => onDateChange(getToday())}
           className="text-xs px-2 py-1 rounded-lg transition-colors"
           style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
         >

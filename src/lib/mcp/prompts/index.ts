@@ -1,3 +1,4 @@
+import { getToday, addDays, startOfWeek } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -33,7 +34,7 @@ function getUserId(extra: Extra): string | null {
 // ---------------------------------------------------------------------------
 
 async function fetchTodayTasks(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const rows = await db
     .select({
       id: tasksTable.id,
@@ -74,7 +75,7 @@ async function fetchActiveGoals(userId: string) {
 }
 
 async function fetchTodayHabits(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const habits = await db
     .select({ id: habitsTable.id, name: habitsTable.name, description: habitsTable.description })
     .from(habitsTable)
@@ -112,9 +113,7 @@ async function fetchAllHabitsWithStats(userId: string) {
 
   if (habits.length === 0) return [];
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const fromDate = thirtyDaysAgo.toISOString().split("T")[0];
+  const fromDate = addDays(getToday(), -30);
 
   const logs = await db
     .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
@@ -142,7 +141,7 @@ async function fetchAllHabitsWithStats(userId: string) {
 }
 
 async function fetchTodayFocusStats(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const rows = await db
     .select({
       id: focusSessions.id,
@@ -153,8 +152,8 @@ async function fetchTodayFocusStats(userId: string) {
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`)),
-        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999Z`))
+        gte(focusSessions.startedAt, new Date(`${today}T00:00:00`)),
+        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999`))
       )
     );
 
@@ -270,8 +269,8 @@ async function fetchFocusSessionsForRange(userId: string, from: string, to: stri
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${from}T00:00:00.000Z`)),
-        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999Z`))
+        gte(focusSessions.startedAt, new Date(`${from}T00:00:00`)),
+        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
       )
     );
   return rows;
@@ -354,7 +353,7 @@ export function registerPrompts(server: McpServer) {
         fetchActiveGoals(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
 
       const systemText = `You are a productivity coach helping plan a focused, intentional day. Use the Franklin Covey A/B/C priority system to guide task ordering. A = must do today, B = should do, C = nice to have.`;
 
@@ -400,7 +399,7 @@ Based on this data, please:
         fetchActiveGoals(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const pendingTasks = tasks.filter((t) => !t.done);
       const aCount = pendingTasks.filter((t) => t.priority.startsWith("A")).length;
 
@@ -442,7 +441,7 @@ Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence
         fetchTodayFocusStats(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const completed = tasks.filter((t) => t.done);
       const incomplete = tasks.filter((t) => !t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
@@ -611,25 +610,10 @@ For each goal, please:
       const userId = getUserId(extra);
       if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-
-      const thisMonday = new Date(now);
-      thisMonday.setDate(now.getDate() + diffToMonday);
-      const thisWeekStart = thisMonday.toISOString().split("T")[0];
-
-      const thisSunday = new Date(thisMonday);
-      thisSunday.setDate(thisMonday.getDate() + 6);
-      const thisWeekEnd = thisSunday.toISOString().split("T")[0];
-
-      const lastMonday = new Date(thisMonday);
-      lastMonday.setDate(thisMonday.getDate() - 7);
-      const lastWeekStart = lastMonday.toISOString().split("T")[0];
-
-      const lastSunday = new Date(lastMonday);
-      lastSunday.setDate(lastMonday.getDate() + 6);
-      const lastWeekEnd = lastSunday.toISOString().split("T")[0];
+      const thisWeekStart = startOfWeek(getToday());
+      const thisWeekEnd = addDays(thisWeekStart, 6);
+      const lastWeekStart = addDays(thisWeekStart, -7);
+      const lastWeekEnd = addDays(lastWeekStart, 6);
 
       const [thisWeekTasks, lastWeekTasks, thisWeekFocus, lastWeekFocus, thisWeekHabits, lastWeekHabits] =
         await Promise.all([
@@ -688,18 +672,8 @@ Please:
       const userId = getUserId(extra);
       if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
 
-      let weekStart = args.week_start;
-      if (!weekStart) {
-        const now = new Date();
-        const day = now.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        now.setDate(now.getDate() + diff);
-        weekStart = now.toISOString().split("T")[0];
-      }
-
-      const weekEndDate = new Date(weekStart);
-      weekEndDate.setDate(weekEndDate.getDate() + 6);
-      const weekEnd = weekEndDate.toISOString().split("T")[0];
+      const weekStart = args.week_start || startOfWeek(getToday());
+      const weekEnd = addDays(weekStart, 6);
 
       const [tasks, habitData, focusRows, journal] = await Promise.all([
         fetchTasksForRange(userId, weekStart, weekEnd),
@@ -767,7 +741,7 @@ Please structure the review with:
         fetchTodayHabits(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
       const completedToday = tasks.filter((t) => t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
 
@@ -816,7 +790,7 @@ Follow with 2-3 shorter follow-up questions if they want to go deeper.`;
         fetchWorkoutTemplates(userId),
       ]);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = getToday();
 
       const userText = `Suggest the best workout for me today (${today}).
 
@@ -937,16 +911,8 @@ Please:
         fetchAllHabitsWithStats(userId),
       ]);
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-      const nextMonday = new Date(now);
-      nextMonday.setDate(now.getDate() + diffToMonday);
-      const nextWeekStart = nextMonday.toISOString().split("T")[0];
-
-      const nextSunday = new Date(nextMonday);
-      nextSunday.setDate(nextMonday.getDate() + 6);
-      const nextWeekEnd = nextSunday.toISOString().split("T")[0];
+      const nextWeekStart = addDays(startOfWeek(getToday()), 7);
+      const nextWeekEnd = addDays(nextWeekStart, 6);
 
       const pendingTasks = tasks.filter((t) => !t.done);
 

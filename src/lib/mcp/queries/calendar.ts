@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday, startOfWeek, endOfWeek, getCalendarGridDates } from "@/lib/dates";
+import { getToday, startOfWeek, endOfWeek, getCalendarGridDates, toLocalDate } from "@/lib/dates";
 
 export interface DayTask {
   id: string;
@@ -275,7 +275,7 @@ export async function getWeekSummary(
     }
 
     for (const f of focusRows) {
-      const date = f.startedAt.toISOString().split("T")[0];
+      const date = toLocalDate(f.startedAt);
       const day = ensureDay(date);
       day.focus.sessions++;
       day.focus.minutes += f.durationMinutes ?? 0;

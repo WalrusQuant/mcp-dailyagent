@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -15,7 +16,7 @@ const SCOPES = ["journal:read", "journal:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 const otherCtx = { userId: OTHER_USER_ID, scopes: SCOPES };
 
-const TODAY = new Date().toISOString().split("T")[0];
+const TODAY = getToday();
 
 interface JournalEntry {
   id: string;

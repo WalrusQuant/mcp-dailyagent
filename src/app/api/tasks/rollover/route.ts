@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
@@ -9,7 +10,7 @@ export async function POST(_request: NextRequest) {
   void _request;
   const userId = getUserId();
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getToday();
 
   try {
     const created = await db.transaction(async (tx) => {

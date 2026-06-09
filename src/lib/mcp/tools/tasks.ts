@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -13,7 +14,7 @@ import { getNextOccurrence } from "@/lib/mcp/queries/tasks";
 // ---------------------------------------------------------------------------
 
 async function getTasksForDate(userId: string, date?: string, spaceId?: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const taskDate = date ?? today;
 
   const baseConditions =
@@ -56,7 +57,7 @@ async function createTask(
     goal_id?: string;
   }
 ) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   try {
     const [row] = await db
       .insert(tasks)

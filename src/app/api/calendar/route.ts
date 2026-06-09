@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habitLogs, habits, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
-import { getCalendarGridDates } from "@/lib/dates";
+import { getCalendarGridDates, toLocalDate } from "@/lib/dates";
 import type { DaySummary } from "@/components/calendar/types";
 import { getUserId } from "@/lib/auth";
 
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const f of focusRows) {
-      const date = f.startedAt.toISOString().split("T")[0];
+      const date = toLocalDate(f.startedAt);
       const day = ensureDay(date);
       day.focus.sessions++;
       day.focus.minutes += f.durationMinutes ?? 0;

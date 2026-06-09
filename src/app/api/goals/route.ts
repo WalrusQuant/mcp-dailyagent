@@ -4,6 +4,7 @@ import { goals, tasks, habits, habitLogs, goalProgressLogs } from "@/lib/db/sche
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
+import { getToday } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const autoGoals = goalRows.filter((g) => g.progressMode === "auto");
     if (autoGoals.length > 0) {
       const goalIds = autoGoals.map((g) => g.id);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getToday();
 
       const [taskRows, habitRows, habitLogRows] = await Promise.all([
         db

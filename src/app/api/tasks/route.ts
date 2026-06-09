@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   const dateParam = searchParams.get("date");
   const spaceId = searchParams.get("space_id");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const taskDate = dateParam || today;
 
   try {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
 
   try {
     const [row] = await db

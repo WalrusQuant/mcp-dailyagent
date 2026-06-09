@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises } from "@/lib/db/schema";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { getToday, addDays } from "@/lib/dates";
 
 interface SetData {
   reps?: number;
@@ -15,9 +16,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = Math.max(1, parseInt(searchParams.get("days") || "30", 10));
 
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  const sinceDate = since.toISOString().split("T")[0];
+  const sinceDate = addDays(getToday(), -days);
 
   try {
     const logs = await db

@@ -1,41 +1,41 @@
+import { getToday, addDays, getDayOfWeek } from "@/lib/dates";
+
 export function calculateStreak(logs: string[], targetDays: number[]): number {
   const logSet = new Set(logs);
   let streak = 0;
   let started = false;
-  const checkDate = new Date();
+  let checkDate = getToday();
 
   for (let i = 0; i < 365; i++) {
-    const dateStr = checkDate.toISOString().split("T")[0];
-    const dayOfWeek = checkDate.getDay() === 0 ? 7 : checkDate.getDay();
+    const dayOfWeek = getDayOfWeek(checkDate);
 
     if (!targetDays.includes(dayOfWeek)) {
-      checkDate.setDate(checkDate.getDate() - 1);
+      checkDate = addDays(checkDate, -1);
       continue;
     }
 
-    if (logSet.has(dateStr)) {
+    if (logSet.has(checkDate)) {
       started = true;
       streak++;
-      checkDate.setDate(checkDate.getDate() - 1);
+      checkDate = addDays(checkDate, -1);
     } else if (started) {
       break;
     } else {
-      checkDate.setDate(checkDate.getDate() - 1);
+      checkDate = addDays(checkDate, -1);
     }
   }
   return streak;
 }
 
-export function getApplicableDays(startDate: Date, endDate: Date, targetDays: number[]): number {
+export function getApplicableDays(startDate: string, endDate: string, targetDays: number[]): number {
   let count = 0;
-  const cursor = new Date(startDate);
+  let cursor = startDate;
 
   while (cursor <= endDate) {
-    const dayOfWeek = cursor.getDay() === 0 ? 7 : cursor.getDay();
-    if (targetDays.includes(dayOfWeek)) {
+    if (targetDays.includes(getDayOfWeek(cursor))) {
       count++;
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor = addDays(cursor, 1);
   }
 
   return count;

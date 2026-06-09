@@ -3,12 +3,13 @@ import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions, goals } from "@/lib/db/schema";
 import { eq, and, gte, lte, asc, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { getToday, addDays } from "@/lib/dates";
 
 export async function GET() {
   const userId = getUserId();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const today = getToday();
+  const weekAgo = addDays(today, -7);
 
   try {
     const [
@@ -75,7 +76,7 @@ export async function GET() {
           and(
             eq(focusSessions.userId, userId),
             eq(focusSessions.status, "completed"),
-            gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`))
+            gte(focusSessions.startedAt, new Date(`${today}T00:00:00`))
           )
         ),
       db

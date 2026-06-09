@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -91,7 +92,7 @@ async function createOrUpdateJournalEntry(
     mood?: number;
   }
 ) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   const entryDate = args.entry_date ?? today;
 
   try {
@@ -209,7 +210,7 @@ export function registerJournalTools(server: McpServer) {
       if (scopeError) return errorResult(scopeError);
 
       if (args.expected_updated_at) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = getToday();
         const entryDate = args.entry_date ?? today;
 
         const [existing] = await db

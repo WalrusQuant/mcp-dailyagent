@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -11,7 +12,7 @@ import { dateSchema } from "./validators";
 // ---------------------------------------------------------------------------
 
 async function getTodayBriefing(userId: string) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
   try {
     const rows = await db
       .select()
@@ -89,7 +90,7 @@ export function registerBriefingTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "briefing:write");
       if (scopeError) return errorResult(scopeError);
 
-      const date = args.briefing_date ?? new Date().toISOString().split("T")[0];
+      const date = args.briefing_date ?? getToday();
       const result = await saveBriefing(auth.userId, date, args.content);
       if (result.error) return errorResult(`Error: ${result.error}`);
 

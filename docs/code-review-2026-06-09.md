@@ -11,7 +11,9 @@ clean, ESLint clean. Tests pass only under `TZ=UTC` — see C1.
 ## Critical
 
 ### C1. `src/lib/dates.ts` breaks for any user east of UTC — browser-freezing infinite loop
-- [ ] Fixed
+- [x] Fixed — all arithmetic now component-based via `Date.UTC` (no `toISOString()`
+  round-trips); `getNextOccurrence` rewritten on the same helpers; Vitest now runs
+  under `TZ=Pacific/Auckland` by default so this bug class fails in CI.
 
 `addDays`, `startOfWeek`, `endOfWeek`, `getDateRange` (`src/lib/dates.ts:13-40`) parse
 `date + "T00:00:00"` as **local** time but emit via `toISOString()` (**UTC**). In any
@@ -31,7 +33,12 @@ Fix: do all date arithmetic in pure string/local-date space; never round-trip th
 `toISOString()`. Add a CI test run under a non-UTC `TZ` so it stays fixed.
 
 ### C2. `getToday()` uses the UTC day, not the user's day
-- [ ] Fixed
+- [x] Fixed — `getToday()` now returns the runtime's local calendar date (browser =
+  user's day; server = container `TZ`, exposed via compose + `.env.example`, default
+  UTC). All ~30 inline UTC-today sites replaced with `getToday()`/`addDays()`;
+  day-window queries on `started_at` use local instants; focus-session bucketing
+  uses the new `toLocalDate()`. Honoring `profiles.timezone` per-request remains a
+  possible future enhancement.
 
 `src/lib/dates.ts:1-3` (`new Date().toISOString().split("T")[0]`) keys everything —
 tasks default date, habit checkmarks, journal entry date, focus queries, briefing
@@ -42,7 +49,10 @@ anything. Internally consistent (client + server both UTC) but wrong wall-clock 
 flip for every non-UTC user. Decide: honor `profiles.timezone` or document UTC-only.
 
 ### C3. `/api/wipe-data` is CSRF-able — any webpage can destroy all data
-- [ ] Fixed
+- [x] Fixed — route now rejects browser cross-site requests (`Sec-Fetch-Site`),
+  requires `Content-Type: application/json` (not no-cors-able; cross-origin needs a
+  failing preflight), and requires `{"confirm":"WIPE"}` in the body. Dashboard
+  Danger Zone sends the confirm body.
 
 `src/app/api/wipe-data/route.ts:28` is a bare `POST` with no confirmation body and no
 Origin/`Sec-Fetch-Site` check; the app has no auth or cookies, so any website open in

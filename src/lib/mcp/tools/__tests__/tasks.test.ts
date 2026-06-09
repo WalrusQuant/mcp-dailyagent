@@ -1,3 +1,4 @@
+import { getToday } from "@/lib/dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -15,7 +16,7 @@ import { tasks } from "@/lib/db/schema";
 const SCOPES = ["tasks:read", "tasks:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 
-const TODAY = new Date().toISOString().split("T")[0];
+const TODAY = getToday();
 
 interface TaskRow {
   id: string;

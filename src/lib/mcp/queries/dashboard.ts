@@ -119,7 +119,7 @@ export async function getDashboardSnapshot(
           and(
             eq(focusSessions.userId, userId),
             eq(focusSessions.status, "completed"),
-            gte(focusSessions.startedAt, new Date(`${today}T00:00:00.000Z`))
+            gte(focusSessions.startedAt, new Date(`${today}T00:00:00`))
           )
         ),
       db

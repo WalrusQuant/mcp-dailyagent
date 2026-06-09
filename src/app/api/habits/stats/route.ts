@@ -4,6 +4,7 @@ import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
+import { getToday, addDays } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -11,11 +12,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const days = Math.max(1, parseInt(searchParams.get("days") || "30"));
 
-  const today = new Date();
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - (days - 1));
-  const startDateStr = startDate.toISOString().split("T")[0];
-  const endDateStr = today.toISOString().split("T")[0];
+  const endDateStr = getToday();
+  const startDateStr = addDays(endDateStr, -(days - 1));
 
   try {
     const habitRows = await db
@@ -63,7 +61,7 @@ export async function GET(request: NextRequest) {
           : [1, 2, 3, 4, 5, 6, 7];
 
       const streak = calculateStreak(habitLogDates, targetDays);
-      const applicableDays = getApplicableDays(startDate, today, targetDays);
+      const applicableDays = getApplicableDays(startDateStr, endDateStr, targetDays);
       const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
       const recentLogs = [...new Set(habitLogDates)].sort().reverse();
 

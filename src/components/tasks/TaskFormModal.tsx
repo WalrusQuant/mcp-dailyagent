@@ -1,5 +1,6 @@
 "use client";
 
+import { getToday } from "@/lib/dates";
 import { useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
@@ -21,7 +22,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClo
   const [title, setTitle] = useState(task?.title || "");
   const [notes, setNotes] = useState(task?.notes || "");
   const [priority, setPriority] = useState(task?.priority || "B1");
-  const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || new Date().toISOString().split("T")[0]);
+  const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || getToday());
   const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
   const [goalId, setGoalId] = useState(task?.goal_id || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");

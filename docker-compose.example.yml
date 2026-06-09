@@ -45,6 +45,9 @@ services:
       SELF_HOSTED_USER_ID: ${SELF_HOSTED_USER_ID}
       SELF_HOSTED_USER_EMAIL: ${SELF_HOSTED_USER_EMAIL:-user@localhost}
       MCP_API_KEY: ${MCP_API_KEY}
+      # Your timezone (e.g. America/New_York). Controls when "today" rolls over
+      # for tasks, habits, journal, and briefings. Defaults to UTC.
+      TZ: ${TZ:-UTC}
       NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Cadence}
       NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
     ports:
