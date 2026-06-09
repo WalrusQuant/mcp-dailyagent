@@ -1,0 +1,476 @@
+# Code Review Findings — 2026-06-09
+
+Full-project review covering the MCP server, DB layer, API routes, frontend, and
+infrastructure. All items below are to be resolved. Status checkboxes track progress.
+
+Baseline at time of review (commit `5bae56e`): 332/332 tests pass, `tsc --noEmit`
+clean, ESLint clean. Tests pass only under `TZ=UTC` — see C1.
+
+---
+
+## Critical
+
+### C1. `src/lib/dates.ts` breaks for any user east of UTC — browser-freezing infinite loop
+- [ ] Fixed
+
+`addDays`, `startOfWeek`, `endOfWeek`, `getDateRange` (`src/lib/dates.ts:13-40`) parse
+`date + "T00:00:00"` as **local** time but emit via `toISOString()` (**UTC**). In any
+UTC+ timezone the round-trip loses a day. Reproduced under `TZ=Europe/Berlin`:
+`addDays("2026-06-09", 1)` → `"2026-06-09"` (no-op); `addDays(..., -1)` skips two days.
+
+Consequences:
+- `getDateRange`'s `while (current <= end)` never advances → **infinite loop, frozen
+  tab**, triggered client-side from `HabitTracker.tsx:34` on Habits page load for
+  users in UTC+1..+14.
+- DateNavigation "next" button is a no-op; `startOfWeek` returns the wrong day,
+  shifting all week math (`get_week_summary`, weekly prompts, WeeklyReview UI).
+- Server-side `getNextOccurrence` (`src/lib/mcp/queries/tasks.ts:67-86`) has the same
+  flaw: completing a daily recurring task spawns a duplicate **on the same day**.
+
+Fix: do all date arithmetic in pure string/local-date space; never round-trip through
+`toISOString()`. Add a CI test run under a non-UTC `TZ` so it stays fixed.
+
+### C2. `getToday()` uses the UTC day, not the user's day
+- [ ] Fixed
+
+`src/lib/dates.ts:1-3` (`new Date().toISOString().split("T")[0]`) keys everything —
+tasks default date, habit checkmarks, journal entry date, focus queries, briefing
+lookup, rollover, dashboard — to the UTC calendar date. New York at 9pm sees
+tomorrow's empty list; Tokyo before 9am sees yesterday's. `DateNavigation.tsx:49`
+duplicates the same expression. `profiles.timezone` exists but is never read by
+anything. Internally consistent (client + server both UTC) but wrong wall-clock day
+flip for every non-UTC user. Decide: honor `profiles.timezone` or document UTC-only.
+
+### C3. `/api/wipe-data` is CSRF-able — any webpage can destroy all data
+- [ ] Fixed
+
+`src/app/api/wipe-data/route.ts:28` is a bare `POST` with no confirmation body and no
+Origin/`Sec-Fetch-Site` check; the app has no auth or cookies, so any website open in
+a browser on a tailnet device can fire
+`fetch("http://<host>/api/wipe-data", {method:"POST", mode:"no-cors"})` and wipe the
+DB. Fix: require a JSON body (e.g. `{confirm:"WIPE"}`, forcing a CORS preflight)
+and/or check `Sec-Fetch-Site`/`Origin`. The wipe logic itself is correct (all 16
+tables, FK-safe order, transactional).
+
+---
+
+## High — task lifecycle
+
+### H1. Recurring-task completion is not idempotent (duplicate next occurrences)
+- [ ] Fixed
+
+Both paths — MCP `complete_task` (`src/lib/mcp/tools/tasks.ts:290-304`) and dashboard
+PATCH (`src/app/api/tasks/[id]/route.ts:98-112`) — run the "spawn next occurrence"
+branch whenever `done: true` arrives, without checking the previous done state.
+Retries or toggling done off/on insert duplicates. Neither checks for an existing
+task on the target date; neither wraps update+insert in a transaction. Also: an
+unrecognized `recurrence.type` falls through `getNextOccurrence`'s switch and returns
+the input date → same-day duplicate.
+
+### H2. Rollover works only once per task and falsifies completion history
+- [ ] Fixed
+
+`src/app/api/tasks/rollover/route.ts:24,47-50` (+ `rollover/check/route.ts:21`):
+- Candidates filtered with `isNull(tasks.rolledFrom)`, but rolled copies have
+  `rolledFrom` set → a still-undone rolled task can never roll again; check endpoint
+  reports `count: 0` while the task lingers as overdue.
+- Undone originals are marked `done: true, doneAt: now()` → never-completed tasks
+  count as completed in calendar views, exports, and **inflate goal auto-progress**.
+
+### H3. Recurrence and rollover copies silently drop `goal_id`
+- [ ] Fixed
+
+`tasks/[id]/route.ts:102-111` and `rollover/route.ts:33-43` copy
+title/notes/priority/spaceId/recurrence/sortOrder but omit `goalId`, permanently
+breaking goal linkage (and goal auto-progress) for recurring/rolled tasks.
+
+### H4. `update_task(done: true)` diverges from `complete_task`
+- [ ] Fixed
+
+MCP `update_task` does not spawn the next recurrence while `complete_task` does
+(`src/lib/mcp/tools/tasks.ts`). An agent using `update_task` to finish a recurring
+task silently breaks the chain. Unify or document.
+
+---
+
+## Medium
+
+### Data loss / integrity
+
+### M1. Journal update silently wipes `mood`
+- [ ] Fixed
+
+`src/lib/mcp/tools/journal.ts:104,111,228` (and `queries/journal.ts`
+`createOrUpdateJournalEntry`): omitted `mood` is coerced to `null` in both the upsert
+and optimistic paths, so re-saving content destroys recorded mood. Omit the field
+from SET when undefined.
+
+### M2. Journal editor loses in-flight keystrokes on first autosave; duplicate-entry window
+- [ ] Fixed
+
+`src/components/journal/JournalView.tsx` keys the editor on
+`${date}-${todayEntry?.id || "new"}`; the first autosave POST sets `todayEntry`, the
+key changes, and the editor remounts with the saved snapshot — text typed during the
+round trip is deleted and focus lost. Until the response lands, `entryId` is
+undefined, so a second debounce can POST again → unique `(user_id, entry_date)`
+violation → raw 500 (see M8). Also toasts "Journal saved" on every autosave.
+
+### M3. Untransacted delete-then-insert in workout exercise replacement
+- [ ] Fixed
+
+`src/app/api/workouts/logs/[id]/route.ts:92-119`,
+`workouts/templates/[id]/route.ts:69-98`, and MCP `updateWorkoutLog`
+(`src/lib/mcp/tools/workouts.ts:259-288`): DELETE all exercises then INSERT new, no
+transaction — a failed insert (e.g. missing `exercise_name` → not-null violation;
+items are never validated) permanently destroys the old list. POST counterparts
+(`logs/route.ts:69-98`, `templates/route.ts:58-88`, MCP `logWorkout`/
+`createWorkoutTemplate` at `tools/workouts.ts:172-238`) insert parent+children
+untransacted → orphan parents on failure. The DELETE also never verifies the parent
+belongs to the user / exists (preceding UPDATE row count unchecked). Use
+`db.transaction` like `logGoalProgress` (`queries/goals.ts`).
+
+### M4. `GET /api/goals` mutates the database; upsert race → 500
+- [ ] Fixed
+
+`src/app/api/goals/route.ts:27-115`: list endpoint recomputes auto progress, UPDATEs
+`goals`, and upserts `goal_progress_logs` via select-then-insert (non-atomic against
+the unique `(goal_id, log_date)` index — concurrent dashboard loads → unique
+violation → 500), sequentially awaited per goal (N+1 on a GET). Also writes a stale
+progress log for auto goals with no linked items. Auto-progress counts every linked
+task ever, so rolled-over "completed" originals (H2) inflate it.
+
+### Type drift (`src/types/database.ts` — drift test only checks field names, not value types)
+
+### M5. `FocusSession.status` omits `"paused"`
+- [ ] Fixed
+
+`src/types/database.ts:157` declares `"active" | "completed" | "cancelled"`, but
+`schema.ts:336`, migration `0005`, and MCP `pause_focus_session`
+(`tools/focus.ts:273,281`) all use `"paused"`.
+
+### M6. `habits.target_days` nullable in DB, non-null `number[]` in types
+- [ ] Fixed
+
+`schema.ts:179` has a default but no `.notNull()` (confirmed in `0005_snapshot.json`).
+An explicit `target_days: null` write succeeds, then components iterating it crash.
+Make the column `NOT NULL` (with migration) or fix the type + guards.
+
+### M7. `default_weight` serialized as string, typed as number
+- [ ] Fixed
+
+`numeric` columns come back as strings from postgres.js. `serializeExercise`
+(`src/lib/mcp/queries/workouts.ts:41`) passes the raw string through (the path used by
+dashboard `/api/workouts/templates`), while line 223 converts with `Number()`.
+`WorkoutLogger.tsx:32` then copies the string into the `sets` jsonb, polluting logged
+data with mixed types.
+
+### MCP correctness
+
+### M8. Duplicate-day journal POST returns raw 500
+- [ ] Fixed
+
+`src/app/api/journal/route.ts:86-96` doesn't upsert or map the unique
+`(user_id, entry_date)` violation to 409 (the way `tags` does); same for
+`journal/[id]` PATCH of `entry_date`. Leaks constraint name in the error.
+
+### M9. `getWeekSummary` computes expected habits from the current month's grid
+- [ ] Fixed
+
+`src/lib/mcp/queries/calendar.ts:160,255`:
+`getCalendarGridDates(today.slice(0, 7))` builds the grid around **today**, then
+filters to the requested week — any week outside the current month's grid gets 0
+expected habits. Derive from `getDateRange(weekStart, weekEnd)` instead.
+
+### M10. `weekly_review` prompt journal stats wrong for past weeks
+- [ ] Fixed
+
+`src/lib/mcp/prompts/index.ts:704-716`: fetches the 7 most recent entries overall,
+then filters to the week — for a past week (the documented use), "Entries written"
+reports 0. Query the date range directly.
+
+### M11. `habit_analysis` prompt mislabels partial-week habits
+- [ ] Fixed
+
+`src/lib/mcp/prompts/index.ts:115-141`: `completionRate = completions / 30` ignores
+`target_days`/frequency (a perfect 3×/week habit caps at ~43% → labeled
+"struggling"); window is 31 days inclusive so daily habits can exceed 100%. Use
+`getApplicableDays` like `getHabitStats` (`queries/habits.ts`).
+
+### M12. MCP resources swallow query errors
+- [ ] Fixed
+
+All of `src/lib/mcp/resources/*.ts` return `result.data ?? []/null` and never inspect
+`result.error` — DB failure is indistinguishable from "no data". Surface errors like
+the tools do.
+
+### Frontend
+
+### M13. Pomodoro timer drifts and stalls in background tabs
+- [ ] Fixed
+
+`src/hooks/useFocusTimer.ts:109-127`: decrement-per-tick countdown with no wall-clock
+resync; effect deps `[isRunning, secondsLeft]` recreate the interval every second
+(cumulative drift); background-tab throttling reduces ticks to ~1/min or suspends
+them. `startTime` is persisted but only consulted in the mount effect (line 82), and
+`FocusTimerProvider` never remounts during SPA navigation. Fix: recompute remaining
+from `startTime` on every tick + on `visibilitychange`.
+
+### M14. Habit completion rate shows e.g. "4700%" after toggling
+- [ ] Fixed
+
+Server sends `completionRate` as a 0–1 fraction; `HabitTracker.tsx:126`'s local
+recompute after toggle produces an already-×100 value, and `HabitRow.tsx:81` /
+`HabitStats.tsx:36` multiply by 100 again. Local denominator (flat 30) also disagrees
+with the server's target-day-aware `applicableDays`.
+
+### M15. Insight dismissals keyed by array index, persisted forever
+- [ ] Fixed
+
+`src/components/dashboard/InsightCards.tsx`: `insight-${i}` in localStorage with no
+date/content scoping — dismissing insights 0–2 hides every future insight at those
+indices permanently. Secondary: `visible.slice(0, 3)` computed but render iterates
+`insights`, so >3 cards can render.
+
+### M16. No fetch cancellation / staleness guards on rapid navigation
+- [ ] Fixed
+
+`TaskList.tsx:111-128`, `JournalView.tsx` (`loadData`), `GoalList.tsx` (status tabs),
+`CalendarView.tsx` (`fetchMonth`), `WeeklyReview.tsx`: fetch-then-setState with no
+AbortController/ignore flag — a stale slow response can render the wrong day's data.
+`Sidebar.tsx` has the correct `cancelled`-flag pattern to copy.
+
+### Infra
+
+### M17. Service worker never installs (leftover from old chat app)
+- [ ] Fixed
+
+`public/sw.js:1-9`: `CACHE_NAME = "chat-v6"`, `STATIC_ASSETS = ["/", "/chat"]` — no
+`/chat` route exists, `cache.addAll` rejects, the `install` event fails every time,
+so PWA offline support is entirely dead. Registration errors swallowed
+(`src/app/layout.tsx:58`). After fixing the precache list, note navigation cache only
+busts via manual `CACHE_NAME` bumps.
+
+### M18. Docker images publish with no CI gate
+- [ ] Fixed
+
+`.github/workflows/docker.yml:3-10` builds + pushes `:latest`/semver on every push to
+`main` and on `v*.*.*` tags, with no coupling to `ci.yml` (which doesn't trigger on
+tags at all). A red commit ships to everyone running `docker compose pull`. Gate the
+publish on lint/test/build.
+
+### M19. Boot-time `drizzle-kit migrate` works only by npm-hoisting accident
+- [ ] Fixed
+
+`Dockerfile:40` copies `node_modules/drizzle-kit`, `drizzle-orm`, `postgres` — but
+`drizzle-kit/bin.cjs` hard-requires `esbuild` (to load the TS config). It currently
+rides along only because drizzle-kit pins `esbuild ^0.25.x` while the top-level tree
+has `0.27.x`, so npm nests it under `drizzle-kit/node_modules`. When versions
+converge, every container boot crash-loops (`set -e`), and no workflow ever boots the
+built image to catch it. Fix: use drizzle-orm's programmatic `migrate()` (no
+TS-config load), or convert config to `.js`, or copy esbuild explicitly.
+
+### M20. `backups/` (pg_dump output) not in `.gitignore` / `.dockerignore`
+- [ ] Fixed
+
+`docker-compose.yml:64` bind-mounts `./backups` inside the git working tree on the
+from-source path; `git add -A` can commit full DB dumps and `COPY . .`
+(`Dockerfile:13`) pulls them into build context. One-line fix in both files.
+
+### M21. `NEXT_PUBLIC_*` runtime env vars are no-ops with the prebuilt image
+- [ ] Fixed
+
+`docker-compose.example.yml:48-49` + `.env.example:25-26`: Next.js inlines
+`NEXT_PUBLIC_*` at build time; the GHCR image bakes them as undefined so setting them
+in `.env` does nothing. They're only read in a server component
+(`src/app/layout.tsx:16-17`) — rename to non-`NEXT_PUBLIC_` server vars or drop.
+
+---
+
+## Low
+
+### L1. Malformed JSON returns 500, not 400
+- [ ] Fixed
+
+Every POST/PATCH except `profile` calls `await request.json()` outside try/catch
+(~20 sites, e.g. `tasks/route.ts:54`, `habits/[id]/route.ts:40`,
+`journal/route.ts:67`, `tasks/reorder/route.ts:10`).
+
+### L2. Unvalidated values surface as raw PG 500s
+- [ ] Fixed
+
+Task `priority` (must match `^[A-C][1-9]$`, `schema.ts:162`) unvalidated at
+`tasks/route.ts:70` / `tasks/[id]/route.ts:46`; goal `category`/`status`/`progress`
+(`goals/route.ts:139-144`, `goals/[id]/route.ts:66-68`); journal `mood` accepts
+floats into an integer column (`journal/route.ts:74-81`); `new Date()` from
+unvalidated strings (`tasks/[id]/route.ts:49`, `focus/[id]/route.ts:32,37`);
+`body.recurrence` stored with no shape check (`tasks/[id]/route.ts:53`). MCP-side:
+`list_tasks.date` is bare `z.string()` without `dateSchema` (`tools/tasks.ts:160`,
+breaks the overdue-rollover string comparison for variant formats); goal `progress`
+missing `.int()` (`tools/goals.ts:180,217`).
+
+### L3. `calculateStreak` never resets after a lapse; dashboard streak hardcoded 0
+- [ ] Fixed
+
+`src/lib/habit-stats.ts:1-27`: walks back past all unlogged days, so a 5-day run from
+months ago still reports 5; also mixes UTC date strings with local `getDay()`.
+Meanwhile `dashboard/route.ts:114` always sends `streak: 0`, so the streak badge in
+`HabitWidget.tsx:38` / `DailyStartCard.tsx:121-128` never renders.
+
+### L4. MCP rate limiting applies only after successful auth
+- [ ] Fixed
+
+`src/app/api/mcp/route.ts:32-57`: limiter keyed by `auth.userId` after auth, so
+bearer-token brute-force attempts are unthrottled (mitigated by `timingSafeEqual` +
+Tailscale, but contradicts the in-code comment).
+
+### L5. "Focus session complete!" toast fires on cancel/reset
+- [ ] Fixed
+
+`src/components/focus/FocusTimer.tsx:52-58` toasts on every `isActive` true→false
+transition, including user abandonment (session marked `cancelled`).
+
+### L6. Fetch inside `setState` updater in task reorder
+- [ ] Fixed
+
+`src/components/tasks/TaskList.tsx:42-70`: `handleDrop` PATCHes
+`/api/tasks/reorder` from inside the `setTasks` updater (React may invoke updaters
+twice; StrictMode does) and `.catch(() => {})` silently desyncs order on failure.
+
+### L7. Optimistic updates without rollback / swallowed failures on inline actions
+- [ ] Fixed
+
+`SpaceDashboard.tsx` (`handleToggleTask`, `updateProgress`): state-first, no
+`response.ok` check, no rollback. `TaskList.handleToggle`/`handleDelete`,
+`HabitTracker.handleToggle`/`handleDelete`, `WorkoutLogger.handleSave`,
+`DailyStartCard.handleCompleteTask`: non-ok responses (incl. optimistic-concurrency
+409s) produce no user feedback. Form modals handle these correctly — mirror that.
+
+### L8. `habits/[id]` PATCH silently drops `null` clears
+- [ ] Fixed
+
+`src/app/api/habits/[id]/route.ts:47-56`: `frequency`/`color`/`sort_order` accept
+`null` in the guard then coerce `?? undefined` — returns 200, changes nothing.
+
+### L9. `parseInt` without NaN check → 500
+- [ ] Fixed
+
+`habits/stats/route.ts:12-18`, `focus/stats/route.ts:11-15`,
+`workouts/stats/route.ts:16`: `?days=abc` → NaN → Invalid Date → throw.
+
+### L10. Profile route emits camelCase, contradicting the API contract
+- [ ] Fixed
+
+`src/app/api/profile/route.ts` returns `displayName`/`avatarUrl`/... while
+`types/database.ts:10-23` documents snake_case. Works today (settings components
+match) but contradicts the stated contract and every other route.
+
+### L11. Error responses leak internal DB details; status-code inconsistencies
+- [ ] Fixed
+
+Most catches return `err.message` verbatim (constraint names, SQL);
+`profile/route.ts:35,81` returns `String(err)`. `tasks/reorder/route.ts:38-39` shows
+the right pattern (log + generic). Also: `tasks`/`spaces` POST return 200 vs 201
+elsewhere; `calendar/route.ts:78-79` + `calendar/day/route.ts:49-50` parse day
+boundaries server-local but bucket sessions by UTC (`route.ts:149`), inconsistent
+with `dashboard/route.ts:78`.
+
+### L12. Workout multi-statement writes (MCP) untransacted
+- [ ] Fixed
+
+Covered by M3's fix — listed separately to ensure MCP `logWorkout` /
+`createWorkoutTemplate` / `updateWorkoutLog` get the same `db.transaction` treatment.
+
+### L13. No scope checks on dashboard resource or any prompt
+- [ ] Fixed
+
+`src/lib/mcp/resources/dashboard.ts:16`, `prompts/index.ts:26-29`: moot while the
+single token gets `all`, but a latent scope bypass if scoped tokens are ever issued.
+
+### L14. Redundant indexes; unindexed self-FK
+- [ ] Fixed
+
+`schema.ts`: `idx_journal_user_date:231` duplicates the unique index at :232;
+`idx_habit_logs_habit_date:208` duplicates :210; `idx_spaces_user:55` is a prefix of
+:56; `idx_focus_sessions_user:333` prefix of :334. `tasks.rolled_from` (:150) is the
+only FK without a covering index.
+
+### L15. Migration 0004 unique index has no dedupe step
+- [ ] Fixed
+
+`drizzle/0004_silent_prima.sql`: if a pre-0004 deployment has two journal entries on
+one day, auto-migration on boot fails → container crash-loop with no documented
+remediation. Add a dedupe statement before the index (or document recovery).
+
+### L16. `retry.ts` default predicate retries every error
+- [ ] Fixed
+
+`src/lib/retry.ts:20`: comment says "network errors and 5xx" but the fallback is
+`return true` — programming errors, aborts, 4xx all retried with ~17s backoff.
+Default should be `return false` (or at least exclude `AbortError`).
+
+### L17. `isPaused` is `true` when no timer exists
+- [ ] Fixed
+
+`src/hooks/useFocusTimer.ts:266`: `timerState?.pausedAt !== null` →
+`undefined !== null` → `true`. Currently unconsumed; fix before it bites.
+
+### L18. Dark-theme flash for light-theme users
+- [ ] Fixed
+
+`src/lib/theme.tsx:49-51` + `src/app/layout.tsx:45`: html class hardcoded `"dark"`
+server-side, corrected post-hydration. Add an inline pre-paint script.
+
+### L19. Chat-era debris sweep
+- [ ] Fixed
+
+- `@openrouter/sdk` in `package.json:20` — imported nowhere.
+- `infrastructure/hydra/hydra.yml` — dead Ory Hydra OAuth config (old multi-user
+  design); references routes that don't exist.
+- `.github/workflows/ci.yml:24-28` — stale `NEXT_PUBLIC_SUPABASE_*`,
+  `OPENROUTER_API_KEY`, `SIGNUP_SECRET` env vars, referenced nowhere.
+- `docs/index.html` — landing page for the previous product; excluded from mkdocs
+  build, describes features that don't exist.
+- CLAUDE.md still documents `source` columns dropped by migrations 0001/0002.
+
+### L20. Docs/compose corrections
+- [ ] Fixed
+
+- `docs/quick-start.md:87`: `source .env` errors — `.env.example:26` has an unquoted
+  multi-word value.
+- `docs/quick-start.md:102` / `docs/DEPLOY.md:78`: `ufw deny 3000/tcp` doesn't filter
+  Docker-published ports (Docker's iptables rules bypass ufw); fine while bound to
+  127.0.0.1, misleading otherwise. Docs also claim Postgres is bound to 127.0.0.1 —
+  its ports block is commented out entirely (which is better).
+- `docs/DEPLOY.md:29-31`: instructs setting `DATABASE_URL` in `.env`, but
+  `docker-compose.yml:33` constructs it itself — the value is never used.
+- App container has no healthcheck in either compose file despite
+  `/api/mcp/health` existing.
+
+---
+
+## Verified clean (no action needed)
+
+- No auth bypasses or cross-user leaks: `userId` filtering present in every MCP tool,
+  resource, prompt fetcher, and API route reviewed.
+- No SQL injection: the two raw `sql` fragments (journal FTS, optimistic
+  `date_trunc`) are parameterized; entrypoint seed uses tagged templates.
+- `timingSafeEqual` bearer comparison; correct 401/WWW-Authenticate; stateless
+  transport.
+- `optimistic.ts` is a true single-statement compare-and-swap (ms-truncation is a
+  deliberate, documented precision fix).
+- Schema constraints, cascades, per-day unique indexes, `timestamptz` throughout;
+  migrations match `schema.ts`.
+- Docker: non-root user, loopback-only binds, `.env*` excluded from image, idempotent
+  seed, bounded wait loop, migration failure correctly prevents server start.
+
+## Suggested fix order
+
+1. **C1 + C2** — rewrite `dates.ts` (also resolves the same-day recurrence duplicate
+   mechanism in H1 and week math in M9); add non-UTC `TZ` test run to CI.
+2. **C3** — guard `/api/wipe-data`.
+3. **H1–H4** — task lifecycle (idempotent completion, re-rollover, preserve
+   `goal_id`, stop marking rolled tasks done, unify `update_task`/`complete_task`).
+4. **M18 + M19** — gate Docker publish on CI; fix drizzle-kit/esbuild fragility.
+5. **M1–M4** — data-loss fixes (journal mood/editor, workout transactions, goals GET).
+6. **M5–M7** — type drift; extend the drift test to cover value unions/nullability.
+7. Remaining mediums, then lows (batch L19/L20 debris+docs sweep together).
