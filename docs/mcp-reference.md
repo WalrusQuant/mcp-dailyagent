@@ -1,6 +1,6 @@
 # MCP reference
 
-34 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
+45 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
 
 There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns `{ ok, transport, tools, prompts, resources, version }`. Use it to confirm the server is up and speaking the right protocol before troubleshooting auth, and to discover how many tools the running build exposes.
 
@@ -9,6 +9,9 @@ There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns 
 
 !!! note "Rate limit"
     `/api/mcp` is protected by an abuse-guard token-bucket rate limit (burst 100, refill 10/sec ≈ 600 req/min). Normal agent traffic never trips it; a runaway loop gets a `429 rate_limited` with a `Retry-After` header.
+
+!!! note "Optimistic concurrency"
+    The `update_*` tools — plus `complete_task`, `complete_focus_session`, `pause_focus_session`, `resume_focus_session`, and `create_journal_entry` when updating — accept an optional `expected_updated_at` (the ISO timestamp from your last read of that row). If set and the row changed in the meantime, the write fails with a `conflict` result (returning the current row) instead of clobbering it. Omit it for last-write-wins.
 
 ## Shared value formats
 
@@ -23,6 +26,7 @@ There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns 
 | Space status | enum | `active`, `paused`, `completed` |
 | Mood | int `1-5` | 1 = low, 5 = great |
 | Exercise type | enum | `strength`, `timed`, `cardio` |
+| Focus status | enum | `active`, `paused`, `completed`, `cancelled` |
 | Focus duration | int `1-480` min | — |
 | Focus break | int `0-120` min | — |
 
@@ -103,6 +107,22 @@ Idempotent — toggles whether the habit was completed on the given date.
 | `habit_id` | UUID | yes | |
 | `date` | date | no | Defaults to today |
 
+### `update_habit`
+
+Update a habit's details, or archive/restore it.
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `habit_id` | UUID | yes | |
+| `name`, `description`, `color` | varies | no | |
+| `frequency` | `daily \| weekly` | no | |
+| `target_days` | `int[1-7][]` | no | ISO weekdays |
+| `archived` | boolean | no | `true` hides it from `list_habits` (unless `include_archived`); `false` restores |
+
+### `delete_habit`
+
+Delete a habit permanently, including all its completion logs. To keep history, archive it via `update_habit` instead. Argument: `habit_id` (UUID).
+
 ---
 
 ## Journal
@@ -119,7 +139,7 @@ Fetch a single day or a date range.
 
 ### `search_journal`
 
-Substring search across all entries.
+Full-text search across entry content (Postgres `to_tsvector`/`plainto_tsquery`, English stemming).
 
 Argument: `query: string`.
 
@@ -132,6 +152,10 @@ Upserts — if an entry already exists for that date, it's overwritten.
 | `content` | string | yes |
 | `entry_date` | date | no (defaults today) |
 | `mood` | int `1-5` | no |
+
+### `delete_journal_entry`
+
+Delete the entry for a given date permanently. Argument: `entry_date` (date).
 
 ---
 
@@ -178,6 +202,52 @@ Each exercise entry:
 
 `type` must be one of `strength`, `timed`, `cardio`. `name` is required on each entry.
 
+### `create_workout_template`
+
+Save a reusable routine. The `exercises` argument is a **JSON string** array of template exercise entries.
+
+| Arg | Type | Required |
+|---|---|---|
+| `name` | string | yes |
+| `description` | string | no |
+| `exercises` | JSON string | no |
+
+Each template exercise entry:
+
+```json
+{
+  "name": "Bench Press",
+  "type": "strength",
+  "default_sets": 3,
+  "default_reps": 8,
+  "default_weight": 80,
+  "default_duration_seconds": null,
+  "notes": null
+}
+```
+
+### `update_workout_log`
+
+Update a logged workout. Only the fields you pass change. Passing `exercises` **replaces** the full exercise list (use `[]` to clear); omit it to leave the existing exercises untouched.
+
+| Arg | Type | Required |
+|---|---|---|
+| `log_id` | UUID | yes |
+| `name`, `notes` | string | no |
+| `log_date` | date | no |
+| `duration_minutes` | int | no |
+| `exercises` | JSON string | no |
+
+The `exercises` entry shape matches `log_workout` (with `sets`/`reps`/`weight`/`duration_seconds`).
+
+### `delete_workout_log`
+
+Delete a workout log permanently (also removes its logged exercises). Argument: `log_id` (UUID).
+
+### `delete_workout_template`
+
+Delete a template permanently. Its exercises are removed; past logs created from it are kept (their `template_id` is set to null). Argument: `template_id` (UUID).
+
 ---
 
 ## Focus sessions
@@ -203,6 +273,14 @@ No arguments. Returns today's totals (sessions started, completed, total focus m
 ### `complete_focus_session`
 
 Mark a session complete. Argument: `session_id: UUID`.
+
+### `pause_focus_session`
+
+Pause an in-progress session (sets status to `paused`). Resume later with `resume_focus_session`. Argument: `session_id` (UUID).
+
+### `resume_focus_session`
+
+Resume a paused session (sets status back to `active`). Argument: `session_id` (UUID).
 
 ---
 
@@ -237,6 +315,10 @@ Just update the progress %.
 | `goal_id` | UUID | yes |
 | `progress` | int `0-100` | yes |
 
+### `delete_goal`
+
+Delete a goal permanently, including its progress logs. To keep the record, set its status to `abandoned` via `update_goal` instead. Argument: `goal_id` (UUID).
+
 ---
 
 ## Spaces (projects)
@@ -259,6 +341,10 @@ No arguments.
 | `space_id` | UUID | yes | |
 | `name`, `description` | string | no | |
 | `status` | space status | no | `active`, `paused`, or `completed` |
+
+### `delete_space`
+
+Delete a space permanently. Tasks linked to it are kept but unlinked (their space becomes empty). Argument: `space_id` (UUID).
 
 ---
 
@@ -373,5 +459,5 @@ All tool errors come back as `text/plain` content starting with `Error: ` and th
 
 - **Validation errors** — Zod schema rejection. The message names the field and expected format.
 - **CHECK constraint failures** — DB-level rejection. Surfaces the Postgres error message; usually means the tool schema and DB constraint got out of sync (shouldn't happen with current `validators.ts`, but file a bug if it does).
-- **Not found** — e.g. `Task not found` when updating/completing a task that doesn't exist or belongs to a different user.
+- **Not found** — e.g. `Task not found` when updating, completing, or deleting a row that doesn't exist or belongs to a different user. All `update_*` and `delete_*` tools report this consistently.
 - **Unauthorized** — missing or wrong bearer token. HTTP 401 before the tool even runs.

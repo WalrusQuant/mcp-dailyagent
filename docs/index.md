@@ -20,7 +20,7 @@ flowchart TD
     API -->|Drizzle| DB
 ```
 
-- **MCP server** (`/api/mcp`) — the agent's interface. 34 typed tools for reading and writing every piece of productivity data, 13 prompt templates, plus read-only resources. Bearer-token authenticated.
+- **MCP server** (`/api/mcp`) — the agent's interface. 45 typed tools for reading and writing every piece of productivity data, 13 prompt templates, plus read-only resources. Bearer-token authenticated.
 - **Dashboard** — a Next.js UI for browsing and manually editing the same data. No AI features. No generate buttons. Just CRUD.
 
 OpenClaw owns model choice, scheduling, message delivery (Telegram / WhatsApp / etc.), briefings, insights, and reviews. This repo owns storage and the contract.
@@ -66,7 +66,7 @@ You if:
 
     ---
 
-    34 tools, grouped by domain, with input schemas and examples.
+    45 tools, grouped by domain, with input schemas and examples.
 
     [:octicons-arrow-right-24: Browse tools](mcp-reference.md)
 

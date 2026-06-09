@@ -12,7 +12,7 @@ Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journa
 
 Two front doors, one database:
 
-1. **MCP server** (`/api/mcp`) — the primary interface. Your OpenClaw agent reads and writes every piece of productivity data through it: 34 typed tools, a dozen prompt templates, a handful of read-only resources. Authenticated by a single bearer token.
+1. **MCP server** (`/api/mcp`) — the primary interface. Your OpenClaw agent reads and writes every piece of productivity data through it: 45 typed tools, a dozen prompt templates, a handful of read-only resources. Authenticated by a single bearer token.
 2. **Dashboard** (`/dashboard`, `/tasks`, `/habits`, `/journal`, `/workouts`, `/focus`, `/goals`, `/calendar`, `/review`, `/spaces`, `/settings`) — a Next.js UI for browsing and manually editing the same data. No AI features. No generate buttons. If you want AI, you talk to OpenClaw.
 
 OpenClaw owns everything about the agent: model choice, scheduling, message delivery (Telegram / WhatsApp / etc.), briefings, insights, reviews. This repo owns storage and the contract.
@@ -190,7 +190,7 @@ src/
     mcp/
       server.ts           # Factory: registers tools, prompts, resources
       auth.ts             # Bearer token validation
-      tools/              # 34 tools, one file per domain
+      tools/              # 45 tools, one file per domain
       prompts/            # 13 prompt templates
       resources/          # Read-only URI resources
       queries/            # Shared query helpers
