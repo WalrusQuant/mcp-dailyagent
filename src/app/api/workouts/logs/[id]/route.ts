@@ -63,6 +63,16 @@ export async function PATCH(
   }
 
   try {
+    // Verify the log exists and belongs to this user before touching child
+    // rows — the exercise delete below is keyed by log id alone.
+    const [owned] = await db
+      .select({ id: workoutLogs.id })
+      .from(workoutLogs)
+      .where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId)));
+    if (!owned) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     if (typeof body.expected_updated_at === "string") {
       const result = await updateWithVersion<typeof workoutLogs.$inferSelect>({
         table: workoutLogs,
@@ -90,32 +100,36 @@ export async function PATCH(
     }
 
     if (Array.isArray(body.exercises)) {
-      await db.delete(workoutLogExercises).where(eq(workoutLogExercises.logId, id));
+      // Replace atomically: if the insert fails, the delete rolls back and
+      // the previous exercises survive.
+      await db.transaction(async (tx) => {
+        await tx.delete(workoutLogExercises).where(eq(workoutLogExercises.logId, id));
 
-      if (body.exercises.length > 0) {
-        await db.insert(workoutLogExercises).values(
-          body.exercises.map(
-            (ex: {
-              exercise_name: string;
-              exercise_type?: string;
-              sort_order?: number;
-              sets?: Array<{
-                set_number?: number;
-                reps?: number;
-                weight?: number;
-                duration_seconds?: number;
-                notes?: string;
-              }>;
-            }) => ({
-              logId: id,
-              exerciseName: ex.exercise_name,
-              exerciseType: ex.exercise_type ?? "strength",
-              sortOrder: ex.sort_order ?? 0,
-              sets: ex.sets ?? [],
-            })
-          )
-        );
-      }
+        if (body.exercises.length > 0) {
+          await tx.insert(workoutLogExercises).values(
+            body.exercises.map(
+              (ex: {
+                exercise_name: string;
+                exercise_type?: string;
+                sort_order?: number;
+                sets?: Array<{
+                  set_number?: number;
+                  reps?: number;
+                  weight?: number;
+                  duration_seconds?: number;
+                  notes?: string;
+                }>;
+              }) => ({
+                logId: id,
+                exerciseName: ex.exercise_name,
+                exerciseType: ex.exercise_type ?? "strength",
+                sortOrder: ex.sort_order ?? 0,
+                sets: ex.sets ?? [],
+              })
+            )
+          );
+        }
+      });
     }
 
     const result = await getLogWithExercises(id, userId);

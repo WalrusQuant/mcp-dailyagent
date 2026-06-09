@@ -24,41 +24,78 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef(initialContent);
 
-  const save = useCallback(async (text: string, moodVal: number | null) => {
-    if (!text.trim()) return;
-    setIsSaving(true);
-    try {
-      const url = entryId ? `/api/journal/${entryId}` : "/api/journal";
-      const method = entryId ? "PATCH" : "POST";
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, mood: moodVal, entry_date: date }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        lastSavedRef.current = text;
-        onSave(data);
-      }
-    } catch (error) {
-      console.error("Failed to save:", error);
-    } finally {
-      setIsSaving(false);
+  // The editor must not remount when the first save assigns an id (that would
+  // discard keystrokes typed during the request), so the id lives in a ref
+  // that flips POST -> PATCH in place.
+  const entryIdRef = useRef<string | undefined>(entryId);
+  useEffect(() => {
+    if (entryId) entryIdRef.current = entryId;
+  }, [entryId]);
+
+  // Latest-value refs so a save always writes what's currently on screen,
+  // even when it was queued behind an in-flight request.
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
+
+  const inFlightRef = useRef(false);
+  const pendingRef = useRef(false);
+
+  const save = useCallback(async () => {
+    // Never run two saves concurrently: a second POST before the first
+    // returns would create a duplicate entry for the date. Queue instead.
+    if (inFlightRef.current) {
+      pendingRef.current = true;
+      return;
     }
-  }, [entryId, date, onSave]);
+
+    do {
+      pendingRef.current = false;
+      const text = contentRef.current;
+      const moodVal = moodRef.current;
+      if (!text.trim()) return;
+
+      inFlightRef.current = true;
+      setIsSaving(true);
+      try {
+        const id = entryIdRef.current;
+        const url = id ? `/api/journal/${id}` : "/api/journal";
+        const response = await fetch(url, {
+          method: id ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: text, mood: moodVal, entry_date: date }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.id) entryIdRef.current = data.id;
+          lastSavedRef.current = text;
+          onSave(data);
+          // Re-run if more changes arrived while this save was in flight.
+          if (contentRef.current !== lastSavedRef.current) pendingRef.current = true;
+        }
+      } catch (error) {
+        console.error("Failed to save:", error);
+      } finally {
+        inFlightRef.current = false;
+        setIsSaving(false);
+      }
+    } while (pendingRef.current);
+  }, [date, onSave]);
 
   // Auto-save on content change
   useEffect(() => {
     if (content === lastSavedRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => save(content, mood), 2000);
+    saveTimeoutRef.current = setTimeout(save, 2000);
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, [content, mood, save]);
 
   const handleMoodChange = (newMood: number) => {
     const val = mood === newMood ? null : newMood;
     setMood(val);
-    if (content.trim()) save(content, val);
+    moodRef.current = val;
+    if (content.trim()) save();
   };
 
   return (
@@ -127,7 +164,7 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
           </button>
         )}
         <button
-          onClick={() => save(content, mood)}
+          onClick={() => save()}
           disabled={!content.trim() || isSaving}
           className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
           style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}

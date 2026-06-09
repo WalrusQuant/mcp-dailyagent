@@ -108,7 +108,8 @@ async function createOrUpdateJournalEntry(
         target: [journalEntries.userId, journalEntries.entryDate],
         set: {
           content: args.content.trim(),
-          mood: args.mood ?? null,
+          // Omitted mood must not wipe a previously recorded one.
+          ...(args.mood !== undefined ? { mood: args.mood } : {}),
           updatedAt: new Date(),
         },
       })
@@ -191,7 +192,7 @@ export function registerJournalTools(server: McpServer) {
   // --- create_journal_entry (WRITE) ---
   server.tool(
     "create_journal_entry",
-    "Create or update a journal entry for a given date (defaults to today). When updating an existing entry, pass expected_updated_at to opt into concurrency-safe writes.",
+    "Create or update a journal entry for a given date (defaults to today). Omitting mood keeps the entry's existing mood. When updating an existing entry, pass expected_updated_at to opt into concurrency-safe writes.",
     {
       content: z.string().describe("Journal entry content"),
       entry_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
@@ -226,7 +227,7 @@ export function registerJournalTools(server: McpServer) {
           id: existing.id,
           userId: auth.userId,
           expectedUpdatedAt: args.expected_updated_at,
-          patch: { content: args.content, mood: args.mood ?? null },
+          patch: { content: args.content, ...(args.mood !== undefined ? { mood: args.mood } : {}) },
         });
         if (result.ok) return textResult(result.row);
         if (result.reason === "not_found") return errorResult("Journal entry not found");

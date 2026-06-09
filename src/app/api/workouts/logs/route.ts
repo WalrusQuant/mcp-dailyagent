@@ -66,36 +66,42 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [log] = await db
-      .insert(workoutLogs)
-      .values({
-        userId,
-        name: name || "Workout",
-        templateId: template_id ?? null,
-        logDate: log_date,
-        durationMinutes: duration_minutes ?? null,
-        notes: notes ?? null,
-      })
-      .returning();
+    // Parent + children in one transaction so a failed exercise insert
+    // doesn't leave an orphan log behind.
+    const log = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(workoutLogs)
+        .values({
+          userId,
+          name: name || "Workout",
+          templateId: template_id ?? null,
+          logDate: log_date,
+          durationMinutes: duration_minutes ?? null,
+          notes: notes ?? null,
+        })
+        .returning();
 
-    if (Array.isArray(exercises) && exercises.length > 0) {
-      await db.insert(workoutLogExercises).values(
-        exercises.map(
-          (ex: {
-            exercise_name: string;
-            exercise_type?: string;
-            sort_order?: number;
-            sets?: Array<{ reps?: number; weight?: number; duration?: number }>;
-          }) => ({
-            logId: log.id,
-            exerciseName: ex.exercise_name,
-            exerciseType: ex.exercise_type || "strength",
-            sortOrder: ex.sort_order ?? 0,
-            sets: ex.sets || [],
-          })
-        )
-      );
-    }
+      if (Array.isArray(exercises) && exercises.length > 0) {
+        await tx.insert(workoutLogExercises).values(
+          exercises.map(
+            (ex: {
+              exercise_name: string;
+              exercise_type?: string;
+              sort_order?: number;
+              sets?: Array<{ reps?: number; weight?: number; duration?: number }>;
+            }) => ({
+              logId: created.id,
+              exerciseName: ex.exercise_name,
+              exerciseType: ex.exercise_type || "strength",
+              sortOrder: ex.sort_order ?? 0,
+              sets: ex.sets || [],
+            })
+          )
+        );
+      }
+
+      return created;
+    });
 
     const exRows = await db
       .select()

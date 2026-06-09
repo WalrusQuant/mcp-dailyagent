@@ -118,6 +118,30 @@ describe("create_journal_entry + get_journal_entries", () => {
     expect(list).toHaveLength(1);
     expect(list[0].content).toBe("second version");
   });
+
+  it("re-saving content without mood preserves the previously recorded mood", async () => {
+    expectOk(await h.call("create_journal_entry", { content: "good day", entry_date: "2026-06-04", mood: 4 }, ctx));
+    const resaved = expectOk<JournalEntry>(
+      await h.call("create_journal_entry", { content: "good day, more detail", entry_date: "2026-06-04" }, ctx)
+    );
+    expect(resaved.content).toBe("good day, more detail");
+    expect(resaved.mood).toBe(4);
+  });
+
+  it("versioned update without mood also preserves the existing mood", async () => {
+    const created = expectOk<JournalEntry>(
+      await h.call("create_journal_entry", { content: "v1", entry_date: "2026-06-05", mood: 2 }, ctx)
+    );
+    const updated = expectOk<JournalEntry>(
+      await h.call(
+        "create_journal_entry",
+        { content: "v2", entry_date: "2026-06-05", expected_updated_at: created.updatedAt },
+        ctx
+      )
+    );
+    expect(updated.content).toBe("v2");
+    expect(updated.mood).toBe(2);
+  });
 });
 
 describe("get_journal_entries — range & limit", () => {

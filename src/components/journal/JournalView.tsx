@@ -72,9 +72,10 @@ export function JournalView() {
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
+  // No toast here: autosave fires every couple of seconds while typing and the
+  // editor already shows its own "Saving..." indicator.
   const handleSave = (entry: JournalEntry) => {
     setTodayEntry(entry);
-    addToast("Journal saved");
   };
 
   const handleDelete = () => {
@@ -99,8 +100,10 @@ export function JournalView() {
         <DateNavigation date={date} onDateChange={setDate} />
       </div>
 
+      {/* Key on date only: remounting when the first save assigns an id would
+          discard keystrokes typed while the request was in flight. */}
       <JournalEditor
-        key={`${date}-${todayEntry?.id || "new"}`}
+        key={date}
         entryId={todayEntry?.id}
         initialContent={todayEntry?.content || ""}
         initialMood={todayEntry?.mood}

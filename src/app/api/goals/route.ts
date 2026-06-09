@@ -64,6 +64,22 @@ export async function GET(request: NextRequest) {
         habitsByGoal.set(h.goalId, counts);
       }
 
+      // Today's existing snapshots, so steady-state GETs issue no writes at all.
+      const existingLogs = await db
+        .select({ goalId: goalProgressLogs.goalId, progress: goalProgressLogs.progress })
+        .from(goalProgressLogs)
+        .where(
+          and(
+            eq(goalProgressLogs.userId, userId),
+            eq(goalProgressLogs.logDate, today),
+            inArray(goalProgressLogs.goalId, goalIds)
+          )
+        );
+      const loggedProgress = new Map(existingLogs.map((l) => [l.goalId, l.progress]));
+
+      const goalUpdates: { id: string; progress: number }[] = [];
+      const logUpserts: { goalId: string; progress: number }[] = [];
+
       for (const goal of autoGoals) {
         const taskCounts = tasksByGoal.get(goal.id);
         const habitCounts = habitsByGoal.get(goal.id);
@@ -85,33 +101,39 @@ export async function GET(request: NextRequest) {
           progress = Math.round((habitCounts.completed / habitCounts.total) * 100);
         }
 
-        if (hasLinked && progress !== goal.progress) {
+        // No linked items: nothing to recompute, and logging the goal's stored
+        // progress here would just write a stale snapshot.
+        if (!hasLinked) continue;
+
+        if (progress !== goal.progress) {
           goal.progress = progress;
-          await db
-            .update(goals)
-            .set({ progress, updatedAt: new Date() })
-            .where(eq(goals.id, goal.id));
+          goalUpdates.push({ id: goal.id, progress });
         }
-
-        // Upsert today's progress log
-        const existingLog = await db
-          .select()
-          .from(goalProgressLogs)
-          .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
-
-        if (existingLog.length > 0) {
-          await db
-            .update(goalProgressLogs)
-            .set({ progress: goal.progress })
-            .where(and(eq(goalProgressLogs.goalId, goal.id), eq(goalProgressLogs.logDate, today)));
-        } else {
-          await db.insert(goalProgressLogs).values({
-            goalId: goal.id,
-            userId,
-            logDate: today,
-            progress: goal.progress,
-          });
+        if (loggedProgress.get(goal.id) !== progress) {
+          logUpserts.push({ goalId: goal.id, progress });
         }
+      }
+
+      if (goalUpdates.length > 0 || logUpserts.length > 0) {
+        await db.transaction(async (tx) => {
+          for (const u of goalUpdates) {
+            await tx
+              .update(goals)
+              .set({ progress: u.progress, updatedAt: new Date() })
+              .where(and(eq(goals.id, u.id), eq(goals.userId, userId)));
+          }
+          for (const l of logUpserts) {
+            // Atomic upsert on (goal_id, log_date): concurrent dashboard loads
+            // can no longer race a select-then-insert into a unique violation.
+            await tx
+              .insert(goalProgressLogs)
+              .values({ goalId: l.goalId, userId, logDate: today, progress: l.progress })
+              .onConflictDoUpdate({
+                target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
+                set: { progress: l.progress },
+              });
+          }
+        });
       }
     }
 

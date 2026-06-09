@@ -59,6 +59,16 @@ export async function PATCH(
   }
 
   try {
+    // Verify the template exists and belongs to this user before touching
+    // child rows — the exercise delete below is keyed by template id alone.
+    const [owned] = await db
+      .select({ id: workoutTemplates.id })
+      .from(workoutTemplates)
+      .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
+    if (!owned) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     if (Object.keys(allowedFields).length > 0) {
       await db
         .update(workoutTemplates)
@@ -67,34 +77,38 @@ export async function PATCH(
     }
 
     if (Array.isArray(body.exercises)) {
-      await db.delete(workoutExercises).where(eq(workoutExercises.templateId, id));
+      // Replace atomically: if the insert fails, the delete rolls back and
+      // the previous exercises survive.
+      await db.transaction(async (tx) => {
+        await tx.delete(workoutExercises).where(eq(workoutExercises.templateId, id));
 
-      if (body.exercises.length > 0) {
-        await db.insert(workoutExercises).values(
-          body.exercises.map(
-            (ex: {
-              name: string;
-              exercise_type?: string;
-              sort_order?: number;
-              default_sets?: number;
-              default_reps?: number;
-              default_weight?: number;
-              default_duration?: number;
-              notes?: string;
-            }) => ({
-              templateId: id,
-              name: ex.name,
-              exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
-              sortOrder: ex.sort_order ?? 0,
-              defaultSets: ex.default_sets ?? null,
-              defaultReps: ex.default_reps ?? null,
-              defaultWeight: ex.default_weight?.toString() ?? null,
-              defaultDuration: ex.default_duration ?? null,
-              notes: ex.notes ?? null,
-            })
-          )
-        );
-      }
+        if (body.exercises.length > 0) {
+          await tx.insert(workoutExercises).values(
+            body.exercises.map(
+              (ex: {
+                name: string;
+                exercise_type?: string;
+                sort_order?: number;
+                default_sets?: number;
+                default_reps?: number;
+                default_weight?: number;
+                default_duration?: number;
+                notes?: string;
+              }) => ({
+                templateId: id,
+                name: ex.name,
+                exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
+                sortOrder: ex.sort_order ?? 0,
+                defaultSets: ex.default_sets ?? null,
+                defaultReps: ex.default_reps ?? null,
+                defaultWeight: ex.default_weight?.toString() ?? null,
+                defaultDuration: ex.default_duration ?? null,
+                notes: ex.notes ?? null,
+              })
+            )
+          );
+        }
+      });
     }
 
     const result = await getTemplateWithExercises(id, userId);

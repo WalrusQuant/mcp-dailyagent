@@ -121,7 +121,10 @@ task silently breaks the chain. Unify or document.
 ### Data loss / integrity
 
 ### M1. Journal update silently wipes `mood`
-- [ ] Fixed
+- [x] Fixed — omitted `mood` is excluded from the upsert SET / optimistic patch in
+  the MCP tool and `queries/journal.ts` (explicit null still clears where the input
+  type allows it); tool description documents the behavior. Regression tests cover
+  both paths.
 
 `src/lib/mcp/tools/journal.ts:104,111,228` (and `queries/journal.ts`
 `createOrUpdateJournalEntry`): omitted `mood` is coerced to `null` in both the upsert
@@ -129,7 +132,11 @@ and optimistic paths, so re-saving content destroys recorded mood. Omit the fiel
 from SET when undefined.
 
 ### M2. Journal editor loses in-flight keystrokes on first autosave; duplicate-entry window
-- [ ] Fixed
+- [x] Fixed — editor keyed on `date` only (no remount when the first save assigns an
+  id); entry id tracked in a ref that flips POST→PATCH in place; saves serialized
+  through an in-flight guard with latest-value refs (queued changes re-save after
+  the current request, so no duplicate POST and nothing typed mid-request is lost);
+  per-autosave toast removed (editor's own "Saving..." indicator remains).
 
 `src/components/journal/JournalView.tsx` keys the editor on
 `${date}-${todayEntry?.id || "new"}`; the first autosave POST sets `todayEntry`, the
@@ -139,7 +146,10 @@ undefined, so a second debounce can POST again → unique `(user_id, entry_date)
 violation → raw 500 (see M8). Also toasts "Journal saved" on every autosave.
 
 ### M3. Untransacted delete-then-insert in workout exercise replacement
-- [ ] Fixed
+- [x] Fixed — all six paths transactional: REST log/template POST (parent+children),
+  REST log/template PATCH (delete+reinsert rolls back together), MCP `logWorkout`,
+  `createWorkoutTemplate`, `updateWorkoutLog`. Both PATCH routes now 404 before
+  touching child rows when the parent doesn't exist or isn't the user's.
 
 `src/app/api/workouts/logs/[id]/route.ts:92-119`,
 `workouts/templates/[id]/route.ts:69-98`, and MCP `updateWorkoutLog`
@@ -153,7 +163,12 @@ belongs to the user / exists (preceding UPDATE row count unchecked). Use
 `db.transaction` like `logGoalProgress` (`queries/goals.ts`).
 
 ### M4. `GET /api/goals` mutates the database; upsert race → 500
-- [ ] Fixed
+- [x] Fixed — progress-log writes are atomic `ON CONFLICT (goal_id, log_date) DO
+  UPDATE` (no select-then-insert race), all writes batched in one transaction, goals
+  with no linked items are skipped (no stale snapshots), and writes only happen when
+  a value actually changed — steady-state GETs are now read-only. (Recompute-on-GET
+  itself retained by design.) Note: auto-progress accuracy also benefits from H2's
+  rollover fix, which stopped inflating done counts.
 
 `src/app/api/goals/route.ts:27-115`: list endpoint recomputes auto progress, UPDATEs
 `goals`, and upserts `goal_progress_logs` via select-then-insert (non-atomic against

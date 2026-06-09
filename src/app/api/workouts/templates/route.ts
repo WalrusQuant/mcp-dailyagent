@@ -55,37 +55,43 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [template] = await db
-      .insert(workoutTemplates)
-      .values({ userId, name, description: description ?? null })
-      .returning();
+    // Parent + children in one transaction so a failed exercise insert
+    // doesn't leave an orphan template behind.
+    const template = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(workoutTemplates)
+        .values({ userId, name, description: description ?? null })
+        .returning();
 
-    if (Array.isArray(exercises) && exercises.length > 0) {
-      await db.insert(workoutExercises).values(
-        exercises.map(
-          (ex: {
-            name: string;
-            exercise_type?: string;
-            sort_order?: number;
-            default_sets?: number;
-            default_reps?: number;
-            default_weight?: number;
-            default_duration?: number;
-            notes?: string;
-          }) => ({
-            templateId: template.id,
-            name: ex.name,
-            exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
-            sortOrder: ex.sort_order ?? 0,
-            defaultSets: ex.default_sets ?? null,
-            defaultReps: ex.default_reps ?? null,
-            defaultWeight: ex.default_weight?.toString() ?? null,
-            defaultDuration: ex.default_duration ?? null,
-            notes: ex.notes ?? null,
-          })
-        )
-      );
-    }
+      if (Array.isArray(exercises) && exercises.length > 0) {
+        await tx.insert(workoutExercises).values(
+          exercises.map(
+            (ex: {
+              name: string;
+              exercise_type?: string;
+              sort_order?: number;
+              default_sets?: number;
+              default_reps?: number;
+              default_weight?: number;
+              default_duration?: number;
+              notes?: string;
+            }) => ({
+              templateId: created.id,
+              name: ex.name,
+              exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
+              sortOrder: ex.sort_order ?? 0,
+              defaultSets: ex.default_sets ?? null,
+              defaultReps: ex.default_reps ?? null,
+              defaultWeight: ex.default_weight?.toString() ?? null,
+              defaultDuration: ex.default_duration ?? null,
+              notes: ex.notes ?? null,
+            })
+          )
+        );
+      }
+
+      return created;
+    });
 
     const exRows = await db
       .select()

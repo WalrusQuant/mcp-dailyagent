@@ -170,20 +170,25 @@ async function logWorkout(
   }
 
   try {
-    const [log] = await db
-      .insert(workoutLogs)
-      .values({
-        userId,
-        name: args.name,
-        logDate: args.log_date,
-        durationMinutes: args.duration_minutes ?? null,
-        notes: args.notes ?? null,
-      })
-      .returning();
+    // Parent + children in one transaction: no orphan log on a failed insert.
+    const log = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(workoutLogs)
+        .values({
+          userId,
+          name: args.name,
+          logDate: args.log_date,
+          durationMinutes: args.duration_minutes ?? null,
+          notes: args.notes ?? null,
+        })
+        .returning();
 
-    if (exercises.length > 0) {
-      await db.insert(workoutLogExercises).values(buildLogExerciseRows(log.id, exercises));
-    }
+      if (exercises.length > 0) {
+        await tx.insert(workoutLogExercises).values(buildLogExerciseRows(created.id, exercises));
+      }
+
+      return created;
+    });
 
     return { data: { ...log, exercises }, error: null };
   } catch (err) {
@@ -207,29 +212,34 @@ async function createWorkoutTemplate(
   }
 
   try {
-    const [template] = await db
-      .insert(workoutTemplates)
-      .values({
-        userId,
-        name: args.name,
-        description: args.description ?? null,
-      })
-      .returning();
+    // Parent + children in one transaction: no orphan template on a failed insert.
+    const template = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(workoutTemplates)
+        .values({
+          userId,
+          name: args.name,
+          description: args.description ?? null,
+        })
+        .returning();
 
-    if (exercises.length > 0) {
-      const exerciseRows = exercises.map((ex, i) => ({
-        templateId: template.id,
-        name: ex.name,
-        exerciseType: ex.type ?? "strength",
-        sortOrder: i,
-        defaultSets: ex.default_sets ?? null,
-        defaultReps: ex.default_reps ?? null,
-        defaultWeight: ex.default_weight != null ? String(ex.default_weight) : null,
-        defaultDuration: ex.default_duration_seconds ?? null,
-        notes: ex.notes ?? null,
-      }));
-      await db.insert(workoutExercises).values(exerciseRows);
-    }
+      if (exercises.length > 0) {
+        const exerciseRows = exercises.map((ex, i) => ({
+          templateId: created.id,
+          name: ex.name,
+          exerciseType: ex.type ?? "strength",
+          sortOrder: i,
+          defaultSets: ex.default_sets ?? null,
+          defaultReps: ex.default_reps ?? null,
+          defaultWeight: ex.default_weight != null ? String(ex.default_weight) : null,
+          defaultDuration: ex.default_duration_seconds ?? null,
+          notes: ex.notes ?? null,
+        }));
+        await tx.insert(workoutExercises).values(exerciseRows);
+      }
+
+      return created;
+    });
 
     return { data: { ...template, workout_exercises: exercises }, error: null };
   } catch (err) {
@@ -264,21 +274,29 @@ async function updateWorkoutLog(
     if (args.notes !== undefined) patch.notes = args.notes;
     patch.updatedAt = new Date();
 
-    const [row] = await db
-      .update(workoutLogs)
-      .set(patch)
-      .where(and(eq(workoutLogs.id, args.log_id), eq(workoutLogs.userId, userId)))
-      .returning();
+    // Update + exercise replacement in one transaction: if anything fails,
+    // the previous exercise list survives instead of being half-deleted.
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(workoutLogs)
+        .set(patch)
+        .where(and(eq(workoutLogs.id, args.log_id), eq(workoutLogs.userId, userId)))
+        .returning();
+
+      if (!updated) return null;
+
+      // When exercises are supplied, replace the full set (omit the field to leave them untouched).
+      if (exercises !== null) {
+        await tx.delete(workoutLogExercises).where(eq(workoutLogExercises.logId, args.log_id));
+        if (exercises.length > 0) {
+          await tx.insert(workoutLogExercises).values(buildLogExerciseRows(args.log_id, exercises));
+        }
+      }
+
+      return updated;
+    });
 
     if (!row) return { data: null, error: "Workout log not found" };
-
-    // When exercises are supplied, replace the full set (omit the field to leave them untouched).
-    if (exercises !== null) {
-      await db.delete(workoutLogExercises).where(eq(workoutLogExercises.logId, args.log_id));
-      if (exercises.length > 0) {
-        await db.insert(workoutLogExercises).values(buildLogExerciseRows(args.log_id, exercises));
-      }
-    }
 
     const logExercises = await db
       .select()
