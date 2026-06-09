@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Local working notes
 /tasks/
+
+# pg_dump output from the docker-compose backup service
+/backups/

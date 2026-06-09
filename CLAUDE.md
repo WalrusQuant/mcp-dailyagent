@@ -128,7 +128,6 @@ Required (in `.env` for Docker compose, `.env.local` for local `npm run dev`):
 - `MCP_API_KEY` — Bearer token OpenClaw sends on every `/api/mcp` request
 
 Optional:
-- `NEXT_PUBLIC_SITE_NAME`, `NEXT_PUBLIC_SITE_DESCRIPTION`
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — only used by the Postgres compose service
 
 ## Deployment

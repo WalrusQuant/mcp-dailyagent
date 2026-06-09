@@ -231,7 +231,6 @@ Optional:
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_SITE_NAME`, `NEXT_PUBLIC_SITE_DESCRIPTION` | Branding |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Only used by the `postgres` compose service |
 
 ---

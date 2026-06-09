@@ -354,14 +354,20 @@ built image to catch it. Fix: use drizzle-orm's programmatic `migrate()` (no
 TS-config load), or convert config to `.js`, or copy esbuild explicitly.
 
 ### M20. `backups/` (pg_dump output) not in `.gitignore` / `.dockerignore`
-- [ ] Fixed
+- [x] Fixed — `/backups/` added to `.gitignore`, `backups` to `.dockerignore`.
 
 `docker-compose.yml:64` bind-mounts `./backups` inside the git working tree on the
 from-source path; `git add -A` can commit full DB dumps and `COPY . .`
 (`Dockerfile:13`) pulls them into build context. One-line fix in both files.
 
 ### M21. `NEXT_PUBLIC_*` runtime env vars are no-ops with the prebuilt image
-- [ ] Fixed
+- [x] Fixed — vars dropped entirely; branding hardcoded to "Cadence" in
+  `layout.tsx`. Investigation showed they were no-ops on **both** Docker paths
+  (no build args, `.env` dockerignored), and all pages are statically
+  prerendered so a server-var rename alone wouldn't have worked either.
+  Removed from `.env.example`, both compose files, README, CLAUDE.md. Side
+  effect: also resolves L20's `source .env` bullet (the unquoted multi-word
+  value was `NEXT_PUBLIC_SITE_DESCRIPTION`).
 
 `docker-compose.example.yml:48-49` + `.env.example:25-26`: Next.js inlines
 `NEXT_PUBLIC_*` at build time; the GHCR image bakes them as undefined so setting them

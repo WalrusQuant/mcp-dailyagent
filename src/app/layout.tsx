@@ -13,8 +13,8 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Cadence";
-const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "Your productivity dashboard";
+const siteName = "Cadence";
+const siteDescription = "Your productivity dashboard";
 
 export const metadata: Metadata = {
   title: siteName,

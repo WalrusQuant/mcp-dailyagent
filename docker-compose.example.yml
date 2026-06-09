@@ -48,8 +48,6 @@ services:
       # Your timezone (e.g. America/New_York). Controls when "today" rolls over
       # for tasks, habits, journal, and briefings. Defaults to UTC.
       TZ: ${TZ:-UTC}
-      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Cadence}
-      NEXT_PUBLIC_SITE_DESCRIPTION: ${NEXT_PUBLIC_SITE_DESCRIPTION:-Your productivity dashboard}
     ports:
       # Localhost by default. If you're fronting this with Tailscale or a reverse
       # proxy, replace "127.0.0.1" with your Tailscale IP (e.g. "100.x.y.z:3000:3000").
