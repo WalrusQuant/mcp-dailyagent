@@ -19,10 +19,10 @@ export async function PATCH(
   const allowedFields: Partial<typeof focusSessions.$inferInsert> = {};
 
   if (typeof body.status === "string") {
-    const validStatuses = ["active", "completed", "cancelled"];
+    const validStatuses = ["active", "paused", "completed", "cancelled"];
     if (!validStatuses.includes(body.status)) {
       return NextResponse.json(
-        { error: "status must be one of: active, completed, cancelled" },
+        { error: "status must be one of: active, paused, completed, cancelled" },
         { status: 400 }
       );
     }

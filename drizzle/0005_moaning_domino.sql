@@ -1,0 +1,2 @@
+ALTER TABLE "focus_sessions" DROP CONSTRAINT "focus_sessions_status_check";--> statement-breakpoint
+ALTER TABLE "focus_sessions" ADD CONSTRAINT "focus_sessions_status_check" CHECK ("focus_sessions"."status" IN ('active', 'paused', 'completed', 'cancelled'));

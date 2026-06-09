@@ -99,6 +99,18 @@ async function updateGoalLegacy(
   }
 }
 
+async function deleteGoal(userId: string, goalId: string) {
+  try {
+    const deleted = await db
+      .delete(goals)
+      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+      .returning({ id: goals.id });
+    return { error: deleted.length > 0 ? null : "Goal not found" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -215,6 +227,27 @@ export function registerGoalTools(server: McpServer) {
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
+    }
+  );
+
+  // --- delete_goal (WRITE) ---
+  server.tool(
+    "delete_goal",
+    "Delete a goal permanently, including its progress logs. To keep the record, set its status to 'abandoned' via update_goal instead.",
+    {
+      goal_id: z.string().describe("Goal ID to delete"),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "goals:write");
+      if (scopeError) return errorResult(scopeError);
+
+      const result = await deleteGoal(auth.userId, args.goal_id);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult({ success: true });
     }
   );
 }

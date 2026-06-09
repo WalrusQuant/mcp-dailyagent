@@ -3,9 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
+import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, habitFrequencySchema } from "./validators";
 import { getHabitStats } from "@/lib/mcp/queries/habits";
+import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -50,6 +51,63 @@ async function createHabit(
     return { data: row, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+function buildHabitPatch(args: {
+  name?: string;
+  description?: string;
+  frequency?: "daily" | "weekly";
+  target_days?: number[];
+  color?: string;
+  archived?: boolean;
+}): Partial<typeof habits.$inferInsert> {
+  const patch: Partial<typeof habits.$inferInsert> = {};
+  if (args.name !== undefined) patch.name = args.name;
+  if (args.description !== undefined) patch.description = args.description;
+  if (args.frequency !== undefined) patch.frequency = args.frequency;
+  if (args.target_days !== undefined) patch.targetDays = args.target_days;
+  if (args.color !== undefined) patch.color = args.color;
+  if (args.archived !== undefined) patch.archived = args.archived;
+  return patch;
+}
+
+async function updateHabitLegacy(
+  userId: string,
+  args: {
+    habit_id: string;
+    name?: string;
+    description?: string;
+    frequency?: "daily" | "weekly";
+    target_days?: number[];
+    color?: string;
+    archived?: boolean;
+  }
+) {
+  const updates = buildHabitPatch(args);
+  updates.updatedAt = new Date();
+
+  try {
+    const [row] = await db
+      .update(habits)
+      .set(updates)
+      .where(and(eq(habits.id, args.habit_id), eq(habits.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Habit not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+async function deleteHabit(userId: string, habitId: string) {
+  try {
+    const deleted = await db
+      .delete(habits)
+      .where(and(eq(habits.id, habitId), eq(habits.userId, userId)))
+      .returning({ id: habits.id });
+    return { error: deleted.length > 0 ? null : "Habit not found" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
@@ -182,6 +240,77 @@ export function registerHabitTools(server: McpServer) {
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
+    }
+  );
+
+  // --- update_habit (WRITE) ---
+  server.tool(
+    "update_habit",
+    "Update a habit's details, or archive/unarchive it via the 'archived' flag. Pass expected_updated_at to opt into concurrency-safe writes.",
+    {
+      habit_id: z.string().describe("Habit ID"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency. Omit for last-write-wins."),
+      name: z.string().optional().describe("New name"),
+      description: z.string().optional().describe("New description"),
+      frequency: habitFrequencySchema.optional().describe("New frequency: daily or weekly"),
+      target_days: z
+        .array(z.number().int().min(1).max(7))
+        .optional()
+        .describe("ISO days of week to target (1=Monday, 7=Sunday)"),
+      color: z.string().optional().describe("New color hex code for display"),
+      archived: z.boolean().optional().describe("Set true to archive (hide) the habit, false to restore it"),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "habits:write");
+      if (scopeError) return errorResult(scopeError);
+
+      if (args.expected_updated_at) {
+        const patch = buildHabitPatch(args);
+        const result = await updateWithVersion<typeof habits.$inferSelect>({
+          table: habits,
+          id: args.habit_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch,
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Habit not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await updateHabitLegacy(auth.userId, args);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult(result.data);
+    }
+  );
+
+  // --- delete_habit (WRITE) ---
+  server.tool(
+    "delete_habit",
+    "Delete a habit permanently, including all of its completion logs. To keep history, archive it with update_habit instead.",
+    {
+      habit_id: z.string().describe("Habit ID to delete"),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "habits:write");
+      if (scopeError) return errorResult(scopeError);
+
+      const result = await deleteHabit(auth.userId, args.habit_id);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult({ success: true });
     }
   );
 }

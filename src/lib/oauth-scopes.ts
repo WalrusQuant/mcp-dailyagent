@@ -14,27 +14,27 @@ export const OAUTH_SCOPES: ScopeDefinition[] = [
 
   // Habits
   { scope: "habits:read", label: "Read your habits", description: "View habits, streaks, and completion stats", category: "Habits" },
-  { scope: "habits:write", label: "Manage your habits", description: "Create, update, and toggle habit completions", category: "Habits" },
+  { scope: "habits:write", label: "Manage your habits", description: "Create, update, toggle, archive, and delete habits", category: "Habits" },
 
   // Journal
   { scope: "journal:read", label: "Read your journal", description: "View journal entries and search content", category: "Journal" },
-  { scope: "journal:write", label: "Write journal entries", description: "Create and update journal entries", category: "Journal" },
+  { scope: "journal:write", label: "Write journal entries", description: "Create, update, and delete journal entries", category: "Journal" },
 
   // Workouts
   { scope: "workouts:read", label: "Read your workouts", description: "View workout templates, logs, and stats", category: "Workouts" },
-  { scope: "workouts:write", label: "Manage your workouts", description: "Create templates and log workouts", category: "Workouts" },
+  { scope: "workouts:write", label: "Manage your workouts", description: "Create and delete templates, log, edit, and delete workouts", category: "Workouts" },
 
   // Focus
   { scope: "focus:read", label: "Read focus sessions", description: "View focus session history and stats", category: "Focus" },
-  { scope: "focus:write", label: "Manage focus sessions", description: "Start and complete focus sessions", category: "Focus" },
+  { scope: "focus:write", label: "Manage focus sessions", description: "Start, pause, resume, and complete focus sessions", category: "Focus" },
 
   // Goals
   { scope: "goals:read", label: "Read your goals", description: "View goals and progress tracking", category: "Goals" },
-  { scope: "goals:write", label: "Manage your goals", description: "Create goals and log progress", category: "Goals" },
+  { scope: "goals:write", label: "Manage your goals", description: "Create, update, delete goals and log progress", category: "Goals" },
 
   // Spaces
   { scope: "spaces:read", label: "Read your spaces", description: "View spaces and their details", category: "Spaces" },
-  { scope: "spaces:write", label: "Manage your spaces", description: "Create and update spaces", category: "Spaces" },
+  { scope: "spaces:write", label: "Manage your spaces", description: "Create, update, and delete spaces", category: "Spaces" },
 
   // Calendar
   { scope: "calendar:read", label: "Read your calendar", description: "View daily and weekly summaries", category: "Calendar" },

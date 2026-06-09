@@ -333,7 +333,7 @@ export const focusSessions = pgTable(
     index("idx_focus_sessions_user").on(t.userId),
     index("idx_focus_sessions_user_date").on(t.userId, t.startedAt),
     index("idx_focus_sessions_task").on(t.taskId),
-    check("focus_sessions_status_check", sql`${t.status} IN ('active', 'completed', 'cancelled')`),
+    check("focus_sessions_status_check", sql`${t.status} IN ('active', 'paused', 'completed', 'cancelled')`),
   ]
 );
 
