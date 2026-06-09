@@ -1,5 +1,6 @@
 import { z, type ZodRawShape } from "zod";
 import { expect } from "vitest";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export interface ToolResult {
   content: { type: string; text: string }[];
@@ -34,7 +35,7 @@ function makeExtra(ctx: CallContext) {
  * handlers can be invoked directly, with the same zod validation the SDK
  * applies before dispatch.
  */
-export function createToolHarness(register: (server: { tool: (...a: never[]) => void }) => void) {
+export function createToolHarness(register: (server: McpServer) => void) {
   const tools = new Map<string, RegisteredTool>();
 
   const server = {
@@ -48,7 +49,9 @@ export function createToolHarness(register: (server: { tool: (...a: never[]) => 
     },
   };
 
-  register(server as unknown as { tool: (...a: never[]) => void });
+  // The handlers only ever call server.tool(...); the rest of the McpServer
+  // surface is unused, so a structural stub cast to the type is sufficient.
+  register(server as unknown as McpServer);
 
   return {
     /** Names of all registered tools. */
