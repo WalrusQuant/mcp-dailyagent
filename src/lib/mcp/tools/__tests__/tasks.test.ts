@@ -260,10 +260,16 @@ describe("delete_task", () => {
     expect(list).toHaveLength(0);
   });
 
-  it("is a no-op (still success) for another user's task and leaves it intact", async () => {
+  it("returns not found for an unknown task id", async () => {
+    const res = await h.call("delete_task", { task_id: OTHER_USER_ID }, ctx);
+    expect(expectError(res)).toContain("not found");
+  });
+
+  it("does not delete another user's task and reports not found", async () => {
     const task = await seedTask({ task_date: "2026-06-04" });
-    // delete scopes by userId, so OTHER_USER_ID's delete affects nothing.
-    expectOk(await h.call("delete_task", { task_id: task.id }, { userId: OTHER_USER_ID, scopes: SCOPES }));
+    // delete scopes by userId, so OTHER_USER_ID's delete matches nothing.
+    const res = await h.call("delete_task", { task_id: task.id }, { userId: OTHER_USER_ID, scopes: SCOPES });
+    expect(expectError(res)).toContain("not found");
 
     const list = expectOk<TaskRow[]>(await h.call("list_tasks", { date: "2026-06-04" }, ctx));
     expect(list).toHaveLength(1);

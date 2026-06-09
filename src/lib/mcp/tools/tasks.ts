@@ -137,8 +137,11 @@ async function completeTaskLegacy(userId: string, taskId: string) {
 
 async function deleteTask(userId: string, taskId: string) {
   try {
-    await db.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
-    return { error: null };
+    const deleted = await db
+      .delete(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+      .returning({ id: tasks.id });
+    return { error: deleted.length > 0 ? null : "Task not found" };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Unknown error" };
   }
