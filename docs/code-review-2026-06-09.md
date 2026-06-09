@@ -180,21 +180,28 @@ task ever, so rolled-over "completed" originals (H2) inflate it.
 ### Type drift (`src/types/database.ts` — drift test only checks field names, not value types)
 
 ### M5. `FocusSession.status` omits `"paused"`
-- [ ] Fixed
+- [x] Fixed — `"paused"` added to the wire union; invariant test asserts all four
+  statuses stay assignable.
 
 `src/types/database.ts:157` declares `"active" | "completed" | "cancelled"`, but
 `schema.ts:336`, migration `0005`, and MCP `pause_focus_session`
 (`tools/focus.ts:273,281`) all use `"paused"`.
 
 ### M6. `habits.target_days` nullable in DB, non-null `number[]` in types
-- [ ] Fixed
+- [x] Fixed — column is now `NOT NULL` (migration `0006_nostalgic_wong.sql`
+  backfills any NULL rows to `{1..7}` before tightening). Verified on real
+  Postgres 16: fresh apply and upgrade-from-0005 with an existing NULL row both
+  succeed. Drift test asserts the schema column stays `notNull`.
 
 `schema.ts:179` has a default but no `.notNull()` (confirmed in `0005_snapshot.json`).
 An explicit `target_days: null` write succeeds, then components iterating it crash.
 Make the column `NOT NULL` (with migration) or fix the type + guards.
 
 ### M7. `default_weight` serialized as string, typed as number
-- [ ] Fixed
+- [x] Fixed — `serializeExercise` converts the postgres.js numeric string to
+  `number | null` (matching the other template path and the wire type), so
+  WorkoutLogger no longer copies strings into the `sets` jsonb. Invariant test
+  covers both the numeric and null cases.
 
 `numeric` columns come back as strings from postgres.js. `serializeExercise`
 (`src/lib/mcp/queries/workouts.ts:41`) passes the raw string through (the path used by

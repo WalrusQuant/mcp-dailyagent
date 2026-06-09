@@ -176,7 +176,7 @@ export const habits = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     frequency: text("frequency").notNull().default("daily"),
-    targetDays: integer("target_days").array().default(sql`'{1,2,3,4,5,6,7}'`),
+    targetDays: integer("target_days").array().notNull().default(sql`'{1,2,3,4,5,6,7}'`),
     color: text("color").notNull().default("#d4a574"),
     archived: boolean("archived").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),

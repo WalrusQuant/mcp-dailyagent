@@ -38,7 +38,8 @@ export function serializeExercise(e: typeof workoutExercises.$inferSelect) {
     sort_order: e.sortOrder,
     default_sets: e.defaultSets,
     default_reps: e.defaultReps,
-    default_weight: e.defaultWeight,
+    // numeric columns come back as strings from postgres.js; the wire type is number | null
+    default_weight: e.defaultWeight != null ? Number(e.defaultWeight) : null,
     default_duration: e.defaultDuration,
     notes: e.notes,
   };

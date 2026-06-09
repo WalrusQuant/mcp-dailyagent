@@ -154,7 +154,7 @@ export interface FocusSession {
   break_minutes: number;
   started_at: string;
   completed_at: string | null;
-  status: "active" | "completed" | "cancelled";
+  status: "active" | "paused" | "completed" | "cancelled";
   notes: string | null;
   updated_at: string;
 }

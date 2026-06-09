@@ -43,6 +43,13 @@
       "when": 1781017406155,
       "tag": "0005_moaning_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781032856789,
+      "tag": "0006_nostalgic_wong",
+      "breakpoints": true
     }
   ]
 }
