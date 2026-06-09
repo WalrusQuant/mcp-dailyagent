@@ -261,7 +261,10 @@ the tools do.
 ### Frontend
 
 ### M13. Pomodoro timer drifts and stalls in background tabs
-- [ ] Fixed
+- [x] Fixed — tick effect recomputes remaining from the persisted wall-clock
+  `startTime` on every tick (interval is created once per run, not per second)
+  and resyncs on `visibilitychange`, so throttled/suspended tabs snap back to
+  the correct time and completion fires even after long suspensions.
 
 `src/hooks/useFocusTimer.ts:109-127`: decrement-per-tick countdown with no wall-clock
 resync; effect deps `[isRunning, secondsLeft]` recreate the interval every second
@@ -271,7 +274,9 @@ them. `startTime` is persisted but only consulted in the mount effect (line 82),
 from `startTime` on every tick + on `visibilitychange`.
 
 ### M14. Habit completion rate shows e.g. "4700%" after toggling
-- [ ] Fixed
+- [x] Fixed — the post-toggle local recompute now produces a 0–1 fraction and
+  reuses the stats endpoint's `calculateStreak`/`getApplicableDays` (target-day
+  aware, capped at 100%), so the optimistic value matches what a reload shows.
 
 Server sends `completionRate` as a 0–1 fraction; `HabitTracker.tsx:126`'s local
 recompute after toggle produces an already-×100 value, and `HabitRow.tsx:81` /
@@ -279,7 +284,10 @@ recompute after toggle produces an already-×100 value, and `HabitRow.tsx:81` /
 with the server's target-day-aware `applicableDays`.
 
 ### M15. Insight dismissals keyed by array index, persisted forever
-- [ ] Fixed
+- [x] Fixed — dismissal keys are now `cache_date + title + body` (so a dismissal
+  can never hide a different future insight), the stored set is pruned to the
+  currently served insights on load (no unbounded localStorage growth), and the
+  render iterates the filtered `visible` list so at most 3 cards show.
 
 `src/components/dashboard/InsightCards.tsx`: `insight-${i}` in localStorage with no
 date/content scoping — dismissing insights 0–2 hides every future insight at those
@@ -287,7 +295,10 @@ indices permanently. Secondary: `visible.slice(0, 3)` computed but render iterat
 `insights`, so >3 cards can render.
 
 ### M16. No fetch cancellation / staleness guards on rapid navigation
-- [ ] Fixed
+- [x] Fixed — TaskList, JournalView (load + search), GoalList, CalendarView
+  (month), and WeeklyReview all abort the in-flight fetch via AbortController on
+  param change/unmount; CalendarView's click-driven day detail uses a request
+  counter (latest request wins, close invalidates in-flight).
 
 `TaskList.tsx:111-128`, `JournalView.tsx` (`loadData`), `GoalList.tsx` (status tabs),
 `CalendarView.tsx` (`fetchMonth`), `WeeklyReview.tsx`: fetch-then-setState with no
@@ -297,7 +308,11 @@ AbortController/ignore flag — a stale slow response can render the wrong day's
 ### Infra
 
 ### M17. Service worker never installs (leftover from old chat app)
-- [ ] Fixed
+- [x] Fixed — precache list is now `/dashboard` + manifest + icons under
+  `cadence-v1` (`/` is intentionally excluded: it redirects, which both fails
+  `addAll` and can't be served for navigations); registration failures are
+  logged instead of swallowed. Comment in `sw.js` documents that cached
+  navigations only refresh via manual `CACHE_NAME` bumps.
 
 `public/sw.js:1-9`: `CACHE_NAME = "chat-v6"`, `STATIC_ASSETS = ["/", "/chat"]` — no
 `/chat` route exists, `cache.addAll` rejects, the `install` event fails every time,

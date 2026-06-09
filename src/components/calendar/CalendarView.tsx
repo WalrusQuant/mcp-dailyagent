@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { getToday, addMonths, formatMonth } from "@/lib/dates";
 import { CalendarGrid } from "./CalendarGrid";
@@ -25,46 +25,59 @@ export function CalendarView() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const fetchMonth = useCallback(async (month: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/calendar?month=${month}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSummaries(data.summaries);
-        setGridDates(data.gridDates);
-      }
-    } catch (err) {
-      console.error("Failed to fetch calendar data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchMonth(currentMonth);
-  }, [currentMonth, fetchMonth]);
+    // Abort on month change/unmount so a slow response can't render a stale month.
+    const controller = new AbortController();
+    const fetchMonth = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/calendar?month=${currentMonth}`, { signal: controller.signal });
+        if (res.ok) {
+          const data = await res.json();
+          setSummaries(data.summaries);
+          setGridDates(data.gridDates);
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to fetch calendar data:", err);
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+    fetchMonth();
+    return () => controller.abort();
+  }, [currentMonth]);
 
+  // Click-driven (not effect-driven), so guard with a request counter: only
+  // the latest selected day's response may write state.
+  const detailRequestRef = useRef(0);
   const fetchDayDetail = useCallback(async (date: string) => {
+    const requestId = ++detailRequestRef.current;
     setIsDetailLoading(true);
     setDayDetail(null);
     try {
       const res = await fetch(`/api/calendar/day?date=${date}`);
       if (res.ok) {
         const data = await res.json();
-        setDayDetail(data);
+        if (detailRequestRef.current === requestId) setDayDetail(data);
       }
     } catch (err) {
       console.error("Failed to fetch day detail:", err);
     } finally {
-      setIsDetailLoading(false);
+      if (detailRequestRef.current === requestId) setIsDetailLoading(false);
     }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    detailRequestRef.current++; // invalidate any in-flight detail fetch
+    setSelectedDate(null);
+    setDayDetail(null);
+    setIsDetailLoading(false);
   }, []);
 
   const handleSelectDate = (date: string) => {
     if (selectedDate === date) {
-      setSelectedDate(null);
-      setDayDetail(null);
+      closeDetail();
     } else {
       setSelectedDate(date);
       fetchDayDetail(date);
@@ -72,20 +85,17 @@ export function CalendarView() {
   };
 
   const goToPrev = () => {
-    setSelectedDate(null);
-    setDayDetail(null);
+    closeDetail();
     setCurrentMonth(addMonths(currentMonth, -1));
   };
 
   const goToNext = () => {
-    setSelectedDate(null);
-    setDayDetail(null);
+    closeDetail();
     setCurrentMonth(addMonths(currentMonth, 1));
   };
 
   const goToToday = () => {
-    setSelectedDate(null);
-    setDayDetail(null);
+    closeDetail();
     setCurrentMonth(today.slice(0, 7));
   };
 
@@ -158,10 +168,7 @@ export function CalendarView() {
         <DayDetailPanel
           detail={dayDetail}
           isLoading={isDetailLoading}
-          onClose={() => {
-            setSelectedDate(null);
-            setDayDetail(null);
-          }}
+          onClose={closeDetail}
           isMobile={isMobile}
         />
       )}

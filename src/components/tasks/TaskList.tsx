@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
 import { Task, Space } from "@/types/database";
@@ -108,24 +108,27 @@ export function TaskList() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
-  const loadTasks = useCallback(async (d: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/tasks?date=${d}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
-      }
-    } catch (error) {
-      console.error("Failed to load tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadTasks(date);
-  }, [date, loadTasks]);
+    // Abort on date change/unmount so a slow response can't render a stale day.
+    const controller = new AbortController();
+    const loadTasks = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/tasks?date=${date}`, { signal: controller.signal });
+        if (response.ok) {
+          const data = await response.json();
+          setTasks(data);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load tasks:", error);
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+    loadTasks();
+    return () => controller.abort();
+  }, [date]);
 
   useEffect(() => {
     fetch("/api/spaces")

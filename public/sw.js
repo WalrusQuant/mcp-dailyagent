@@ -1,5 +1,15 @@
-const CACHE_NAME = "chat-v6";
-const STATIC_ASSETS = ["/", "/chat"];
+// Bump CACHE_NAME on any change to this file or the precache list — cached
+// navigations only refresh when the old cache is dropped in `activate`.
+const CACHE_NAME = "cadence-v1";
+// Note: "/" is deliberately absent — it redirects to /dashboard, and a cached
+// redirected response can't be served for navigations (and fails addAll).
+const STATIC_ASSETS = [
+  "/dashboard",
+  "/manifest.json",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -12,6 +12,12 @@ interface InsightItem {
 
 const DISMISSED_KEY = "dismissed-insights";
 
+// Dismissal keys are scoped to the cache date + content so dismissing today's
+// insight never hides a different one tomorrow (the old index-based keys did).
+function insightKey(cacheDate: string, insight: InsightItem): string {
+  return `${cacheDate}:${insight.title}:${insight.body}`;
+}
+
 function getDismissed(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
@@ -27,25 +33,37 @@ function saveDismissed(ids: Set<string>) {
 
 export function InsightCards() {
   const [insights, setInsights] = useState<InsightItem[]>([]);
+  const [cacheDate, setCacheDate] = useState("");
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setDismissed(getDismissed());
+    let cancelled = false;
     const load = async () => {
       try {
         const res = await fetch("/api/insights");
         if (res.ok) {
           const data = await res.json();
-          setInsights(data.insights ?? []);
+          if (cancelled) return;
+          const items: InsightItem[] = data.insights ?? [];
+          const date: string = data.cache_date ?? "";
+          setInsights(items);
+          setCacheDate(date);
+          // Prune dismissals for insights no longer shown so storage can't
+          // grow forever.
+          const currentKeys = new Set(items.map((it) => insightKey(date, it)));
+          const pruned = new Set([...getDismissed()].filter((k) => currentKeys.has(k)));
+          setDismissed(pruned);
+          saveDismissed(pruned);
         }
       } catch {
         // silently fail
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     load();
+    return () => { cancelled = true; };
   }, []);
 
   const handleDismiss = (key: string) => {
@@ -58,7 +76,7 @@ export function InsightCards() {
   if (isLoading || insights.length === 0) return null;
 
   const visible = insights
-    .filter((_, i) => !dismissed.has(`insight-${i}`))
+    .filter((insight) => !dismissed.has(insightKey(cacheDate, insight)))
     .slice(0, 3);
 
   if (visible.length === 0) return null;
@@ -77,9 +95,8 @@ export function InsightCards() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-      {insights.map((insight, i) => {
-        const key = `insight-${i}`;
-        if (dismissed.has(key)) return null;
+      {visible.map((insight) => {
+        const key = insightKey(cacheDate, insight);
         return (
           <div
             key={key}

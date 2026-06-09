@@ -21,12 +21,12 @@ export function JournalView() {
   const [isSearching, setIsSearching] = useState(false);
   const { addToast } = useToast();
 
-  const loadData = useCallback(async (d: string) => {
+  const loadData = useCallback(async (d: string, signal?: AbortSignal) => {
     setIsLoading(true);
     try {
       const [entryRes, recentRes] = await Promise.all([
-        fetch(`/api/journal?date=${d}`),
-        fetch("/api/journal"),
+        fetch(`/api/journal?date=${d}`, { signal }),
+        fetch("/api/journal", { signal }),
       ]);
 
       if (entryRes.ok) {
@@ -39,14 +39,18 @@ export function JournalView() {
         setRecentEntries(entries.filter((e) => e.entry_date !== d));
       }
     } catch (error) {
+      if (signal?.aborted) return;
       console.error("Failed to load journal:", error);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData(date);
+    // Abort on date change/unmount so a slow response can't render a stale day.
+    const controller = new AbortController();
+    loadData(date, controller.signal);
+    return () => controller.abort();
   }, [date, loadData]);
 
   useEffect(() => {
@@ -55,21 +59,27 @@ export function JournalView() {
       return;
     }
 
+    const controller = new AbortController();
     const timeout = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const response = await fetch(`/api/journal?search=${encodeURIComponent(searchQuery)}`);
+        const response = await fetch(`/api/journal?search=${encodeURIComponent(searchQuery)}`, {
+          signal: controller.signal,
+        });
         if (response.ok) {
           setSearchResults(await response.json());
         }
       } catch {
         // ignore
       } finally {
-        setIsSearching(false);
+        if (!controller.signal.aborted) setIsSearching(false);
       }
     }, 300);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, [searchQuery]);
 
   // No toast here: autosave fires every couple of seconds while typing and the

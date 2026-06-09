@@ -10,6 +10,7 @@ import { HabitRow } from "./HabitRow";
 import { HabitFormModal } from "./HabitFormModal";
 import { HabitStats } from "./HabitStats";
 import { getToday, startOfWeek, getDateRange, endOfWeek, addDays } from "@/lib/dates";
+import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
 import { useToast } from "@/lib/toast-context";
 
 interface HabitWithStats {
@@ -103,27 +104,24 @@ export function HabitTracker() {
             else newLogs.delete(toggleDate);
 
             // Recalculate sparkline from updated logs
+            const today = getToday();
+            const windowStart = addDays(today, -29);
             const recentData: number[] = [];
             for (let i = 29; i >= 0; i--) {
-              const d = addDays(getToday(), -i);
+              const d = addDays(today, -i);
               recentData.push(newLogs.has(d) ? 1 : 0);
             }
 
-            // Recalculate streak (consecutive days ending at most recent logged day)
-            let streak = 0;
-            let started = false;
-            for (let i = 0; i <= 29; i++) {
-              const d = addDays(getToday(), -i);
-              if (newLogs.has(d)) {
-                started = true;
-                streak++;
-              } else if (started) {
-                break;
-              }
-            }
-
-            // Recalculate completion rate (last 30 days)
-            const completionRate = Math.round((recentData.filter(Boolean).length / 30) * 100);
+            // Recalculate streak and completion rate the same way the stats
+            // endpoint does: target-day-aware, rate as a 0–1 fraction.
+            const targetDays =
+              Array.isArray(hs.habit.target_days) && hs.habit.target_days.length > 0
+                ? hs.habit.target_days
+                : [1, 2, 3, 4, 5, 6, 7];
+            const streak = calculateStreak([...newLogs], targetDays);
+            const applicableDays = getApplicableDays(windowStart, today, targetDays);
+            const loggedInWindow = [...newLogs].filter((d) => d >= windowStart && d <= today).length;
+            const completionRate = applicableDays > 0 ? Math.min(1, loggedInWindow / applicableDays) : 0;
 
             return { ...hs, logs: newLogs, recentData, streak, completionRate };
           })
