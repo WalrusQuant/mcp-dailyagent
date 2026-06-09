@@ -35,6 +35,8 @@ The MCP server is already registered in the user's OpenClaw config as `cadence`.
 
 ## Tools
 
+> Most write tools that modify an existing row accept an optional `expected_updated_at` (the ISO timestamp from your last read). Pass it for conflict-safe updates; omit it for last-write-wins, which is fine for most agent flows.
+
 ### Tasks
 - `list_tasks(date?, space_id?)` — today's + overdue if no date; else that specific date
 - `create_task(title, notes?, priority?, task_date?, space_id?, goal_id?)` — priority `A1`-`C9`, defaults to B1
@@ -47,33 +49,44 @@ The MCP server is already registered in the user's OpenClaw config as `cadence`.
 - `get_habit_stats(habit_id, days?)` — default 30 days
 - `create_habit(name, description?, frequency?, target_days?, color?)` — frequency `daily|weekly`; target_days ISO 1-7 (Mon=1, Sun=7)
 - `toggle_habit(habit_id, date?)` — idempotent toggle; defaults to today
+- `update_habit(habit_id, name?, description?, frequency?, target_days?, color?, archived?)` — `archived: true` hides it, `false` restores
+- `delete_habit(habit_id)` — permanent; also deletes its logs. Prefer `update_habit(archived: true)` to keep history
 
 ### Journal
 - `get_journal_entries(date?|from?,to?, limit?)` — specific day or a range
-- `search_journal(query)` — substring search
+- `search_journal(query)` — full-text search over entry content
 - `create_journal_entry(content, entry_date?, mood?)` — mood 1-5; upserts if entry for that date exists
+- `delete_journal_entry(entry_date)` — delete that day's entry
 
 ### Workouts
 - `list_workout_logs(date?|from?,to?)` — most recent 20 if no filter
 - `list_workout_templates()`
 - `log_workout(name, log_date, duration_minutes?, notes?, exercises?)` — `exercises` is a JSON string array; each entry: `{name, type?: "strength"|"timed"|"cardio", sets?, reps?, weight?, duration_seconds?, notes?}`
+- `create_workout_template(name, description?, exercises?)` — save a reusable routine; `exercises` is a JSON string array, each entry `{name, type?, default_sets?, default_reps?, default_weight?, default_duration_seconds?, notes?}`
+- `update_workout_log(log_id, name?, log_date?, duration_minutes?, notes?, exercises?)` — only fields passed change; `exercises` replaces the list (`[]` clears), omit to leave it untouched
+- `delete_workout_log(log_id)` — permanent; also removes its logged exercises
+- `delete_workout_template(template_id)` — permanent; past logs created from it are kept
 
 ### Focus
 - `get_focus_sessions(from?, to?)`
 - `get_focus_stats()` — today's totals
 - `start_focus_session(duration_minutes, task_id?, break_minutes?)` — duration 1-480, break 0-120
 - `complete_focus_session(session_id)`
+- `pause_focus_session(session_id)` — sets status to paused
+- `resume_focus_session(session_id)` — sets a paused session back to active
 
 ### Goals
 - `list_goals(status?)` — status `active|completed|abandoned`
 - `create_goal(title, description?, category?, target_date?)` — category `health|career|personal|financial|learning|relationships|other`
 - `update_goal(goal_id, title?, description?, status?, progress?)` — progress 0-100
 - `log_goal_progress(goal_id, progress)` — just the progress percentage
+- `delete_goal(goal_id)` — permanent; also deletes progress logs. Prefer `update_goal(status: "abandoned")` to keep the record
 
 ### Spaces (projects)
 - `list_spaces()`
 - `create_space(name, description?)`
 - `update_space(space_id, name?, description?, status?)` — status `active|paused|completed`
+- `delete_space(space_id)` — permanent; linked tasks are kept but unlinked
 
 ### Weekly Reviews
 - `get_weekly_review(week_start?)` — latest if omitted

@@ -18,7 +18,7 @@ Expected:
 {
   "ok": true,
   "transport": "streamable-http",
-  "tools": 34,
+  "tools": 45,
   "prompts": 13,
   "resources": 15,
   "version": "..."
