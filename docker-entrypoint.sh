@@ -35,7 +35,7 @@ log "database reachable"
 
 # --- 2. Run migrations ------------------------------------------------------
 log "running drizzle migrations..."
-node node_modules/drizzle-kit/bin.cjs migrate
+node scripts/migrate.mjs
 
 # --- 3. Seed profile row ----------------------------------------------------
 SEED_EMAIL="${SELF_HOSTED_USER_EMAIL:-user@localhost}"

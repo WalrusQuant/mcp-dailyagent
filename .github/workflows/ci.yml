@@ -4,6 +4,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the Docker publish workflow run these jobs as its gate (incl. on tags).
+  workflow_call:
 
 jobs:
   lint-and-test:
@@ -21,11 +23,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: lint-and-test
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-key"
-      OPENROUTER_API_KEY: "test-key"
-      SIGNUP_SECRET: "test"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

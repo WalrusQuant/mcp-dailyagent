@@ -34,13 +34,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Drizzle migrations + config so we can run `drizzle-kit migrate` at boot
+# Drizzle migrations + plain-JS runner (drizzle-orm programmatic migrator) so
+# boot-time migration needs no drizzle-kit/esbuild/TS-config in the image
 COPY --from=builder /app/drizzle ./drizzle
-COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=builder /app/node_modules/drizzle-kit ./node_modules/drizzle-kit
+COPY --from=builder /app/scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --from=builder /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
 COPY --from=builder /app/node_modules/postgres ./node_modules/postgres
-COPY --from=builder /app/src/lib/db/schema.ts ./src/lib/db/schema.ts
 
 # Entrypoint: wait for DB → migrate → seed profile → exec Next.js server
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

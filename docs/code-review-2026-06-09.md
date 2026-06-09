@@ -289,7 +289,12 @@ so PWA offline support is entirely dead. Registration errors swallowed
 busts via manual `CACHE_NAME` bumps.
 
 ### M18. Docker images publish with no CI gate
-- [ ] Fixed
+- [x] Fixed — `ci.yml` is now `workflow_call`-able and `docker.yml` runs it as a
+  gate (covers tag pushes too, which CI's own triggers never did). Added a
+  `smoke-test` job that builds the amd64 image, boots it against a real Postgres 16
+  service, and requires `/api/mcp/health` to respond — publish needs both jobs
+  green. Also removed the stale Supabase/OpenRouter/SIGNUP_SECRET env vars from
+  ci.yml's build job (part of L19).
 
 `.github/workflows/docker.yml:3-10` builds + pushes `:latest`/semver on every push to
 `main` and on `v*.*.*` tags, with no coupling to `ci.yml` (which doesn't trigger on
@@ -297,7 +302,16 @@ tags at all). A red commit ships to everyone running `docker compose pull`. Gate
 publish on lint/test/build.
 
 ### M19. Boot-time `drizzle-kit migrate` works only by npm-hoisting accident
-- [ ] Fixed
+- [x] Fixed — boot now runs `scripts/migrate.mjs`, a plain-JS runner on
+  drizzle-orm's programmatic `migrate()` (postgres-js migrator): no drizzle-kit,
+  esbuild, or TS config in the image. Dockerfile drops the drizzle-kit/config/
+  schema COPYs. Verified against real Postgres 16: fresh apply (17 tables, 6/6
+  migrations), idempotent re-run, non-zero exit on failure (so `set -e` aborts
+  boot), seamless takeover of a drizzle-kit-migrated DB (same
+  `drizzle.__drizzle_migrations` table), and the runner works with only
+  drizzle-orm + postgres in node_modules (the exact image COPY set). The new CI
+  smoke test (M18) guards this class of breakage permanently. `npm run db:*`
+  dev commands still use drizzle-kit locally.
 
 `Dockerfile:40` copies `node_modules/drizzle-kit`, `drizzle-orm`, `postgres` — but
 `drizzle-kit/bin.cjs` hard-requires `esbuild` (to load the TS config). It currently
