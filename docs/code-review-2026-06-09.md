@@ -417,7 +417,10 @@ Meanwhile `dashboard/route.ts:114` always sends `streak: 0`, so the streak badge
 `HabitWidget.tsx:38` / `DailyStartCard.tsx:121-128` never renders.
 
 ### L4. MCP rate limiting applies only after successful auth
-- [ ] Fixed
+- [x] Fixed — failed auth attempts consume from a separate per-IP token bucket
+  (`auth_fail:<ip>`, 10 burst / 1 per min, first `x-forwarded-for` hop) and
+  return 429 + Retry-After when exhausted; per-user post-auth limiter
+  unchanged.
 
 `src/app/api/mcp/route.ts:32-57`: limiter keyed by `auth.userId` after auth, so
 bearer-token brute-force attempts are unthrottled (mitigated by `timingSafeEqual` +
@@ -452,7 +455,9 @@ twice; StrictMode does) and `.catch(() => {})` silently desyncs order on failure
 409s) produce no user feedback. Form modals handle these correctly — mirror that.
 
 ### L8. `habits/[id]` PATCH silently drops `null` clears
-- [ ] Fixed
+- [x] Fixed — guards are now presence-based (`"field" in body`): explicit null
+  clears nullable columns (description, goal_id) and returns 400 for NOT NULL
+  columns (name, frequency, target_days, color, archived, sort_order).
 
 `src/app/api/habits/[id]/route.ts:47-56`: `frequency`/`color`/`sort_order` accept
 `null` in the guard then coerce `?? undefined` — returns 200, changes nothing.
@@ -465,14 +470,19 @@ twice; StrictMode does) and `.catch(() => {})` silently desyncs order on failure
 `workouts/stats/route.ts:16`: `?days=abc` → NaN → Invalid Date → throw.
 
 ### L10. Profile route emits camelCase, contradicting the API contract
-- [ ] Fixed
+- [x] Fixed — GET/PATCH now speak snake_case per `types/database.ts`;
+  AccountTab and Sidebar consumers updated.
 
 `src/app/api/profile/route.ts` returns `displayName`/`avatarUrl`/... while
 `types/database.ts:10-23` documents snake_case. Works today (settings components
 match) but contradicts the stated contract and every other route.
 
 ### L11. Error responses leak internal DB details; status-code inconsistencies
-- [ ] Fixed
+- [x] Fixed — every unexpected-error path now logs via `console.error` and
+  returns a generic "Internal server error" (intentional 400/404/409 paths
+  untouched); tags/[id] upgraded to `isUniqueViolation`; tasks/spaces/tags
+  POST return 201. Calendar local-day bucketing turned out to be already
+  fixed by C2's pass — verified, no change needed.
 
 Most catches return `err.message` verbatim (constraint names, SQL);
 `profile/route.ts:35,81` returns `String(err)`. `tasks/reorder/route.ts:38-39` shows
@@ -489,7 +499,9 @@ Covered by M3's fix — listed separately to ensure MCP `logWorkout` /
 `createWorkoutTemplate` / `updateWorkoutLog` get the same `db.transaction` treatment.
 
 ### L13. No scope checks on dashboard resource or any prompt
-- [ ] Fixed
+- [x] Fixed — new `checkScopes` helper; dashboard resource requires the six
+  read scopes it fetches; all 13 prompts gate on the read scopes of their
+  fetched domains via a shared `getPromptAuth` helper.
 
 `src/lib/mcp/resources/dashboard.ts:16`, `prompts/index.ts:26-29`: moot while the
 single token gets `all`, but a latent scope bypass if scoped tokens are ever issued.
@@ -510,7 +522,9 @@ one day, auto-migration on boot fails → container crash-loop with no documente
 remediation. Add a dedupe statement before the index (or document recovery).
 
 ### L16. `retry.ts` default predicate retries every error
-- [ ] Fixed
+- [x] Fixed — default predicate now matches its comment: retries fetch
+  TypeErrors and 5xx Responses only; AbortError and everything else are not
+  retried. No callers relied on the old catch-all.
 
 `src/lib/retry.ts:20`: comment says "network errors and 5xx" but the fallback is
 `return true` — programming errors, aborts, 4xx all retried with ~17s backoff.

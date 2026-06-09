@@ -27,7 +27,8 @@ export async function GET(
 
     return NextResponse.json(serializeSpace(rows[0]));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -95,7 +96,8 @@ export async function PATCH(
 
     return NextResponse.json(serializeSpace(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -110,6 +112,7 @@ export async function DELETE(
     await db.delete(spaces).where(and(eq(spaces.id, id), eq(spaces.userId, userId)));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

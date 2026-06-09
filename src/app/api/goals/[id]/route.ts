@@ -47,7 +47,8 @@ export async function GET(
       habits: habitRows.map(serializeHabit),
     });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -150,7 +151,8 @@ export async function PATCH(
 
     return NextResponse.json(serializeGoal(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -165,6 +167,7 @@ export async function DELETE(
     await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId)));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

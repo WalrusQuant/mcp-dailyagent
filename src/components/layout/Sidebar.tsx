@@ -45,7 +45,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
         const res = await fetch("/api/profile");
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        if (!cancelled) setUserDisplayName(data.displayName || null);
+        if (!cancelled) setUserDisplayName(data.display_name || null);
       } catch {
         // non-fatal — sidebar works without a display name
       }

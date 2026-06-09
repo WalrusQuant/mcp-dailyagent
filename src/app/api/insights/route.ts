@@ -21,9 +21,7 @@ export async function GET() {
       cache_date: row?.cacheDate ?? today,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status: 500 }
-    );
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

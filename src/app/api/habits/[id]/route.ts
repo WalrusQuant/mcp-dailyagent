@@ -27,7 +27,8 @@ export async function GET(
 
     return NextResponse.json(serializeHabit(rows[0]));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -45,23 +46,48 @@ export async function PATCH(
 
   const allowedFields: Partial<typeof habits.$inferInsert> = {};
 
-  if (typeof body.name === "string") allowedFields.name = body.name;
-  if (typeof body.description === "string" || body.description === null)
-    allowedFields.description = body.description as string | null;
-  if (typeof body.frequency === "string" || body.frequency === null)
-    allowedFields.frequency = (body.frequency as string) ?? undefined;
-  if (Array.isArray(body.target_days))
-    allowedFields.targetDays = body.target_days as number[];
-  else if (body.target_days === null)
-    allowedFields.targetDays = undefined;
-  if (typeof body.color === "string" || body.color === null)
-    allowedFields.color = (body.color as string) ?? undefined;
-  if (typeof body.archived === "boolean")
-    allowedFields.archived = body.archived;
-  if (typeof body.sort_order === "number" || body.sort_order === null)
-    allowedFields.sortOrder = (body.sort_order as number) ?? undefined;
-  if (typeof body.goal_id === "string" || body.goal_id === null)
-    allowedFields.goalId = body.goal_id as string | null;
+  // NOT NULL columns: explicit null must return 400.
+  if ("name" in body) {
+    if (body.name === null) return NextResponse.json({ error: "name cannot be null" }, { status: 400 });
+    if (typeof body.name === "string") allowedFields.name = body.name;
+  }
+
+  // Nullable column: explicit null clears the value.
+  if ("description" in body) {
+    if (typeof body.description === "string" || body.description === null)
+      allowedFields.description = body.description as string | null;
+  }
+
+  if ("frequency" in body) {
+    if (body.frequency === null) return NextResponse.json({ error: "frequency cannot be null" }, { status: 400 });
+    if (typeof body.frequency === "string") allowedFields.frequency = body.frequency;
+  }
+
+  if ("target_days" in body) {
+    if (body.target_days === null) return NextResponse.json({ error: "target_days cannot be null" }, { status: 400 });
+    if (Array.isArray(body.target_days)) allowedFields.targetDays = body.target_days as number[];
+  }
+
+  if ("color" in body) {
+    if (body.color === null) return NextResponse.json({ error: "color cannot be null" }, { status: 400 });
+    if (typeof body.color === "string") allowedFields.color = body.color;
+  }
+
+  if ("archived" in body) {
+    if (body.archived === null) return NextResponse.json({ error: "archived cannot be null" }, { status: 400 });
+    if (typeof body.archived === "boolean") allowedFields.archived = body.archived;
+  }
+
+  if ("sort_order" in body) {
+    if (body.sort_order === null) return NextResponse.json({ error: "sort_order cannot be null" }, { status: 400 });
+    if (typeof body.sort_order === "number") allowedFields.sortOrder = body.sort_order;
+  }
+
+  // Nullable FK: explicit null clears the goal link.
+  if ("goal_id" in body) {
+    if (typeof body.goal_id === "string" || body.goal_id === null)
+      allowedFields.goalId = body.goal_id as string | null;
+  }
 
   if (Object.keys(allowedFields).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
@@ -97,7 +123,8 @@ export async function PATCH(
 
     return NextResponse.json(serializeHabit(row));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -112,6 +139,7 @@ export async function DELETE(
     await db.delete(habits).where(and(eq(habits.id, id), eq(habits.userId, userId)));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

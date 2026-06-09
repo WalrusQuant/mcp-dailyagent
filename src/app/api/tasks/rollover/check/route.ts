@@ -24,6 +24,7 @@ export async function GET() {
 
     return NextResponse.json({ count: result[0]?.count ?? 0 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

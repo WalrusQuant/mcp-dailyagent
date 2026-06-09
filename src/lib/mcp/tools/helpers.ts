@@ -29,6 +29,18 @@ export function checkScope(scopes: string[], required: string): string | null {
   return scopes.includes(required) ? null : `Insufficient scope: ${required}`;
 }
 
+/**
+ * Check that ALL of the required scopes are present.
+ * Returns the first missing scope error, or null if all are present.
+ */
+export function checkScopes(scopes: string[], required: string[]): string | null {
+  for (const scope of required) {
+    const err = checkScope(scopes, scope);
+    if (err) return err;
+  }
+  return null;
+}
+
 /** Build a successful text result. */
 export function textResult(data: unknown) {
   return {

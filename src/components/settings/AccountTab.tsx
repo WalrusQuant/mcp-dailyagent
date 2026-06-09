@@ -17,7 +17,7 @@ export function AccountTab() {
         const res = await fetch("/api/profile");
         if (!res.ok) return;
         const data = await res.json();
-        setDisplayName(data.displayName || "");
+        setDisplayName(data.display_name || "");
         setTimezone(data.timezone || "UTC");
       } catch {
         // non-fatal
@@ -34,7 +34,7 @@ export function AccountTab() {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: displayName || null, timezone }),
+        body: JSON.stringify({ display_name: displayName || null, timezone }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

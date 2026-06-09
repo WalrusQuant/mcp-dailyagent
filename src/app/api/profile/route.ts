@@ -25,15 +25,16 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      displayName: profile.displayName ?? null,
-      avatarUrl: profile.avatarUrl ?? null,
+      display_name: profile.displayName ?? null,
+      avatar_url: profile.avatarUrl ?? null,
       timezone: profile.timezone ?? "UTC",
-      toolCallingEnabled: profile.toolCallingEnabled ?? true,
-      briefingEnabled: profile.briefingEnabled ?? true,
-      aiModelConfig: profile.aiModelConfig ?? null,
+      tool_calling_enabled: profile.toolCallingEnabled ?? true,
+      briefing_enabled: profile.briefingEnabled ?? true,
+      ai_model_config: profile.aiModelConfig ?? null,
     });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -46,29 +47,38 @@ export async function PATCH(request: NextRequest) {
     const userId = getUserId();
     const allowed: Partial<typeof profiles.$inferInsert> = {};
 
-    if (typeof body.displayName === "string" || body.displayName === null) {
-      allowed.displayName = (body.displayName as string) || null;
+    // Accept snake_case (canonical API contract). Clients should send snake_case.
+    const displayName = "display_name" in body ? body.display_name : undefined;
+    if (typeof displayName === "string" || displayName === null) {
+      allowed.displayName = (displayName as string) || null;
     }
 
-    if (typeof body.avatarUrl === "string" || body.avatarUrl === null) {
-      allowed.avatarUrl = (body.avatarUrl as string) || null;
+    const avatarUrl = "avatar_url" in body ? body.avatar_url : undefined;
+    if (typeof avatarUrl === "string" || avatarUrl === null) {
+      allowed.avatarUrl = (avatarUrl as string) || null;
     }
 
     if (typeof body.timezone === "string") {
       allowed.timezone = body.timezone;
     }
 
-    if (typeof body.toolCallingEnabled === "boolean") {
-      allowed.toolCallingEnabled = body.toolCallingEnabled;
+    const toolCallingEnabled =
+      "tool_calling_enabled" in body ? body.tool_calling_enabled : undefined;
+    if (typeof toolCallingEnabled === "boolean") {
+      allowed.toolCallingEnabled = toolCallingEnabled;
     }
 
-    if (typeof body.briefingEnabled === "boolean") {
-      allowed.briefingEnabled = body.briefingEnabled;
+    const briefingEnabled =
+      "briefing_enabled" in body ? body.briefing_enabled : undefined;
+    if (typeof briefingEnabled === "boolean") {
+      allowed.briefingEnabled = briefingEnabled;
     }
 
-    if (body.aiModelConfig !== undefined) {
-      if (body.aiModelConfig === null || typeof body.aiModelConfig === "object") {
-        allowed.aiModelConfig = body.aiModelConfig as object | null;
+    const aiModelConfig =
+      "ai_model_config" in body ? body.ai_model_config : undefined;
+    if (aiModelConfig !== undefined) {
+      if (aiModelConfig === null || typeof aiModelConfig === "object") {
+        allowed.aiModelConfig = aiModelConfig as object | null;
       }
     }
 
@@ -82,7 +92,8 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -95,6 +106,7 @@ export async function DELETE() {
       .where(eq(profiles.id, userId));
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

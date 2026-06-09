@@ -1,14 +1,22 @@
 /**
  * In-process token-bucket rate limiter for /api/mcp.
  *
- * Sized as an abuse guard, not a fair-use quota: a runaway agent loop is
- * stopped before it hammers Postgres, but no realistic OpenClaw traffic ever
- * trips it. Single-user self-host means there's typically one token in the
- * map at a time.
+ * Two limiters:
+ * 1. Post-auth (per userId): abuse guard for runaway agent loops.
+ * 2. Pre-auth (per IP): throttles bearer-token brute-force attempts.
+ *
+ * Both limiters share the same consumeToken() implementation; they differ
+ * only in bucket parameters and the key namespace.
  */
 
+// Post-auth limiter parameters (high ceiling, legitimate agent traffic)
 const BUCKET_SIZE = 100;
 const REFILL_PER_SEC = 10;
+
+// Pre-auth (failed-auth) limiter parameters (tight ceiling for brute-force)
+const AUTH_FAIL_BUCKET_SIZE = 10;
+const AUTH_FAIL_REFILL_PER_SEC = 1 / 60; // 1 token per minute
+
 const IDLE_EVICT_MS = 60 * 60 * 1000; // 1h
 
 interface Bucket {
@@ -17,6 +25,8 @@ interface Bucket {
 }
 
 const buckets = new Map<string, Bucket>();
+// Auth-fail buckets live in a separate namespace ("auth_fail:<key>") within
+// the same map so they participate in the same idle-sweep cycle.
 let lastSweepMs = 0;
 
 export interface RateLimitDecision {
@@ -24,19 +34,17 @@ export interface RateLimitDecision {
   retryAfterSeconds: number;
 }
 
-export function consumeToken(
+/** Core token-bucket consume. Shared by all rate-limit flavors. */
+function consume(
   key: string,
-  now: number = Date.now()
+  bucketSize: number,
+  refillPerSec: number,
+  now: number
 ): RateLimitDecision {
-  sweepIdle(now);
-
-  const bucket = buckets.get(key) ?? { tokens: BUCKET_SIZE, lastRefillMs: now };
+  const bucket = buckets.get(key) ?? { tokens: bucketSize, lastRefillMs: now };
 
   const elapsedSec = Math.max(0, (now - bucket.lastRefillMs) / 1000);
-  bucket.tokens = Math.min(
-    BUCKET_SIZE,
-    bucket.tokens + elapsedSec * REFILL_PER_SEC
-  );
+  bucket.tokens = Math.min(bucketSize, bucket.tokens + elapsedSec * refillPerSec);
   bucket.lastRefillMs = now;
 
   if (bucket.tokens >= 1) {
@@ -49,8 +57,29 @@ export function consumeToken(
   const needed = 1 - bucket.tokens;
   return {
     allowed: false,
-    retryAfterSeconds: Math.max(1, Math.ceil(needed / REFILL_PER_SEC)),
+    retryAfterSeconds: Math.max(1, Math.ceil(needed / refillPerSec)),
   };
+}
+
+/** Post-auth rate limit keyed by userId (abuse guard for runaway agent loops). */
+export function consumeToken(
+  key: string,
+  now: number = Date.now()
+): RateLimitDecision {
+  sweepIdle(now);
+  return consume(key, BUCKET_SIZE, REFILL_PER_SEC, now);
+}
+
+/**
+ * Pre-auth rate limit keyed by client IP (throttles bearer-token brute-force).
+ * Much tighter ceiling than the post-auth limiter.
+ */
+export function consumeAuthFailToken(
+  ip: string,
+  now: number = Date.now()
+): RateLimitDecision {
+  sweepIdle(now);
+  return consume(`auth_fail:${ip}`, AUTH_FAIL_BUCKET_SIZE, AUTH_FAIL_REFILL_PER_SEC, now);
 }
 
 function sweepIdle(now: number): void {

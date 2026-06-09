@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getAuth, checkScope, textResult, errorResult, Extra } from "@/lib/mcp/tools/helpers";
+import { getAuth, checkScope, checkScopes, textResult, errorResult, Extra } from "@/lib/mcp/tools/helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers to build the Extra-shaped objects the handlers receive
@@ -79,6 +79,29 @@ describe("checkScope", () => {
 
   it("is case-sensitive when matching scopes", () => {
     expect(checkScope(["Tasks:Read"], "tasks:read")).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("checkScopes", () => {
+  it("returns null when all required scopes are present", () => {
+    expect(checkScopes(["tasks:read", "habits:read", "goals:read"], ["tasks:read", "habits:read"])).toBeNull();
+  });
+
+  it("returns an error for the first missing scope", () => {
+    const result = checkScopes(["tasks:read"], ["tasks:read", "habits:read"]);
+    expect(result).not.toBeNull();
+    expect(result).toContain("habits:read");
+  });
+
+  it("returns null for empty required list", () => {
+    expect(checkScopes([], [])).toBeNull();
+  });
+
+  it("fails if any required scope is absent", () => {
+    const result = checkScopes([], ["tasks:read", "habits:read"]);
+    expect(result).not.toBeNull();
   });
 });
 

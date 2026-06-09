@@ -2,6 +2,7 @@ import { getToday, addDays, startOfWeek } from "@/lib/dates";
 import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getAuth, checkScopes } from "@/lib/mcp/tools/helpers";
 import { db } from "@/lib/db/client";
 import {
   tasks as tasksTable,
@@ -25,9 +26,21 @@ type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 // Auth helper
 // ---------------------------------------------------------------------------
 
-function getUserId(extra: Extra): string | null {
-  const authInfo = (extra as unknown as { authInfo?: { extra?: Record<string, unknown> } }).authInfo;
-  return (authInfo?.extra?.userId as string) ?? null;
+/**
+ * Extract user ID and check required scopes for a prompt handler.
+ * Returns null if not authenticated or a missing-scope error string.
+ * Callers: `const auth = getPromptAuth(extra, [...scopes]); if (!auth.userId) return notAuthMsg;`
+ */
+function getPromptAuth(extra: Extra, requiredScopes: string[]): { userId: string | null; scopeError: string | null } {
+  const auth = getAuth(extra);
+  if (!auth) return { userId: null, scopeError: null };
+  const scopeError = checkScopes(auth.scopes, requiredScopes);
+  return { userId: auth.userId, scopeError };
+}
+
+const NOT_AUTHENTICATED_MSG = { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+function insufficientScopeMsg(err: string) {
+  return { messages: [{ role: "user" as const, content: { type: "text" as const, text: err } }] };
 }
 
 // ---------------------------------------------------------------------------
@@ -371,8 +384,9 @@ export function registerPrompts(server: McpServer) {
     "Plan my day based on tasks, habits, and calendar",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, goals] = await Promise.all([
         fetchTodayTasks(userId),
@@ -417,8 +431,9 @@ Based on this data, please:
     "Quick morning snapshot of what's ahead today",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, goals] = await Promise.all([
         fetchTodayTasks(userId),
@@ -459,8 +474,9 @@ Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence
     "Review what got done today and reflect on the day",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, habits, focusStats] = await Promise.all([
         fetchTodayTasks(userId),
@@ -512,8 +528,9 @@ Please provide:
       to: z.string().describe("End date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [focusRows, tasks, habitData] = await Promise.all([
         fetchFocusSessionsForRange(userId, args.from, args.to),
@@ -564,8 +581,9 @@ Please provide:
     "Analyze habit patterns and suggest improvements",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["habits:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const habits = await fetchAllHabitsWithStats(userId);
 
@@ -603,8 +621,9 @@ Please:
     "Check progress on active goals and identify next actions",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const goals = await fetchActiveGoals(userId);
 
@@ -634,8 +653,9 @@ For each goal, please:
     "Compare this week vs last week across all productivity metrics",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const thisWeekStart = startOfWeek(getToday());
       const thisWeekEnd = addDays(thisWeekStart, 6);
@@ -696,8 +716,9 @@ Please:
       week_start: z.string().optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "journal:read", "focus:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const weekStart = args.week_start || startOfWeek(getToday());
       const weekEnd = addDays(weekStart, 6);
@@ -757,8 +778,9 @@ Please structure the review with:
     "Get a thoughtful, personalized journal prompt based on recent activity",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "journal:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [recentJournal, tasks, habits] = await Promise.all([
         fetchRecentJournal(userId, 5),
@@ -807,8 +829,9 @@ Follow with 2-3 shorter follow-up questions if they want to go deeper.`;
     "Suggest a workout based on recent training history and available templates",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["workouts:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [recentWorkouts, templates] = await Promise.all([
         fetchRecentWorkouts(userId, 7),
@@ -848,8 +871,9 @@ Please:
       goal_id: z.string().describe("Goal ID to plan for"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["goals:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const goal = await fetchGoalById(userId, args.goal_id);
 
@@ -889,8 +913,9 @@ Format tasks as: [PRIORITY: A/B/C] Task title`;
       space_id: z.string().optional().describe("Space ID to plan for (if omitted, shows all unassigned tasks)"),
     },
     async (args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["spaces:read", "tasks:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, spaces] = await Promise.all([
         fetchSpaceTasks(userId, args.space_id),
@@ -927,8 +952,9 @@ Please:
     "Plan the upcoming week with priorities, goals alignment, and a day-by-day schedule",
     {},
     async (_args, extra: Extra) => {
-      const userId = getUserId(extra);
-      if (!userId) return { messages: [{ role: "user" as const, content: { type: "text" as const, text: "Not authenticated" } }] };
+      const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "goals:read", "habits:read"]);
+      if (!userId) return NOT_AUTHENTICATED_MSG;
+      if (scopeError) return insufficientScopeMsg(scopeError);
 
       const [tasks, goals, habits] = await Promise.all([
         fetchTodayTasks(userId),

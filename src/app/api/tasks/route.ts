@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(rows.map(serializeTask));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -102,8 +103,9 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    return NextResponse.json(serializeTask(row));
+    return NextResponse.json(serializeTask(row), { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

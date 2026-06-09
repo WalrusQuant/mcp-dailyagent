@@ -41,7 +41,8 @@ export async function GET() {
       templates.map((t) => serializeTemplate(t, exercisesByTemplate[t.id] ?? []))
     );
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeTemplate(template, exRows), { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status: 500 });
+    console.error(err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
