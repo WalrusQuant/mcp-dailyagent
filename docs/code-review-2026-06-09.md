@@ -1,7 +1,9 @@
 # Code Review Findings — 2026-06-09
 
 Full-project review covering the MCP server, DB layer, API routes, frontend, and
-infrastructure. All items below are to be resolved. Status checkboxes track progress.
+infrastructure. Status checkboxes track progress.
+
+**Status: all 47 findings resolved (2026-06-09).**
 
 Baseline at time of review (commit `5bae56e`): 332/332 tests pass, `tsc --noEmit`
 clean, ESLint clean. Tests pass only under `TZ=UTC` — see C1.
@@ -551,7 +553,10 @@ Default should be `return false` (or at least exclude `AbortError`).
 server-side, corrected post-hydration. Add an inline pre-paint script.
 
 ### L19. Chat-era debris sweep
-- [ ] Fixed
+- [x] Fixed — `@openrouter/sdk` uninstalled; `infrastructure/hydra/` and
+  `docs/index.html` deleted (mkdocs exclude entry removed); ci.yml's stale
+  env vars were already removed in M18's pass; CLAUDE.md no longer documents
+  the dropped `source` columns.
 
 - `@openrouter/sdk` in `package.json:20` — imported nowhere.
 - `infrastructure/hydra/hydra.yml` — dead Ory Hydra OAuth config (old multi-user
@@ -563,7 +568,12 @@ server-side, corrected post-hydration. Add an inline pre-paint script.
 - CLAUDE.md still documents `source` columns dropped by migrations 0001/0002.
 
 ### L20. Docs/compose corrections
-- [ ] Fixed
+- [x] Fixed — `source .env` breakage resolved by M21 (the multi-word value is
+  gone); quick-start and DEPLOY.md no longer recommend the ineffective
+  `ufw deny` and correctly describe the bind-based protection (Postgres not
+  published at all); DEPLOY.md's `.env` template drops the unused
+  `DATABASE_URL` (compose constructs it); both compose files gained an app
+  healthcheck hitting `/api/mcp/health`.
 
 - `docs/quick-start.md:87`: `source .env` errors — `.env.example:26` has an unquoted
   multi-word value.

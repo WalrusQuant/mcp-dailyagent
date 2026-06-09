@@ -95,14 +95,16 @@ curl -s -X POST http://localhost:3000/api/mcp \
 
 Expected output: a number matching `tools` from the health endpoint (e.g. `45`). If you get `null` or an error, double-check `MCP_API_KEY` matches what's in `.env`.
 
-## 5. Tailscale + firewall
+## 5. Tailscale
 
 ```bash
 sudo tailscale up          # follow the auth link
-sudo ufw deny 3000/tcp     # or your firewall of choice
 ```
 
-The compose file binds Postgres and the app to `127.0.0.1` so neither is reachable from the public internet. Tailscale's WireGuard interface is what lets your tailnet devices in.
+The compose file binds the app to `127.0.0.1` and doesn't publish Postgres at all, so neither is reachable from the public internet. Tailscale's WireGuard interface is what lets your tailnet devices in.
+
+!!! note "Don't rely on ufw for Docker ports"
+    Docker inserts its own iptables rules ahead of ufw's, so `ufw deny 3000/tcp` has **no effect** on a Docker-published port. The protection here is the `127.0.0.1` bind itself. If you change the bind, use your Tailscale IP (below) — never `0.0.0.0`.
 
 To expose the dashboard on your tailnet IP instead of localhost, edit the `app.ports` line in `docker-compose.yml`:
 

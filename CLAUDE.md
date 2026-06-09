@@ -115,9 +115,9 @@ Tables (17 total):
 - `workout_templates` + `workout_exercises` + `workout_logs` + `workout_log_exercises`
 - `focus_sessions` — Pomodoro timer sessions linked to tasks
 - `goals` + `goal_progress_logs`
-- `weekly_reviews` — weekly review summaries (source: mcp; dashboard is read-only)
-- `daily_briefings` — daily briefings saved by OpenClaw (source: dashboard | mcp)
-- `insight_cache` — cached insights saved by OpenClaw (source: dashboard | mcp)
+- `weekly_reviews` — weekly review summaries written by OpenClaw via MCP; dashboard is read-only
+- `daily_briefings` — daily briefings saved by OpenClaw via MCP; dashboard is read-only
+- `insight_cache` — cached insights saved by OpenClaw via MCP; dashboard is read-only
 
 ## Environment Variables
 

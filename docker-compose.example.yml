@@ -52,6 +52,13 @@ services:
       # Localhost by default. If you're fronting this with Tailscale or a reverse
       # proxy, replace "127.0.0.1" with your Tailscale IP (e.g. "100.x.y.z:3000:3000").
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/mcp/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Entrypoint waits for Postgres and runs migrations before the server starts
+      start_period: 30s
 
   db-backup:
     # Daily pg_dump with retention. Dumps land in ./backups next to this file
