@@ -5,6 +5,7 @@ import { Plus, Save, X } from "lucide-react";
 import { WorkoutTemplate, WorkoutExercise } from "@/types/database";
 import { ExerciseSetInput } from "./ExerciseSetInput";
 import { getToday } from "@/lib/dates";
+import { useToast } from "@/lib/toast-context";
 
 interface ExerciseEntry {
   exercise_name: string;
@@ -37,6 +38,7 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
   const [isSaving, setIsSaving] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseType, setNewExerciseType] = useState("strength");
+  const { addToast } = useToast();
 
   const addExercise = () => {
     if (!newExerciseName.trim()) return;
@@ -78,9 +80,12 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
 
       if (response.ok) {
         onSave();
+      } else {
+        addToast("Failed to save workout");
       }
     } catch (error) {
       console.error("Failed to save workout:", error);
+      addToast("Failed to save workout");
     } finally {
       setIsSaving(false);
     }

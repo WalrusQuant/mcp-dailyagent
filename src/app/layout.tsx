@@ -45,6 +45,17 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        {/* Pre-paint theme script: reads the persisted preference and applies
+            the correct class before first paint, eliminating the dark flash
+            for light-theme users. Must exactly match ThemeProvider's logic:
+            same localStorage key "theme", same default "dark", same
+            "system" resolution via matchMedia. ThemeProvider sets
+            className to the resolved theme string ("dark" | "light"). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var r=t==='light'?'light':t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):'dark';document.documentElement.className=r;}catch(e){}})();`,
+          }}
+        />
       </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}

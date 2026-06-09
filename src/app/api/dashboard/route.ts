@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions, goals } from "@/lib/db/schema";
-import { eq, and, gte, lte, asc, desc } from "drizzle-orm";
+import { eq, and, gte, lte, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { getToday, addDays } from "@/lib/dates";
+import { calculateStreak } from "@/lib/habit-stats";
 
 export async function GET() {
   const userId = getUserId();
 
   const today = getToday();
   const weekAgo = addDays(today, -7);
+  // Fetch enough log history to compute a streak (up to 365 days back)
+  const streakWindowStart = addDays(today, -364);
 
   try {
     const [
@@ -41,7 +44,7 @@ export async function GET() {
         .orderBy(asc(tasks.sortOrder))
         .limit(3),
       db
-        .select({ id: habits.id, name: habits.name })
+        .select({ id: habits.id, name: habits.name, targetDays: habits.targetDays })
         .from(habits)
         .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
       db
@@ -99,6 +102,38 @@ export async function GET() {
     const completedHabitIds = new Set(todayHabitLogs.map((l) => l.habitId));
     const completedHabitsToday = allHabits.filter((h) => completedHabitIds.has(h.id)).length;
 
+    // Compute the maximum current streak across all habits (one batch query).
+    let maxStreak = 0;
+    if (allHabits.length > 0) {
+      const habitIds = allHabits.map((h) => h.id);
+      const streakLogs = await db
+        .select({ habitId: habitLogs.habitId, logDate: habitLogs.logDate })
+        .from(habitLogs)
+        .where(
+          and(
+            inArray(habitLogs.habitId, habitIds),
+            gte(habitLogs.logDate, streakWindowStart),
+            lte(habitLogs.logDate, today)
+          )
+        );
+
+      // Group logs by habit
+      const logsByHabit: Record<string, string[]> = {};
+      for (const log of streakLogs) {
+        if (!logsByHabit[log.habitId]) logsByHabit[log.habitId] = [];
+        logsByHabit[log.habitId].push(log.logDate);
+      }
+
+      for (const habit of allHabits) {
+        const targetDays: number[] =
+          Array.isArray(habit.targetDays) && habit.targetDays.length > 0
+            ? habit.targetDays
+            : [1, 2, 3, 4, 5, 6, 7];
+        const streak = calculateStreak(logsByHabit[habit.id] ?? [], targetDays);
+        if (streak > maxStreak) maxStreak = streak;
+      }
+    }
+
     const todayFocusMinutes = todayFocus.reduce((s, f) => s + (f.durationMinutes ?? 0), 0);
     const weekCount = weekWorkouts.length;
     const todayLog = todayWorkout[0] ?? null;
@@ -112,7 +147,7 @@ export async function GET() {
       habits: {
         total: allHabits.length,
         completedToday: completedHabitsToday,
-        streak: 0,
+        streak: maxStreak,
       },
       journal: {
         hasEntry: todayJournal.length > 0,

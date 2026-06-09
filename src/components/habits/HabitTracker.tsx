@@ -86,6 +86,38 @@ export function HabitTracker() {
   }, [loadData]);
 
   const handleToggle = async (habitId: string, toggleDate: string) => {
+    // Optimistic update: predict the toggled state before the server responds
+    const prevHabitsWithStats = habitsWithStats;
+    const today = getToday();
+    const windowStart = addDays(today, -29);
+
+    setHabitsWithStats((prev) =>
+      prev.map((hs) => {
+        if (hs.habit.id !== habitId) return hs;
+        const wasLogged = hs.logs.has(toggleDate);
+        const newLogs = new Set(hs.logs);
+        if (wasLogged) newLogs.delete(toggleDate);
+        else newLogs.add(toggleDate);
+
+        const recentData: number[] = [];
+        for (let i = 29; i >= 0; i--) {
+          const d = addDays(today, -i);
+          recentData.push(newLogs.has(d) ? 1 : 0);
+        }
+
+        const targetDays =
+          Array.isArray(hs.habit.target_days) && hs.habit.target_days.length > 0
+            ? hs.habit.target_days
+            : [1, 2, 3, 4, 5, 6, 7];
+        const streak = calculateStreak([...newLogs], targetDays);
+        const applicableDays = getApplicableDays(windowStart, today, targetDays);
+        const loggedInWindow = [...newLogs].filter((d) => d >= windowStart && d <= today).length;
+        const completionRate = applicableDays > 0 ? Math.min(1, loggedInWindow / applicableDays) : 0;
+
+        return { ...hs, logs: newLogs, recentData, streak, completionRate };
+      })
+    );
+
     try {
       const response = await fetch(`/api/habits/${habitId}/log`, {
         method: "POST",
@@ -95,25 +127,23 @@ export function HabitTracker() {
 
       if (response.ok) {
         const { logged } = await response.json();
+        // Reconcile with the actual server result (server is authoritative on
+        // the logged boolean — handles double-tap races).
         addToast(logged ? "Habit logged" : "Habit unlogged");
         setHabitsWithStats((prev) =>
           prev.map((hs) => {
             if (hs.habit.id !== habitId) return hs;
             const newLogs = new Set(hs.logs);
+            // Ensure the set reflects the server's actual result
             if (logged) newLogs.add(toggleDate);
             else newLogs.delete(toggleDate);
 
-            // Recalculate sparkline from updated logs
-            const today = getToday();
-            const windowStart = addDays(today, -29);
             const recentData: number[] = [];
             for (let i = 29; i >= 0; i--) {
               const d = addDays(today, -i);
               recentData.push(newLogs.has(d) ? 1 : 0);
             }
 
-            // Recalculate streak and completion rate the same way the stats
-            // endpoint does: target-day-aware, rate as a 0–1 fraction.
             const targetDays =
               Array.isArray(hs.habit.target_days) && hs.habit.target_days.length > 0
                 ? hs.habit.target_days
@@ -126,9 +156,15 @@ export function HabitTracker() {
             return { ...hs, logs: newLogs, recentData, streak, completionRate };
           })
         );
+      } else {
+        // Revert optimistic update on failure
+        setHabitsWithStats(prevHabitsWithStats);
+        addToast("Failed to update habit");
       }
     } catch (error) {
       console.error("Failed to toggle habit:", error);
+      setHabitsWithStats(prevHabitsWithStats);
+      addToast("Failed to update habit");
     }
   };
 
@@ -149,14 +185,22 @@ export function HabitTracker() {
   };
 
   const handleDelete = async (habit: Habit) => {
+    // Optimistic removal
+    const prevHabitsWithStats = habitsWithStats;
+    setHabitsWithStats((prev) => prev.filter((hs) => hs.habit.id !== habit.id));
     try {
       const response = await fetch(`/api/habits/${habit.id}`, { method: "DELETE" });
       if (response.ok) {
-        setHabitsWithStats((prev) => prev.filter((hs) => hs.habit.id !== habit.id));
         addToast("Habit deleted");
+      } else {
+        // Revert — restore the removed habit
+        setHabitsWithStats(prevHabitsWithStats);
+        addToast("Failed to delete habit");
       }
     } catch (error) {
       console.error("Failed to delete habit:", error);
+      setHabitsWithStats(prevHabitsWithStats);
+      addToast("Failed to delete habit");
     }
   };
 

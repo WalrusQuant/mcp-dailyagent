@@ -406,7 +406,10 @@ breaks the overdue-rollover string comparison for variant formats); goal `progre
 missing `.int()` (`tools/goals.ts:180,217`).
 
 ### L3. `calculateStreak` never resets after a lapse; dashboard streak hardcoded 0
-- [ ] Fixed
+- [x] Fixed — streak walk now breaks on any unlogged applicable day (today
+  unlogged gets a one-time grace), uses TZ-safe date helpers throughout.
+  Dashboard route computes the real max streak across habits with one batched
+  log query (no N+1) via the same shared `calculateStreak`. 23 new unit tests.
 
 `src/lib/habit-stats.ts:1-27`: walks back past all unlogged days, so a 5-day run from
 months ago still reports 5; also mixes UTC date strings with local `getDay()`.
@@ -421,20 +424,26 @@ bearer-token brute-force attempts are unthrottled (mitigated by `timingSafeEqual
 Tailscale, but contradicts the in-code comment).
 
 ### L5. "Focus session complete!" toast fires on cancel/reset
-- [ ] Fixed
+- [x] Fixed — hook exposes `workSessionCompletedCount`, incremented only in
+  `completeWork()`; the toast watches that instead of the isActive transition.
+  Reset still refreshes the session list, just without the toast.
 
 `src/components/focus/FocusTimer.tsx:52-58` toasts on every `isActive` true→false
 transition, including user abandonment (session marked `cancelled`).
 
 ### L6. Fetch inside `setState` updater in task reorder
-- [ ] Fixed
+- [x] Fixed — reorder computed outside the updater (no double-fire under
+  StrictMode); failed PATCH reverts to the pre-drop order and toasts.
 
 `src/components/tasks/TaskList.tsx:42-70`: `handleDrop` PATCHes
 `/api/tasks/reorder` from inside the `setTasks` updater (React may invoke updaters
 twice; StrictMode does) and `.catch(() => {})` silently desyncs order on failure.
 
 ### L7. Optimistic updates without rollback / swallowed failures on inline actions
-- [ ] Fixed
+- [x] Fixed — SpaceDashboard (toggle/progress), TaskList (toggle/delete),
+  HabitTracker (toggle/delete), WorkoutLogger (save), DailyStartCard
+  (complete) all check `response.ok`, revert optimistic state on failure, and
+  toast. HabitTracker reconciles with the server's `logged` flag on success.
 
 `SpaceDashboard.tsx` (`handleToggleTask`, `updateProgress`): state-first, no
 `response.ok` check, no rollback. `TaskList.handleToggle`/`handleDelete`,
@@ -508,13 +517,15 @@ remediation. Add a dedupe statement before the index (or document recovery).
 Default should be `return false` (or at least exclude `AbortError`).
 
 ### L17. `isPaused` is `true` when no timer exists
-- [ ] Fixed
+- [x] Fixed — `isPaused = timerState !== null && timerState.pausedAt !== null`.
 
 `src/hooks/useFocusTimer.ts:266`: `timerState?.pausedAt !== null` →
 `undefined !== null` → `true`. Currently unconsumed; fix before it bites.
 
 ### L18. Dark-theme flash for light-theme users
-- [ ] Fixed
+- [x] Fixed — inline pre-paint script in `<head>` resolves the persisted
+  theme (same key, default, and matchMedia semantics as ThemeProvider) and
+  sets the html class before first paint.
 
 `src/lib/theme.tsx:49-51` + `src/app/layout.tsx:45`: html class hardcoded `"dark"`
 server-side, corrected post-hydration. Add an inline pre-paint script.

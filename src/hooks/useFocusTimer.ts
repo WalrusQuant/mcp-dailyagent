@@ -37,6 +37,9 @@ export function useFocusTimer() {
   const [timerState, setTimerState] = useState<TimerState | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  // Incremented each time a work session naturally completes (not on cancel/reset).
+  // Consumers can watch this to show a "session complete" toast.
+  const [workSessionCompletedCount, setWorkSessionCompletedCount] = useState(0);
   const audioRef = useRef<AudioContext | null>(null);
   const completionHandledRef = useRef(false);
 
@@ -144,6 +147,8 @@ export function useFocusTimer() {
         // ignore
       }
     }
+
+    setWorkSessionCompletedCount((n) => n + 1);
 
     // Start break
     const breakState: TimerState = {
@@ -266,7 +271,7 @@ export function useFocusTimer() {
   const isActive = timerState !== null;
   const isBreak = timerState?.isBreak ?? false;
   const totalSeconds = timerState?.duration ?? 0;
-  const isPaused = timerState?.pausedAt !== null;
+  const isPaused = timerState !== null && timerState.pausedAt !== null;
 
   return {
     secondsLeft,
@@ -275,6 +280,7 @@ export function useFocusTimer() {
     isRunning,
     isBreak,
     isPaused,
+    workSessionCompletedCount,
     taskName: timerState?.taskName ?? null,
     start,
     pause,
