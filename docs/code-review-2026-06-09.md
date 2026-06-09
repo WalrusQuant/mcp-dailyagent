@@ -507,7 +507,9 @@ Covered by M3's fix — listed separately to ensure MCP `logWorkout` /
 single token gets `all`, but a latent scope bypass if scoped tokens are ever issued.
 
 ### L14. Redundant indexes; unindexed self-FK
-- [ ] Fixed
+- [x] Fixed — migration `0007_nostalgic_sumo.sql` drops the four redundant
+  indexes and adds `idx_tasks_rolled_from`. Verified on real Postgres 16
+  (fresh apply + idempotent re-run).
 
 `schema.ts`: `idx_journal_user_date:231` duplicates the unique index at :232;
 `idx_habit_logs_habit_date:208` duplicates :210; `idx_spaces_user:55` is a prefix of
@@ -515,7 +517,11 @@ single token gets `all`, but a latent scope bypass if scoped tokens are ever iss
 only FK without a covering index.
 
 ### L15. Migration 0004 unique index has no dedupe step
-- [ ] Fixed
+- [x] Fixed — 0004 now deletes same-day duplicates (keeping the most recently
+  updated row) before creating the unique index. Editing the shipped file is
+  safe: drizzle's migrator skips applied migrations by timestamp, never by
+  hash. Verified on real Postgres 16: 0000-0003 + duplicate entries → full
+  migrate dedupes (newer row survives) and the index creates cleanly.
 
 `drizzle/0004_silent_prima.sql`: if a pre-0004 deployment has two journal entries on
 one day, auto-migration on boot fails → container crash-loop with no documented

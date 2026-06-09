@@ -52,7 +52,6 @@ export const spaces = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_spaces_user").on(t.userId),
     index("idx_spaces_user_status").on(t.userId, t.status),
     check("spaces_status_check", sql`${t.status} IN ('active', 'paused', 'completed')`),
     check("spaces_progress_check", sql`${t.progress} >= 0 AND ${t.progress} <= 100`),
@@ -159,6 +158,7 @@ export const tasks = pgTable(
     index("idx_tasks_user_done").on(t.userId, t.done),
     index("idx_tasks_space").on(t.spaceId),
     index("idx_tasks_goal").on(t.goalId),
+    index("idx_tasks_rolled_from").on(t.rolledFrom),
     check("tasks_priority_check", sql`${t.priority} ~ '^[A-C][1-9]$'`),
   ]
 );
@@ -205,7 +205,6 @@ export const habitLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_habit_logs_habit_date").on(t.habitId, t.logDate),
     index("idx_habit_logs_user_date").on(t.userId, t.logDate),
     uniqueIndex("habit_logs_habit_date_unique").on(t.habitId, t.logDate),
   ]
@@ -228,7 +227,6 @@ export const journalEntries = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_journal_user_date").on(t.userId, t.entryDate),
     uniqueIndex("journal_entries_user_date_unique").on(t.userId, t.entryDate),
     index("idx_journal_search").using("gin", sql`to_tsvector('english', ${t.content})`),
     check("journal_mood_check", sql`${t.mood} >= 1 AND ${t.mood} <= 5`),
@@ -330,7 +328,6 @@ export const focusSessions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_focus_sessions_user").on(t.userId),
     index("idx_focus_sessions_user_date").on(t.userId, t.startedAt),
     index("idx_focus_sessions_task").on(t.taskId),
     check("focus_sessions_status_check", sql`${t.status} IN ('active', 'paused', 'completed', 'cancelled')`),
