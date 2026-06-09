@@ -83,6 +83,18 @@ async function updateSpaceLegacy(
   }
 }
 
+async function deleteSpace(userId: string, spaceId: string) {
+  try {
+    const deleted = await db
+      .delete(spaces)
+      .where(and(eq(spaces.id, spaceId), eq(spaces.userId, userId)))
+      .returning({ id: spaces.id });
+    return { error: deleted.length > 0 ? null : "Space not found" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -170,6 +182,27 @@ export function registerSpaceTools(server: McpServer) {
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
+    }
+  );
+
+  // --- delete_space (WRITE) ---
+  server.tool(
+    "delete_space",
+    "Delete a space permanently. Tasks linked to it are kept but unlinked (their space becomes empty).",
+    {
+      space_id: z.string().describe("Space ID to delete"),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "spaces:write");
+      if (scopeError) return errorResult(scopeError);
+
+      const result = await deleteSpace(auth.userId, args.space_id);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult({ success: true });
     }
   );
 }

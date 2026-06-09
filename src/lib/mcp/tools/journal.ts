@@ -119,6 +119,18 @@ async function createOrUpdateJournalEntry(
   }
 }
 
+async function deleteJournalEntry(userId: string, entryDate: string) {
+  try {
+    const deleted = await db
+      .delete(journalEntries)
+      .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, entryDate)))
+      .returning({ id: journalEntries.id });
+    return { error: deleted.length > 0 ? null : "Journal entry not found" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -225,6 +237,27 @@ export function registerJournalTools(server: McpServer) {
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
+    }
+  );
+
+  // --- delete_journal_entry (WRITE) ---
+  server.tool(
+    "delete_journal_entry",
+    "Delete the journal entry for a given date permanently",
+    {
+      entry_date: dateSchema.describe("Date of the entry to delete, in YYYY-MM-DD format"),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "journal:write");
+      if (scopeError) return errorResult(scopeError);
+
+      const result = await deleteJournalEntry(auth.userId, args.entry_date);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult({ success: true });
     }
   );
 }

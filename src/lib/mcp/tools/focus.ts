@@ -119,6 +119,23 @@ async function completeFocusSessionLegacy(userId: string, sessionId: string) {
   }
 }
 
+async function setFocusSessionStatusLegacy(
+  userId: string,
+  sessionId: string,
+  status: "active" | "paused"
+) {
+  try {
+    const [row] = await db
+      .update(focusSessions)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
+      .returning();
+    return { data: row ?? null, error: row ? null : "Session not found" };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -222,6 +239,86 @@ export function registerFocusTools(server: McpServer) {
       }
 
       const result = await completeFocusSessionLegacy(auth.userId, args.session_id);
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult(result.data);
+    }
+  );
+
+  // --- pause_focus_session (WRITE) ---
+  server.tool(
+    "pause_focus_session",
+    "Pause an in-progress focus session (sets status to 'paused'). Resume it later with resume_focus_session. Pass expected_updated_at to opt into concurrency-safe writes.",
+    {
+      session_id: z.string().describe("Focus session ID to pause"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "focus:write");
+      if (scopeError) return errorResult(scopeError);
+
+      if (args.expected_updated_at) {
+        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
+          table: focusSessions,
+          id: args.session_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch: { status: "paused" },
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Session not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await setFocusSessionStatusLegacy(auth.userId, args.session_id, "paused");
+      if (result.error) return errorResult(`Error: ${result.error}`);
+
+      return textResult(result.data);
+    }
+  );
+
+  // --- resume_focus_session (WRITE) ---
+  server.tool(
+    "resume_focus_session",
+    "Resume a paused focus session (sets status back to 'active'). Pass expected_updated_at to opt into concurrency-safe writes.",
+    {
+      session_id: z.string().describe("Focus session ID to resume"),
+      expected_updated_at: z
+        .string()
+        .datetime()
+        .optional()
+        .describe("ISO timestamp from the prior read; enables optimistic concurrency."),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+
+      const scopeError = checkScope(auth.scopes, "focus:write");
+      if (scopeError) return errorResult(scopeError);
+
+      if (args.expected_updated_at) {
+        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
+          table: focusSessions,
+          id: args.session_id,
+          userId: auth.userId,
+          expectedUpdatedAt: args.expected_updated_at,
+          patch: { status: "active" },
+        });
+        if (result.ok) return textResult(result.row);
+        if (result.reason === "not_found") return errorResult("Session not found");
+        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+        return conflictResult(result.current);
+      }
+
+      const result = await setFocusSessionStatusLegacy(auth.userId, args.session_id, "active");
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
