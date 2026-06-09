@@ -67,7 +67,11 @@ tables, FK-safe order, transactional).
 ## High — task lifecycle
 
 ### H1. Recurring-task completion is not idempotent (duplicate next occurrences)
-- [ ] Fixed
+- [x] Fixed — shared `maybeSpawnNextOccurrence` helper (queries/tasks.ts) used by
+  MCP `complete_task`/`update_task` and the dashboard PATCH. Spawns only on the
+  not-done → done transition, skips unknown recurrence types (next date must be
+  strictly after the task date), and dedupes against an existing occurrence on the
+  target date (covers retries and un-done/re-done toggles). Covered by tests.
 
 Both paths — MCP `complete_task` (`src/lib/mcp/tools/tasks.ts:290-304`) and dashboard
 PATCH (`src/app/api/tasks/[id]/route.ts:98-112`) — run the "spawn next occurrence"
@@ -78,7 +82,11 @@ unrecognized `recurrence.type` falls through `getNextOccurrence`'s switch and re
 the input date → same-day duplicate.
 
 ### H2. Rollover works only once per task and falsifies completion history
-- [ ] Fixed
+- [x] Fixed — rollover now moves undone past tasks to today **in place** (single
+  UPDATE): no copies, nothing marked done, so history stays truthful, goal links
+  survive, and a still-undone task rolls again tomorrow. `rolled_from` is set to
+  the task's own id on first roll so the "rolled over" badge still renders. The
+  check endpoint drops the `isNull(rolledFrom)` filter accordingly.
 
 `src/app/api/tasks/rollover/route.ts:24,47-50` (+ `rollover/check/route.ts:21`):
 - Candidates filtered with `isNull(tasks.rolledFrom)`, but rolled copies have
@@ -88,14 +96,19 @@ the input date → same-day duplicate.
   count as completed in calendar views, exports, and **inflate goal auto-progress**.
 
 ### H3. Recurrence and rollover copies silently drop `goal_id`
-- [ ] Fixed
+- [x] Fixed — `maybeSpawnNextOccurrence` copies `goalId` (and notes/space/priority/
+  sort order) on every path including the dashboard PATCH, which previously dropped
+  it; in-place rollover preserves all fields by construction. Test asserts the goal
+  link survives recurrence.
 
 `tasks/[id]/route.ts:102-111` and `rollover/route.ts:33-43` copy
 title/notes/priority/spaceId/recurrence/sortOrder but omit `goalId`, permanently
 breaking goal linkage (and goal auto-progress) for recurring/rolled tasks.
 
 ### H4. `update_task(done: true)` diverges from `complete_task`
-- [ ] Fixed
+- [x] Fixed — `update_task` now spawns the next occurrence on done-transition via
+  the same helper (both versioned and last-write-wins paths) and its description
+  documents the behavior.
 
 MCP `update_task` does not spawn the next recurrence while `complete_task` does
 (`src/lib/mcp/tools/tasks.ts`). An agent using `update_task` to finish a recurring

@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
-import { serializeTask, getNextOccurrence } from "@/lib/mcp/queries/tasks";
+import { serializeTask, maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
 
 export async function GET(
   _request: NextRequest,
@@ -65,6 +65,15 @@ export async function PATCH(
   }
 
   try {
+    let wasAlreadyDone = false;
+    if (body.done === true) {
+      const [prior] = await db
+        .select({ done: tasks.done })
+        .from(tasks)
+        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+      wasAlreadyDone = prior?.done ?? false;
+    }
+
     let row: typeof tasks.$inferSelect | null = null;
 
     if (typeof body.expected_updated_at === "string") {
@@ -95,20 +104,8 @@ export async function PATCH(
     }
 
     // If marking done and task has recurrence, create next occurrence
-    if (body.done === true && row.recurrence && row.taskDate) {
-      const recurrence = row.recurrence as { type: string; days?: number[] };
-      const nextDate = getNextOccurrence(row.taskDate, recurrence);
-
-      await db.insert(tasks).values({
-        userId,
-        title: row.title,
-        notes: row.notes,
-        priority: row.priority,
-        taskDate: nextDate,
-        spaceId: row.spaceId,
-        recurrence: row.recurrence,
-        sortOrder: row.sortOrder,
-      });
+    if (body.done === true) {
+      await maybeSpawnNextOccurrence(userId, row, wasAlreadyDone);
     }
 
     return NextResponse.json(serializeTask(row));

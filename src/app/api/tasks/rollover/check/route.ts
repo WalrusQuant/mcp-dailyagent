@@ -2,7 +2,7 @@ import { getToday } from "@/lib/dates";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
-import { eq, and, lt, isNull, sql } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 
 export async function GET() {
@@ -18,8 +18,7 @@ export async function GET() {
         and(
           eq(tasks.userId, userId),
           lt(tasks.taskDate, todayStr),
-          eq(tasks.done, false),
-          isNull(tasks.rolledFrom)
+          eq(tasks.done, false)
         )
       );
 
