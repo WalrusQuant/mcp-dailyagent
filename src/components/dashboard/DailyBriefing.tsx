@@ -44,7 +44,24 @@ export function DailyBriefing() {
     );
   }
 
-  if (!content) return null;
+  if (!content) {
+    return (
+      <div
+        className="rounded-xl p-4 mb-4"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
+          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            Daily Briefing
+          </span>
+        </div>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          No briefing yet — your OpenClaw agent posts the morning briefing here once it runs.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
 import { Task, Space } from "@/types/database";
@@ -8,6 +8,7 @@ import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TaskItem } from "./TaskItem";
 import { TaskFormModal } from "./TaskFormModal";
+import { TaskRolloverBanner } from "./TaskRolloverBanner";
 import { getToday } from "@/lib/dates";
 import { useToast } from "@/lib/toast-context";
 
@@ -27,8 +28,18 @@ function useDragReorder(
 
   const handleDragOver = (taskId: string) => (e: React.DragEvent) => {
     e.preventDefault();
+    if (taskId === dragTaskId) return;
+    // Reordering only works within a priority group, so don't show a drop
+    // indicator (or a "move" cursor) when hovering a different group.
+    const src = tasks.find((t) => t.id === dragTaskId);
+    const tgt = tasks.find((t) => t.id === taskId);
+    if (src && tgt && src.priority[0] !== tgt.priority[0]) {
+      e.dataTransfer.dropEffect = "none";
+      setDragOverTaskId(null);
+      return;
+    }
     e.dataTransfer.dropEffect = "move";
-    if (taskId !== dragTaskId) setDragOverTaskId(taskId);
+    setDragOverTaskId(taskId);
   };
 
   const handleDragLeave = () => {
@@ -124,28 +135,44 @@ export function TaskList() {
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [rolloverCount, setRolloverCount] = useState(0);
+  const [rolloverDismissed, setRolloverDismissed] = useState(false);
+
+  const isToday = date === getToday();
+
+  const loadTasks = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/tasks?date=${date}`, signal ? { signal } : undefined);
+      if (response.ok) setTasks(await response.json());
+    } catch (error) {
+      if (signal?.aborted) return;
+      console.error("Failed to load tasks:", error);
+    } finally {
+      if (!signal?.aborted) setIsLoading(false);
+    }
+  }, [date]);
 
   useEffect(() => {
     // Abort on date change/unmount so a slow response can't render a stale day.
     const controller = new AbortController();
-    const loadTasks = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/tasks?date=${date}`, { signal: controller.signal });
-        if (response.ok) {
-          const data = await response.json();
-          setTasks(data);
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.error("Failed to load tasks:", error);
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false);
-      }
-    };
-    loadTasks();
+    loadTasks(controller.signal);
     return () => controller.abort();
-  }, [date]);
+  }, [loadTasks]);
+
+  // Surface incomplete past-dated tasks so the user can roll them to today.
+  useEffect(() => {
+    if (!isToday) {
+      setRolloverCount(0);
+      return;
+    }
+    const controller = new AbortController();
+    fetch("/api/tasks/rollover/check", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : { count: 0 }))
+      .then((d) => setRolloverCount(d.count ?? 0))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isToday]);
 
   useEffect(() => {
     fetch("/api/spaces")
@@ -181,6 +208,7 @@ export function TaskList() {
   };
 
   const handleDelete = async (task: Task) => {
+    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
     // Optimistic removal
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     try {
@@ -208,6 +236,21 @@ export function TaskList() {
     addToast(editingTask ? "Task updated" : "Task added");
     setShowForm(false);
     setEditingTask(null);
+  };
+
+  const handleRollover = async () => {
+    try {
+      const response = await fetch("/api/tasks/rollover", { method: "POST" });
+      if (response.ok) {
+        await loadTasks();
+        setRolloverCount(0);
+        addToast("Past tasks rolled over to today");
+      } else {
+        addToast("Failed to roll over tasks");
+      }
+    } catch {
+      addToast("Failed to roll over tasks");
+    }
   };
 
   const { addToast } = useToast();
@@ -238,6 +281,14 @@ export function TaskList() {
           </button>
         </div>
       </div>
+
+      {isToday && rolloverCount > 0 && !rolloverDismissed && (
+        <TaskRolloverBanner
+          count={rolloverCount}
+          onRollover={handleRollover}
+          onDismiss={() => setRolloverDismissed(true)}
+        />
+      )}
 
       {isLoading ? (
         <TaskListSkeleton />

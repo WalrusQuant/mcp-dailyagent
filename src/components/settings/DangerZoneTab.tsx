@@ -14,6 +14,10 @@ export function DangerZoneTab() {
   const [wipeError, setWipeError] = useState<string | null>(null);
   const [wipeSuccess, setWipeSuccess] = useState(false);
 
+  // Tolerate casing/whitespace so a correct-but-untrimmed phrase isn't a dead
+  // button. The server independently requires {confirm:"WIPE"}, so this is safe.
+  const confirmMatches = confirmText.trim().toLowerCase() === CONFIRM_PHRASE;
+
   const handleExport = async () => {
     setIsExporting(true);
     setExportError(null);
@@ -191,7 +195,7 @@ export function DangerZoneTab() {
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                className="w-full rounded-lg px-4 py-2 text-sm focus:outline-none"
+                className="w-full rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-negative)]"
                 style={{
                   background: "var(--bg-input)",
                   color: "var(--text-primary)",
@@ -200,6 +204,11 @@ export function DangerZoneTab() {
                 placeholder={CONFIRM_PHRASE}
                 autoFocus
               />
+              {confirmText.trim() && !confirmMatches && (
+                <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Doesn&apos;t match yet — type &ldquo;{CONFIRM_PHRASE}&rdquo; (case and spacing are ignored).
+                </p>
+              )}
             </div>
             {wipeError && (
               <p className="text-xs" style={{ color: "var(--accent-negative)" }}>
@@ -224,7 +233,7 @@ export function DangerZoneTab() {
               </button>
               <button
                 onClick={handleWipe}
-                disabled={confirmText !== CONFIRM_PHRASE || isWiping}
+                disabled={!confirmMatches || isWiping}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-30"
                 style={{
                   background: "var(--accent-negative)",

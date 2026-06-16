@@ -1,11 +1,13 @@
 # cadence — prebuilt-image compose file.
 #
 # Usage:
-#   1. Copy this file to docker-compose.yml
+#   1. Save this file as docker-compose.yml (the quick-start curls it there
+#      for you, so if you followed that you already have it named correctly)
 #   2. Copy .env.example to .env and fill in the required values
 #   3. docker compose up -d
 #
-# Update: docker compose pull && docker compose up -d
+# Update (prebuilt image): docker compose pull && docker compose up -d
+# Building from source instead? See docs/DEPLOY.md.
 
 services:
   postgres:
@@ -30,10 +32,10 @@ services:
       retries: 5
 
   app:
-    # Tracks the latest build from `main`. For a stable pin, use `:1` (floats
-    # within the v1 major, safe for `docker compose pull` auto-upgrades) or
-    # `:1.0.0` for an exact version pin.
-    # Alternatives: docker.io/walrusquant/cadence:latest
+    # Tracks the latest build from `main`. For a stable pin, use the current
+    # major `:2` (floats within v2, safe for `docker compose pull`
+    # auto-upgrades) or `:2.2.0` for an exact version pin. Tags carry no `v`
+    # prefix. Alternatives: docker.io/walrusquant/cadence:latest
     image: ghcr.io/walrusquant/cadence:latest
     container_name: cadence-app
     restart: unless-stopped

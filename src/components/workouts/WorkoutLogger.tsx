@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Save, X } from "lucide-react";
 import { WorkoutTemplate, WorkoutExercise } from "@/types/database";
 import { ExerciseSetInput } from "./ExerciseSetInput";
@@ -14,6 +14,36 @@ interface ExerciseEntry {
   sets: Array<{ reps?: number; weight?: number; duration?: number }>;
 }
 
+// An in-progress workout is mirrored to localStorage so a refresh, PWA kill,
+// or accidental navigation doesn't discard a multi-minute logging session.
+export const WORKOUT_DRAFT_KEY = "cadence:workout-draft";
+
+export interface WorkoutDraft {
+  templateId: string | null; // null = quick workout
+  name: string;
+  exercises: ExerciseEntry[];
+  startTime: number;
+}
+
+export function loadWorkoutDraft(): WorkoutDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(WORKOUT_DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as WorkoutDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearWorkoutDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(WORKOUT_DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 interface WorkoutLoggerProps {
   template?: WorkoutTemplate & { workout_exercises?: WorkoutExercise[] };
   onSave: () => void;
@@ -21,24 +51,54 @@ interface WorkoutLoggerProps {
 }
 
 export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps) {
-  const [name, setName] = useState(template?.name || "Quick Workout");
+  // Restore a saved draft only if it belongs to this workout slot (same
+  // template, or both "quick"); otherwise start fresh from the template.
+  const [draft] = useState<WorkoutDraft | null>(() => loadWorkoutDraft());
+  const matchesDraft = !!draft && draft.templateId === (template?.id ?? null);
+
+  const [name, setName] = useState(matchesDraft ? draft!.name : template?.name || "Quick Workout");
   const [exercises, setExercises] = useState<ExerciseEntry[]>(
-    template?.workout_exercises?.map((e, i) => ({
-      exercise_name: e.name,
-      exercise_type: e.exercise_type,
-      sort_order: i,
-      sets: Array.from({ length: e.default_sets || 3 }, () =>
-        e.exercise_type === "timed"
-          ? { duration: e.default_duration || 60 }
-          : { reps: e.default_reps || 10, weight: e.default_weight || 0 }
-      ),
-    })) || []
+    matchesDraft
+      ? draft!.exercises
+      : template?.workout_exercises?.map((e, i) => ({
+          exercise_name: e.name,
+          exercise_type: e.exercise_type,
+          sort_order: i,
+          sets: Array.from({ length: e.default_sets || 3 }, () =>
+            e.exercise_type === "timed"
+              ? { duration: e.default_duration || 60 }
+              : { reps: e.default_reps || 10, weight: e.default_weight || 0 }
+          ),
+        })) || []
   );
-  const [startTime] = useState(Date.now());
+  const [startTime] = useState(matchesDraft ? draft!.startTime : Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseType, setNewExerciseType] = useState("strength");
   const { addToast } = useToast();
+
+  // Persist the working session as it changes; clear once it has no exercises
+  // so an abandoned empty quick-start doesn't get restored later.
+  useEffect(() => {
+    if (exercises.length === 0) {
+      clearWorkoutDraft();
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        WORKOUT_DRAFT_KEY,
+        JSON.stringify({ templateId: template?.id ?? null, name, exercises, startTime } satisfies WorkoutDraft)
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [name, exercises, startTime, template?.id]);
+
+  const handleCancel = () => {
+    if (exercises.length > 0 && !confirm("Discard this workout? Your logged sets will be lost.")) return;
+    clearWorkoutDraft();
+    onCancel();
+  };
 
   const addExercise = () => {
     if (!newExerciseName.trim()) return;
@@ -79,6 +139,7 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
       });
 
       if (response.ok) {
+        clearWorkoutDraft();
         onSave();
       } else {
         addToast("Failed to save workout");
@@ -102,12 +163,13 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
           style={{ color: "var(--text-primary)" }}
         />
         <div className="flex items-center gap-2">
-          <button onClick={onCancel} className="p-2 rounded-lg" style={{ color: "var(--text-muted)" }}>
+          <button onClick={handleCancel} className="p-2 rounded-lg" style={{ color: "var(--text-muted)" }} aria-label="Cancel workout">
             <X className="w-4 h-4" />
           </button>
           <button
             onClick={handleSave}
             disabled={exercises.length === 0 || isSaving}
+            title={exercises.length === 0 ? "Add at least one exercise first" : undefined}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
           >
@@ -118,6 +180,11 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
       </div>
 
       <div className="space-y-3">
+        {exercises.length === 0 && (
+          <p className="text-sm text-center py-2" style={{ color: "var(--text-muted)" }}>
+            Add at least one exercise, then tap Finish to save.
+          </p>
+        )}
         {exercises.map((ex, i) => (
           <ExerciseSetInput
             key={i}

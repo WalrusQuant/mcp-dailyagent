@@ -61,6 +61,28 @@ export function useFocusTimer() {
     }
   }, []);
 
+  // Reliable completion signal for a backgrounded tab: a system notification
+  // (Web Audio is throttled when hidden and the in-app toast isn't visible),
+  // plus a title flash that restores when the tab is next focused.
+  const notifyCompletion = useCallback((title: string, body: string) => {
+    try {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body });
+      }
+    } catch {
+      // ignore notification errors
+    }
+    if (typeof document !== "undefined" && document.hidden) {
+      const original = document.title;
+      document.title = `⏰ ${title}`;
+      const restore = () => {
+        document.title = original;
+        document.removeEventListener("visibilitychange", restore);
+      };
+      document.addEventListener("visibilitychange", restore);
+    }
+  }, []);
+
   const handleExpired = useCallback(async (state: TimerState) => {
     if (!state.isBreak && state.sessionId) {
       try {
@@ -135,6 +157,7 @@ export function useFocusTimer() {
   const completeWork = useCallback(async () => {
     if (!timerState) return;
     playNotification();
+    notifyCompletion("Focus session complete", "Nice work — time for a break.");
 
     if (timerState.sessionId) {
       try {
@@ -166,16 +189,17 @@ export function useFocusTimer() {
     setSecondsLeft(timerState.breakDuration);
     completionHandledRef.current = false;
     setIsRunning(true);
-  }, [timerState, playNotification]);
+  }, [timerState, playNotification, notifyCompletion]);
 
   const completeBreak = useCallback(() => {
     playNotification();
+    notifyCompletion("Break over", "Ready for the next focus session?");
     storeState(null);
     setTimerState(null);
     setSecondsLeft(0);
     setIsRunning(false);
     completionHandledRef.current = false;
-  }, [playNotification]);
+  }, [playNotification, notifyCompletion]);
 
   // Handle timer reaching 0. State writes are deferred via queueMicrotask so they
   // don't fire inside the effect's render phase (React 19 set-state-in-effect rule).
@@ -190,6 +214,16 @@ export function useFocusTimer() {
   }, [secondsLeft, timerState, completeBreak, completeWork]);
 
   const start = async (workMinutes: number, breakMinutes: number, taskId: string | null, taskName: string | null) => {
+    // Ask for notification permission at a natural moment — the user just chose
+    // to start a focus session — so completion can alert a backgrounded tab.
+    try {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
     // Create session in DB
     let sessionId: string | null = null;
     try {

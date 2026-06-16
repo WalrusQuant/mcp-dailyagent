@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, FileText } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Loader2, FileText, AlertCircle } from "lucide-react";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { startOfWeek, getToday } from "@/lib/dates";
@@ -13,6 +13,7 @@ export function WeeklyReview() {
   const [weekStart, setWeekStart] = useState(startOfWeek(getToday()));
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<{
     tasks?: { total: number; done: number };
     habits?: { total: number; completedToday: number; streak: number };
@@ -20,31 +21,34 @@ export function WeeklyReview() {
     workouts?: { weekCount: number };
   } | null>(null);
 
+  const loadReview = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setError(false);
+    try {
+      const response = await fetch(`/api/weekly-review?week=${weekStart}`, signal ? { signal } : undefined);
+      if (response.ok) {
+        const data = await response.json();
+        setContent(data && data.content ? data.content : "");
+      } else {
+        // A failed fetch is not the same as "no review yet" — don't blame the agent.
+        setError(true);
+        setContent("");
+      }
+    } catch {
+      if (signal?.aborted) return;
+      setError(true);
+      setContent("");
+    } finally {
+      if (!signal?.aborted) setIsLoading(false);
+    }
+  }, [weekStart]);
+
   useEffect(() => {
     // Abort on week change/unmount so a slow response can't render a stale week.
     const controller = new AbortController();
-    const loadReview = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/weekly-review?week=${weekStart}`, {
-          signal: controller.signal,
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setContent(data && data.content ? data.content : "");
-        } else {
-          setContent("");
-        }
-      } catch {
-        if (controller.signal.aborted) return;
-        setContent("");
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false);
-      }
-    };
-    loadReview();
+    loadReview(controller.signal);
     return () => controller.abort();
-  }, [weekStart]);
+  }, [loadReview]);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -68,6 +72,20 @@ export function WeeklyReview() {
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-3 py-12">
+          <AlertCircle className="w-6 h-6" style={{ color: "var(--text-muted)" }} />
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Couldn&apos;t load this week&apos;s review.
+          </p>
+          <button
+            onClick={() => loadReview()}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+            style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
+          >
+            Retry
+          </button>
         </div>
       ) : !content ? (
         <EmptyState

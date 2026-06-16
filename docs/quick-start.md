@@ -5,6 +5,7 @@ Stand up your instance in about five minutes using the prebuilt container image.
 ## Prerequisites
 
 - A host with **Docker Engine + Docker Compose v2** (any Linux VPS, Raspberry Pi, Apple Silicon Mac, etc. — the image is multi-arch)
+- **`curl`** and **`jq`** for the verification step below (`apt install jq` / `brew install jq` if missing), plus **`openssl`** and **`uuidgen`** (ships with `util-linux`) to generate the secrets
 - **Tailscale** (or another way to reach the host privately — the dashboard has no login; Tailscale *is* the auth layer)
 - An **OpenClaw** install somewhere (your laptop, another VPS — wherever you run the agent)
 
@@ -76,10 +77,11 @@ Expected — `ok: true`, the transport name, and surface counts:
   "transport": "streamable-http",
   "tools": 45,
   "prompts": 13,
-  "resources": 15,
-  "version": "0.1.0"
+  "resources": 15
 }
 ```
+
+(The endpoint also returns a `version` field matching the image you pulled.)
 
 **Authenticated `tools/list`** (uses the bearer token from `.env`):
 
@@ -172,7 +174,7 @@ Mirrored to Docker Hub if you prefer:
 docker.io/walrusquant/cadence:latest
 ```
 
-Available tags: `:latest` (tracks `main`), `:1` / `:1.0` / `:1.0.0` (semver — `:1` floats within the v1 major, `:1.0` within v1.0, `:1.0.0` is an exact pin), and `:sha-<short>` for a pin to a specific commit. Pin to `:1` for safe auto-upgrades within the major version.
+Available tags (no `v` prefix): `:latest` (tracks `main`), semver pins like `:2` / `:2.2` / `:2.2.0` (`:2` floats within the current major, `:2.2` within that minor, `:2.2.0` is an exact pin), and `:sha-<short>` for a pin to a specific commit. Pin to the current major (`:2`) for safe auto-upgrades within it — check [the GHCR tags](https://github.com/WalrusQuant/cadence/pkgs/container/cadence) for the latest.
 
 ## What next
 

@@ -11,17 +11,22 @@ interface DailyStartCardProps {
   tasks: { total: number; done: number; topPriorities: Task[] };
   habits: { total: number; completedToday: number; streak: number };
   focus: { todayMinutes: number; todaySessions: number };
+  onTaskComplete?: () => void;
 }
 
-export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
+export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailyStartCardProps) {
   const timer = useFocusTimerContext();
   const { addToast } = useToast();
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && sessionStorage.getItem("daily-start-dismissed") === "true"
   );
-  const [taskDone, setTaskDone] = useState(false);
+  const [completedId, setCompletedId] = useState<string | null>(null);
 
   const topTask = tasks.topPriorities.find((t) => !t.done) || null;
+  // Derived, not effect-synced: strike through only while the just-completed
+  // task is still the top task. Once a reload refreshes props it drops off the
+  // undone list and the card advances to the next task on its own.
+  const showDone = !!topTask && topTask.id === completedId;
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -31,19 +36,23 @@ export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
   const handleCompleteTask = async () => {
     if (!topTask) return;
     // Optimistic update
-    setTaskDone(true);
+    setCompletedId(topTask.id);
     try {
       const response = await fetch(`/api/tasks/${topTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ done: true }),
       });
-      if (!response.ok) {
-        setTaskDone(false);
+      if (response.ok) {
+        addToast("Task completed");
+        // Refresh the dashboard widgets so counts/progress reflect the change.
+        onTaskComplete?.();
+      } else {
+        setCompletedId(null);
         addToast("Failed to complete task");
       }
     } catch {
-      setTaskDone(false);
+      setCompletedId(null);
       addToast("Failed to complete task");
     }
   };
@@ -93,9 +102,9 @@ export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
         <div className="flex items-center gap-3">
           <CheckCircle2
             className="w-4 h-4 shrink-0"
-            style={{ color: taskDone ? "var(--accent-positive)" : "var(--text-muted)" }}
+            style={{ color: showDone ? "var(--accent-positive)" : "var(--text-muted)" }}
           />
-          {topTask && !taskDone ? (
+          {topTask && !showDone ? (
             <button
               onClick={handleCompleteTask}
               className="flex-1 text-left text-sm transition-colors"
@@ -109,7 +118,7 @@ export function DailyStartCard({ tasks, habits, focus }: DailyStartCardProps) {
               </span>
               {topTask.title}
             </button>
-          ) : taskDone ? (
+          ) : showDone ? (
             <span className="text-sm line-through" style={{ color: "var(--text-muted)" }}>
               {topTask?.title || "Task completed"}
             </span>

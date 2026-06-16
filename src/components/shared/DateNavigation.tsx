@@ -7,14 +7,23 @@ interface DateNavigationProps {
   date: string;
   onDateChange: (date: string) => void;
   mode?: "day" | "week";
+  /** Latest navigable date (YYYY-MM-DD). Disables forward nav past it. */
+  maxDate?: string;
 }
 
-export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigationProps) {
+export function DateNavigation({ date, onDateChange, mode = "day", maxDate }: DateNavigationProps) {
+  const nextDisabled = maxDate
+    ? mode === "week"
+      ? startOfWeek(date) >= startOfWeek(maxDate)
+      : date >= maxDate
+    : false;
+
   const handlePrev = () => {
     onDateChange(addDays(date, mode === "week" ? -7 : -1));
   };
 
   const handleNext = () => {
+    if (nextDisabled) return;
     onDateChange(addDays(date, mode === "week" ? 7 : 1));
   };
 
@@ -26,6 +35,7 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
     <div className="flex items-center gap-2">
       <button
         onClick={handlePrev}
+        aria-label={mode === "week" ? "Previous week" : "Previous day"}
         className="p-1.5 rounded-lg transition-colors hover:opacity-80"
         style={{ color: "var(--text-secondary)" }}
       >
@@ -39,7 +49,9 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
       </span>
       <button
         onClick={handleNext}
-        className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+        disabled={nextDisabled}
+        aria-label={mode === "week" ? "Next week" : "Next day"}
+        className="p-1.5 rounded-lg transition-colors hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:opacity-30"
         style={{ color: "var(--text-secondary)" }}
       >
         <ChevronRight className="w-4 h-4" />

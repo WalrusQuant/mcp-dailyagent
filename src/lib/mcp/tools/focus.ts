@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema } from "./validators";
+import { dateSchema, uuidSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ export function registerFocusTools(server: McpServer) {
     "Start a new focus/Pomodoro session",
     {
       duration_minutes: z.number().int().min(1).max(480).describe("Focus session duration in minutes (1-480, e.g. 25)"),
-      task_id: z.string().optional().describe("Task ID to associate this session with"),
+      task_id: uuidSchema.optional().describe("Task ID to associate this session with (from list_tasks)"),
       break_minutes: z.number().int().min(0).max(120).optional().describe("Break duration in minutes (0-120, default: 5)"),
     },
     async (args, extra: Extra) => {
@@ -211,7 +211,7 @@ export function registerFocusTools(server: McpServer) {
     "complete_focus_session",
     "Mark a focus session as complete. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      session_id: z.string().describe("Focus session ID to complete"),
+      session_id: uuidSchema.describe("Focus session ID to complete (from get_focus_sessions)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -251,7 +251,7 @@ export function registerFocusTools(server: McpServer) {
     "pause_focus_session",
     "Pause an in-progress focus session (sets status to 'paused'). Resume it later with resume_focus_session. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      session_id: z.string().describe("Focus session ID to pause"),
+      session_id: uuidSchema.describe("Focus session ID to pause (from get_focus_sessions)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -291,7 +291,7 @@ export function registerFocusTools(server: McpServer) {
     "resume_focus_session",
     "Resume a paused focus session (sets status back to 'active'). Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      session_id: z.string().describe("Focus session ID to resume"),
+      session_id: uuidSchema.describe("Focus session ID to resume (from get_focus_sessions)"),
       expected_updated_at: z
         .string()
         .datetime()

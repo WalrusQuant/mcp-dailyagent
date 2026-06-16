@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema, prioritySchema, priorityDescription } from "./validators";
+import { dateSchema, prioritySchema, priorityDescription, uuidSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
 
@@ -167,7 +167,7 @@ export function registerTaskTools(server: McpServer) {
     "List tasks for a given date (defaults to today). Incomplete tasks from previous days are included when viewing today.",
     {
       date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
-      space_id: z.string().optional().describe("Filter by space/project ID"),
+      space_id: uuidSchema.optional().describe("Filter by space/project ID (from list_spaces)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -192,8 +192,8 @@ export function registerTaskTools(server: McpServer) {
       notes: z.string().optional().describe("Additional notes"),
       priority: prioritySchema.optional().describe(priorityDescription),
       task_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
-      space_id: z.string().optional().describe("Space/project ID to assign to"),
-      goal_id: z.string().optional().describe("Goal ID to link to"),
+      space_id: uuidSchema.optional().describe("Space/project ID to assign to (from list_spaces)"),
+      goal_id: uuidSchema.optional().describe("Goal ID to link to (from list_goals)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -212,9 +212,9 @@ export function registerTaskTools(server: McpServer) {
   // --- update_task (WRITE) ---
   server.tool(
     "update_task",
-    "Update an existing task. Marking a recurring task done schedules its next occurrence (same as complete_task). Pass expected_updated_at (from the last read of this task) to opt into concurrency-safe writes — the call will fail with a conflict if the task was modified in the meantime.",
+    "Update one or more fields of an existing task. To only mark a task done, prefer complete_task. Marking a recurring task done schedules its next occurrence (same as complete_task). Pass expected_updated_at (from the last read of this task) to opt into concurrency-safe writes — the call will fail with a conflict if the task was modified in the meantime.",
     {
-      task_id: z.string().describe("Task ID"),
+      task_id: uuidSchema.describe("Task ID (from list_tasks)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -269,9 +269,9 @@ export function registerTaskTools(server: McpServer) {
   // --- complete_task (WRITE) ---
   server.tool(
     "complete_task",
-    "Mark a task as complete. Pass expected_updated_at to opt into concurrency-safe writes.",
+    "Mark a task as complete. Preferred for simply finishing a task; use update_task only when also changing other fields. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      task_id: z.string().describe("Task ID to complete"),
+      task_id: uuidSchema.describe("Task ID to complete (from list_tasks)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -321,7 +321,7 @@ export function registerTaskTools(server: McpServer) {
     "delete_task",
     "Delete a task permanently",
     {
-      task_id: z.string().describe("Task ID to delete"),
+      task_id: uuidSchema.describe("Task ID to delete (from list_tasks)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

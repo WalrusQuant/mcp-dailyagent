@@ -39,7 +39,10 @@ export function Settings() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors"
+                aria-label={tab.label}
+                aria-pressed={isActive}
+                title={tab.label}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                 style={{
                   background: isActive ? "var(--bg-elevated)" : "transparent",
                   color: isActive

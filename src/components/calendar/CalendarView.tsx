@@ -13,6 +13,7 @@ export function CalendarView() {
   const [gridDates, setGridDates] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<Record<string, DaySummary>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -25,28 +26,33 @@ export function CalendarView() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  const fetchMonth = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/calendar?month=${currentMonth}`, signal ? { signal } : undefined);
+      if (res.ok) {
+        const data = await res.json();
+        setSummaries(data.summaries);
+        setGridDates(data.gridDates);
+      } else {
+        setError(true);
+      }
+    } catch (err) {
+      if (signal?.aborted) return;
+      console.error("Failed to fetch calendar data:", err);
+      setError(true);
+    } finally {
+      if (!signal?.aborted) setIsLoading(false);
+    }
+  }, [currentMonth]);
+
   useEffect(() => {
     // Abort on month change/unmount so a slow response can't render a stale month.
     const controller = new AbortController();
-    const fetchMonth = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/calendar?month=${currentMonth}`, { signal: controller.signal });
-        if (res.ok) {
-          const data = await res.json();
-          setSummaries(data.summaries);
-          setGridDates(data.gridDates);
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        console.error("Failed to fetch calendar data:", err);
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false);
-      }
-    };
-    fetchMonth();
+    fetchMonth(controller.signal);
     return () => controller.abort();
-  }, [currentMonth]);
+  }, [fetchMonth]);
 
   // Click-driven (not effect-driven), so guard with a request counter: only
   // the latest selected day's response may write state.
@@ -108,6 +114,7 @@ export function CalendarView() {
         <div className="flex items-center gap-1">
           <button
             onClick={goToPrev}
+            aria-label="Previous month"
             className="p-2 rounded-lg transition-colors hover:opacity-80"
             style={{ color: "var(--text-secondary)" }}
           >
@@ -121,6 +128,7 @@ export function CalendarView() {
           </h2>
           <button
             onClick={goToNext}
+            aria-label="Next month"
             className="p-2 rounded-lg transition-colors hover:opacity-80"
             style={{ color: "var(--text-secondary)" }}
           >
@@ -146,6 +154,19 @@ export function CalendarView() {
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+        </div>
+      ) : error ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Couldn&apos;t load the calendar.
+          </p>
+          <button
+            onClick={() => fetchMonth()}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+            style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
+          >
+            Retry
+          </button>
         </div>
       ) : gridDates.length > 0 ? (
         <CalendarGrid

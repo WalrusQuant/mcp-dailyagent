@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, CheckSquare, Target, CalendarDays } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { ArrowLeft, CheckSquare, Target, CalendarDays, Plus } from "lucide-react";
 import { Goal, Task, Habit, GoalProgressLog } from "@/types/database";
 import { SparklineChart } from "@/components/shared/SparklineChart";
+import { formatDate, getToday } from "@/lib/dates";
+import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 
 interface GoalWithLinked extends Goal {
   tasks: Task[];
@@ -29,24 +31,26 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
   const [goal, setGoal] = useState<GoalWithLinked | null>(null);
   const [progressLogs, setProgressLogs] = useState<GoalProgressLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [goalRes, progressRes] = await Promise.all([
+        fetch(`/api/goals/${goalId}`),
+        fetch(`/api/goals/${goalId}/progress`),
+      ]);
+      if (goalRes.ok) setGoal(await goalRes.json());
+      if (progressRes.ok) setProgressLogs(await progressRes.json());
+    } catch (err) {
+      console.error("Failed to load goal detail:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [goalId]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [goalRes, progressRes] = await Promise.all([
-          fetch(`/api/goals/${goalId}`),
-          fetch(`/api/goals/${goalId}/progress`),
-        ]);
-        if (goalRes.ok) setGoal(await goalRes.json());
-        if (progressRes.ok) setProgressLogs(await progressRes.json());
-      } catch (err) {
-        console.error("Failed to load goal detail:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     load();
-  }, [goalId]);
+  }, [load]);
 
   if (isLoading) {
     return (
@@ -116,7 +120,7 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           {goal.target_date && (
             <span className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3" />
-              Target: {goal.target_date}
+              Target: {formatDate(goal.target_date)}
             </span>
           )}
           <span className="capitalize">{goal.progress_mode} progress</span>
@@ -138,6 +142,13 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           <h3 className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
             Linked Tasks ({doneTasks}/{goal.tasks.length})
           </h3>
+          <button
+            onClick={() => setShowTaskForm(true)}
+            className="ml-auto flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors"
+            style={{ color: "var(--accent-primary)" }}
+          >
+            <Plus className="w-3 h-3" /> Add task
+          </button>
         </div>
         {goal.tasks.length === 0 ? (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>No tasks linked to this goal</p>
@@ -177,6 +188,18 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           </div>
         )}
       </div>
+
+      {showTaskForm && (
+        <TaskFormModal
+          defaultGoalId={goal.id}
+          defaultDate={getToday()}
+          onClose={() => setShowTaskForm(false)}
+          onSave={() => {
+            setShowTaskForm(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

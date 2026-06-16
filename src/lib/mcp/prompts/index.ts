@@ -381,7 +381,7 @@ export function registerPrompts(server: McpServer) {
   // 1. daily_planning
   server.prompt(
     "daily_planning",
-    "Plan my day based on tasks, habits, and calendar",
+    "Plan my day based on tasks, habits, and goals",
     {},
     async (_args, extra: Extra) => {
       const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "goals:read"]);
@@ -411,10 +411,12 @@ ${JSON.stringify(goals, null, 2)}
 
 Based on this data, please:
 1. Identify my top 3 priority tasks for today (A-priority or most impactful)
-2. Suggest a time-blocked schedule
+2. Suggest an order to tackle the tasks in, grouped by priority
 3. Highlight any habits I haven't completed yet
 4. Note which tasks align with my active goals
-5. Give me a motivating focus for the day`;
+5. Give me a motivating focus for the day
+
+If the data above is empty, do not invent tasks, habits, or goals — say there is nothing scheduled yet and suggest I add some.`;
 
       return {
         messages: [
@@ -458,7 +460,11 @@ ${JSON.stringify(pendingTasks.slice(0, 10), null, 2)}
 ### Habits
 ${JSON.stringify(habits, null, 2)}
 
-Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence motivational close.`;
+Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence motivational close.
+
+If the data above is empty, do not invent tasks or habits — say there is nothing scheduled yet.
+
+After composing the briefing, save it so it shows on the dashboard: call the \`save_daily_briefing\` tool with \`content\` set to your full briefing text. \`briefing_date\` defaults to today (${today}); only set it to write a different day.`;
 
       return {
         messages: [
@@ -605,7 +611,9 @@ Please:
 2. Diagnose the habits I'm struggling with
 3. Suggest habit stacking opportunities (linking weak habits to strong ones)
 4. Recommend 1-2 habits to add or remove based on the patterns
-5. Give me a concrete improvement plan for the next 2 weeks`;
+5. Give me a concrete improvement plan for the next 2 weeks
+
+If I have no habits yet, do not invent any — say so and suggest a first habit or two worth starting.`;
 
       return {
         messages: [
@@ -762,7 +770,9 @@ Please structure the review with:
 2. **Challenges** — What got in the way?
 3. **Lessons** — What did I learn?
 4. **Next week's intention** — Top 3 focus areas
-5. **Carry-forward tasks** — What needs to move to next week?`;
+5. **Carry-forward tasks** — What needs to move to next week?
+
+After writing the review, save it so it shows on the dashboard: call the \`save_weekly_review\` tool with \`week_start\` exactly equal to "${weekStart}" and \`content\` set to your full review.`;
 
       return {
         messages: [
@@ -848,12 +858,16 @@ ${JSON.stringify(recentWorkouts, null, 2)}
 ## My Saved Templates
 ${JSON.stringify(templates, null, 2)}
 
+Note: the data above only includes exercise names and durations — no sets, reps, weight, or muscle-group labels.
+
 Please:
-1. Identify what muscle groups/types I've recently trained
-2. Recommend what I should focus on today based on recovery needs
+1. Infer the likely muscle groups/types I've recently trained from the exercise names where you can (this is approximate)
+2. Recommend what I should focus on today based on apparent recovery needs
 3. Suggest either a specific saved template or a custom workout plan
-4. Include sets/reps if creating a custom plan
-5. Estimate total time needed`;
+4. Include suggested sets/reps if creating a custom plan
+5. Estimate total time needed
+
+If I have no recent workouts or templates, do not invent history — suggest a sensible starting workout instead.`;
 
       return {
         messages: [
@@ -879,7 +893,15 @@ Please:
 
       if (!goal) {
         return {
-          messages: [{ role: "user" as const, content: { type: "text" as const, text: "Goal not found" } }],
+          messages: [
+            {
+              role: "user" as const,
+              content: {
+                type: "text" as const,
+                text: `ERROR: No goal exists with id "${args.goal_id}". Do not generate a plan — tell the user the goal ID is invalid and suggest they list their goals to find the right one.`,
+              },
+            },
+          ],
         };
       }
 

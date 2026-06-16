@@ -26,6 +26,7 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
   const [description, setDescription] = useState(goal?.description || "");
   const [category, setCategory] = useState<string>(goal?.category || "personal");
   const [targetDate, setTargetDate] = useState(goal?.target_date || "");
+  const [status, setStatus] = useState<string>(goal?.status || "active");
   const [progressMode, setProgressMode] = useState(goal?.progress_mode || "auto");
   const [progress, setProgress] = useState(goal?.progress || 0);
   const [isSaving, setIsSaving] = useState(false);
@@ -50,6 +51,12 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
 
       if (progressMode === "manual") {
         body.progress = progress;
+      }
+
+      // Status transitions (complete/abandon/reactivate) only apply to an
+      // existing goal; a new goal always starts active.
+      if (goal) {
+        body.status = status;
       }
 
       if (goal?.updated_at) {
@@ -147,6 +154,24 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
             />
           </div>
         </div>
+
+        {goal && (
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+              style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+            >
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="abandoned">Abandoned</option>
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>

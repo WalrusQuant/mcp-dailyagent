@@ -117,6 +117,8 @@ docker compose up -d --build app
 
 The entrypoint runs any pending migrations on container start.
 
+> This is the **from-source** path — it rebuilds the image locally, so the compose file must use `build:` (not `image:`). If you instead followed the prebuilt-image [quick-start](quick-start.md) (compose uses `image: ghcr.io/...`), update with `docker compose pull && docker compose up -d` — `--build` has nothing to build there.
+
 **View logs:**
 
 ```bash

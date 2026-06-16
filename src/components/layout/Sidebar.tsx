@@ -21,9 +21,11 @@ import {
   FileText,
   CalendarDays,
   Crosshair,
+  Search,
 } from "lucide-react";
 import { FocusTimerBadge } from "@/components/focus/FocusTimerBadge";
 import { useTheme } from "@/lib/theme";
+import { useCommandPalette } from "@/lib/command-palette-context";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -37,6 +39,12 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { toggle: toggleCommandPalette } = useCommandPalette();
+
+  const handleSearchClick = () => {
+    toggleCommandPalette();
+    handleNavClick();
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -148,6 +156,16 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
           {collapsed ? (
             <div className="flex flex-col items-center gap-0.5">
+              <button
+                onClick={handleSearchClick}
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: "var(--text-secondary)" }}
+                title="Search (⌘K)"
+                aria-label="Search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+
               {primaryLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -212,6 +230,21 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
             </div>
           ) : (
             <div className="space-y-0.5">
+              <button
+                onClick={handleSearchClick}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <Search className="w-4 h-4" />
+                <span className="flex-1 text-left">Search</span>
+                <kbd
+                  className="text-[10px] px-1.5 py-0.5 rounded"
+                  style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                >
+                  ⌘K
+                </kbd>
+              </button>
+
               {primaryLinks.map((link) => (
                 <Link
                   key={link.href}

@@ -14,8 +14,8 @@ interface SpaceFormModalProps {
 export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) {
   const [name, setName] = useState(space?.name || "");
   const [description, setDescription] = useState(space?.description || "");
-  const [status] = useState<"active" | "paused" | "completed">(space?.status || "active");
-  const [deadline] = useState(space?.deadline || "");
+  const [status, setStatus] = useState<"active" | "paused" | "completed">(space?.status || "active");
+  const [deadline, setDeadline] = useState(space?.deadline || "");
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
 
@@ -128,6 +128,36 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
               rows={3}
               placeholder="What is this space about?"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as "active" | "paused" | "completed")}
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+              >
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                Deadline
+              </label>
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

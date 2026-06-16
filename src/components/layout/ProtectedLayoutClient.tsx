@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -30,14 +30,6 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const { toggle: toggleCommandPalette } = useCommandPalette();
 
-  const focusSidebarSearch = useCallback(() => {
-    setSidebarOpen(true);
-    setCollapsed(false);
-    setTimeout(() => {
-      window.dispatchEvent(new Event("focus-sidebar-search"));
-    }, 100);
-  }, []);
-
   // Fix iOS PWA bottom gap: innerHeight excludes ~62px on initial load
   // in standalone mode, but screen.height is always correct (874 vs 812).
   // Use screen.height on mount, innerHeight on resize (corrected by then).
@@ -57,7 +49,6 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
   useKeyboardShortcuts([
     { key: "k", metaKey: true, allowInInput: true, handler: toggleCommandPalette },
-    { key: "s", metaKey: true, shiftKey: true, handler: focusSidebarSearch },
     {
       key: "Escape",
       handler: () => {

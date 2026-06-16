@@ -8,7 +8,7 @@ export function registerBriefingResources(server: McpServer) {
   server.resource(
     "briefing-today",
     "cadence://briefing/today",
-    { description: "Today's AI-generated daily briefing, if one has been generated" },
+    { description: "Today's saved daily briefing, if one exists" },
     async (uri, extra: Extra) => {
       const auth = getAuth(extra);
       if (!auth) return { contents: [] };

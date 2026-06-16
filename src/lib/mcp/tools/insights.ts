@@ -16,13 +16,12 @@ const insightsPayloadSchema = z.union([
 // Query helpers
 // ---------------------------------------------------------------------------
 
-async function getTodayInsights(userId: string) {
-  const today = getToday();
+async function getInsightsForDate(userId: string, date: string) {
   try {
     const rows = await db
       .select()
       .from(insightCache)
-      .where(and(eq(insightCache.userId, userId), eq(insightCache.cacheDate, today)));
+      .where(and(eq(insightCache.userId, userId), eq(insightCache.cacheDate, date)));
     return { data: rows.length > 0 ? rows[0] : null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
@@ -59,20 +58,23 @@ export function registerInsightTools(server: McpServer) {
   // --- get_insights (READ) ---
   server.tool(
     "get_insights",
-    "Get today's cached insights",
-    {},
-    async (_args, extra: Extra) => {
+    "Get cached insights for a date (defaults to today)",
+    {
+      date: dateSchema.optional().describe("Cache date in YYYY-MM-DD format (defaults to today)"),
+    },
+    async (args, extra: Extra) => {
       const auth = getAuth(extra);
       if (!auth) return NOT_AUTHENTICATED;
 
       const scopeError = checkScope(auth.scopes, "insights:read");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await getTodayInsights(auth.userId);
+      const date = args.date ?? getToday();
+      const result = await getInsightsForDate(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       if (!result.data) {
-        return textResult({ message: "No insights saved for today." });
+        return textResult({ message: `No insights saved for ${date}.` });
       }
 
       return textResult(result.data);

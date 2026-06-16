@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Dumbbell, Play, FileText } from "lucide-react";
 import { CardSkeleton } from "@/components/shared/Skeleton";
 import { WorkoutTemplate, WorkoutExercise, WorkoutLog, WorkoutLogExercise } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useToast } from "@/lib/toast-context";
 import { WorkoutLogCard } from "./WorkoutLogCard";
-import { WorkoutLogger } from "./WorkoutLogger";
+import { WorkoutLogger, loadWorkoutDraft } from "./WorkoutLogger";
 import { TemplateFormModal } from "./TemplateFormModal";
 import { WorkoutStats } from "./WorkoutStats";
 
@@ -44,7 +44,23 @@ export function WorkoutDashboard() {
     loadData();
   }, [loadData]);
 
+  // Re-open an in-progress workout that survived a refresh / PWA kill.
+  const restoredDraftRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || restoredDraftRef.current) return;
+    restoredDraftRef.current = true;
+    const draft = loadWorkoutDraft();
+    if (!draft) return;
+    if (draft.templateId === null) {
+      setActiveWorkout("quick");
+    } else {
+      const tpl = templates.find((t) => t.id === draft.templateId);
+      if (tpl) setActiveWorkout(tpl);
+    }
+  }, [isLoading, templates]);
+
   const handleDeleteLog = async (log: WorkoutLog) => {
+    if (!confirm(`Delete the "${log.name}" workout? This removes its logged exercises and cannot be undone.`)) return;
     try {
       const response = await fetch(`/api/workouts/logs/${log.id}`, { method: "DELETE" });
       if (response.ok) {
@@ -70,20 +86,24 @@ export function WorkoutDashboard() {
   if (activeWorkout) {
     const template = activeWorkout === "quick" ? undefined : activeWorkout;
     return (
-      <div className="max-w-2xl mx-auto p-4 md:p-6">
-        <WorkoutLogger
-          template={template}
-          onSave={() => { setActiveWorkout(null); loadData(); }}
-          onCancel={() => setActiveWorkout(null)}
-        />
+      <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+        <div className="max-w-2xl mx-auto p-4 md:p-6">
+          <WorkoutLogger
+            template={template}
+            onSave={() => { setActiveWorkout(null); loadData(); }}
+            onCancel={() => setActiveWorkout(null)}
+          />
+        </div>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto p-4 md:p-6">
-        <CardSkeleton />
+      <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+        <div className="max-w-2xl mx-auto p-4 md:p-6">
+          <CardSkeleton />
+        </div>
       </div>
     );
   }

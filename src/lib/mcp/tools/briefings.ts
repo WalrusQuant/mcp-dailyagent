@@ -11,13 +11,12 @@ import { dateSchema } from "./validators";
 // Query helpers
 // ---------------------------------------------------------------------------
 
-async function getTodayBriefing(userId: string) {
-  const today = getToday();
+async function getBriefingForDate(userId: string, date: string) {
   try {
     const rows = await db
       .select()
       .from(dailyBriefings)
-      .where(and(eq(dailyBriefings.userId, userId), eq(dailyBriefings.briefingDate, today)));
+      .where(and(eq(dailyBriefings.userId, userId), eq(dailyBriefings.briefingDate, date)));
     return { data: rows.length > 0 ? rows[0] : null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
@@ -55,20 +54,23 @@ export function registerBriefingTools(server: McpServer) {
   // --- get_daily_briefing (READ) ---
   server.tool(
     "get_daily_briefing",
-    "Get the daily briefing for today",
-    {},
-    async (_args, extra: Extra) => {
+    "Get the daily briefing for a date (defaults to today)",
+    {
+      date: dateSchema.optional().describe("Briefing date in YYYY-MM-DD format (defaults to today)"),
+    },
+    async (args, extra: Extra) => {
       const auth = getAuth(extra);
       if (!auth) return NOT_AUTHENTICATED;
 
       const scopeError = checkScope(auth.scopes, "briefing:read");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await getTodayBriefing(auth.userId);
+      const date = args.date ?? getToday();
+      const result = await getBriefingForDate(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       if (!result.data) {
-        return textResult({ message: "No briefing saved for today." });
+        return textResult({ message: `No briefing saved for ${date}.` });
       }
 
       return textResult(result.data);
