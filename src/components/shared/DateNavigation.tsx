@@ -26,6 +26,7 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
     <div className="flex items-center gap-2">
       <button
         onClick={handlePrev}
+        aria-label={mode === "week" ? "Previous week" : "Previous day"}
         className="p-1.5 rounded-lg transition-colors hover:opacity-80"
         style={{ color: "var(--text-secondary)" }}
       >
@@ -39,6 +40,7 @@ export function DateNavigation({ date, onDateChange, mode = "day" }: DateNavigat
       </span>
       <button
         onClick={handleNext}
+        aria-label={mode === "week" ? "Next week" : "Next day"}
         className="p-1.5 rounded-lg transition-colors hover:opacity-80"
         style={{ color: "var(--text-secondary)" }}
       >

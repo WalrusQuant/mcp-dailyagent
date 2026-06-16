@@ -17,7 +17,9 @@ import {
   FileText,
   Settings,
   Crosshair,
+  Search,
 } from "lucide-react";
+import { useCommandPalette } from "@/lib/command-palette-context";
 
 const TABS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: "/dashboard" },
@@ -38,6 +40,7 @@ const MORE_ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { toggle: toggleCommandPalette } = useCommandPalette();
   const [showMore, setShowMore] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
@@ -82,6 +85,14 @@ export function BottomNav() {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => { setShowMore(false); toggleCommandPalette(); }}
+                className="flex flex-col items-center gap-1 py-3 rounded-lg transition-colors"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <Search className="w-5 h-5" />
+                <span className="text-xs">Search</span>
+              </button>
               {MORE_ITEMS.map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (

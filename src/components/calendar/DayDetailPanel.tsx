@@ -41,6 +41,7 @@ export function DayDetailPanel({ detail, isLoading, onClose, isMobile }: DayDeta
         </h3>
         <button
           onClick={onClose}
+          aria-label="Close"
           className="p-1 rounded-lg transition-colors"
           style={{ color: "var(--text-muted)" }}
         >
