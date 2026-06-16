@@ -76,11 +76,13 @@ export function HabitRow({ habit, weekDates, loggedDates, streak, completionRate
 
       {/* Row 3 (mobile) / inline (desktop): stats + desktop actions */}
       <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-        {completionRate > 0 && (
-          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-            {Math.round(completionRate * 100)}%
-          </span>
-        )}
+        <span
+          className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+          style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+          title="30-day completion rate"
+        >
+          {Math.round(completionRate * 100)}%
+        </span>
         {streak > 0 && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: "var(--bg-elevated)", color: "var(--accent-primary)" }}>
             {streak}d streak

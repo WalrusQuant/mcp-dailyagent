@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, CheckSquare, Target, CalendarDays } from "lucide-react";
 import { Goal, Task, Habit, GoalProgressLog } from "@/types/database";
 import { SparklineChart } from "@/components/shared/SparklineChart";
+import { formatDate } from "@/lib/dates";
 
 interface GoalWithLinked extends Goal {
   tasks: Task[];
@@ -116,7 +117,7 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           {goal.target_date && (
             <span className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3" />
-              Target: {goal.target_date}
+              Target: {formatDate(goal.target_date)}
             </span>
           )}
           <span className="capitalize">{goal.progress_mode} progress</span>

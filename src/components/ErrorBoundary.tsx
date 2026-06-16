@@ -56,16 +56,42 @@ export class ErrorBoundary extends Component<
               Something went wrong
             </h2>
             <p className="mb-6" style={{ color: "var(--text-secondary)" }}>
-              {this.state.error?.message || "An unexpected error occurred"}
+              An unexpected error occurred. Try again, or reload the page.
             </p>
-            <button
-              onClick={this.handleRetry}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg hover:opacity-90 transition-opacity font-medium"
-              style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-            >
-              <RefreshCw className="w-4 h-4" />
-              Try Again
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                onClick={this.handleRetry}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:opacity-90 transition-opacity font-medium"
+                style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 rounded-lg transition-colors font-medium"
+                style={{ color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}
+              >
+                Reload page
+              </button>
+              <a
+                href="/dashboard"
+                className="px-4 py-2 rounded-lg transition-colors font-medium"
+                style={{ color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}
+              >
+                Go to dashboard
+              </a>
+            </div>
+            {this.state.error?.message && (
+              <details className="mt-6 text-left max-w-full">
+                <summary className="text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
+                  Technical details
+                </summary>
+                <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: "var(--text-muted)" }}>
+                  {this.state.error.message}
+                </pre>
+              </details>
+            )}
           </div>
         </div>
       );

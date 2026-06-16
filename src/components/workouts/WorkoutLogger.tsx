@@ -169,6 +169,7 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
           <button
             onClick={handleSave}
             disabled={exercises.length === 0 || isSaving}
+            title={exercises.length === 0 ? "Add at least one exercise first" : undefined}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
           >
@@ -179,6 +180,11 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
       </div>
 
       <div className="space-y-3">
+        {exercises.length === 0 && (
+          <p className="text-sm text-center py-2" style={{ color: "var(--text-muted)" }}>
+            Add at least one exercise, then tap Finish to save.
+          </p>
+        )}
         {exercises.map((ex, i) => (
           <ExerciseSetInput
             key={i}

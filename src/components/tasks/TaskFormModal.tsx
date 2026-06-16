@@ -115,9 +115,12 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClo
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Priority
           </label>
+          <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+            A/B/C is importance; the number is sub-rank within it (1 = highest).
+          </p>
           <div className="grid grid-cols-3 gap-1">
             {["A", "B", "C"].map((letter) => (
               <div key={letter}>
