@@ -48,6 +48,7 @@ export function GoalList() {
   };
 
   const handleDelete = async (goal: Goal) => {
+    if (!confirm(`Delete "${goal.title}"? This also removes its progress history and cannot be undone. To keep the record, set it to Abandoned instead.`)) return;
     try {
       const res = await fetch(`/api/goals/${goal.id}`, { method: "DELETE" });
       if (res.ok) setGoals((prev) => prev.filter((g) => g.id !== goal.id));

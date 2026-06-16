@@ -185,6 +185,7 @@ export function HabitTracker() {
   };
 
   const handleDelete = async (habit: Habit) => {
+    if (!confirm(`Delete "${habit.name}"? This removes all of its logged history and streaks and cannot be undone. To keep the history, archive it instead.`)) return;
     // Optimistic removal
     const prevHabitsWithStats = habitsWithStats;
     setHabitsWithStats((prev) => prev.filter((hs) => hs.habit.id !== habit.id));

@@ -60,6 +60,7 @@ export function WorkoutDashboard() {
   }, [isLoading, templates]);
 
   const handleDeleteLog = async (log: WorkoutLog) => {
+    if (!confirm(`Delete the "${log.name}" workout? This removes its logged exercises and cannot be undone.`)) return;
     try {
       const response = await fetch(`/api/workouts/logs/${log.id}`, { method: "DELETE" });
       if (response.ok) {

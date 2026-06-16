@@ -198,6 +198,7 @@ export function TaskList() {
   };
 
   const handleDelete = async (task: Task) => {
+    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
     // Optimistic removal
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     try {
