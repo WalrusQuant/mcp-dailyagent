@@ -12,7 +12,9 @@
 - Stronger `expected_updated_at` guidance to nudge concurrency-safe writes by default — *low*
 - Instantiate a workout template into a log (optional `template_id` on `log_workout` or a new tool) — *low*
 
-**Dashboard / self-hoster — in progress / pending.** See findings below.
+**Dashboard — highs done** (branch `mcp-usability-fixes`): all 8 high-severity dashboard findings fixed — task-rollover wiring, unscrollable active workout, in-progress workout persistence, editable goal status, space status/deadline, calendar error state, icon-button aria-labels, and a discoverable/touch-reachable command palette (plus the dead Cmd+Shift+S shortcut retired). Remaining: 13 medium + 12 low dashboard findings.
+
+**Self-hoster — pending.** See findings below (image-tag + firewall doc fixes are the highest-value, lowest-risk).
 
 ## Executive summary
 
