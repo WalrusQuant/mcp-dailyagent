@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { LayoutDashboard } from "lucide-react";
 import { DashboardSkeleton } from "@/components/shared/Skeleton";
 import { TaskWidget } from "./TaskWidget";
@@ -28,21 +28,22 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await fetch("/api/dashboard");
-        if (response.ok) {
-          setData(await response.json());
-        }
-      } catch (error) {
-        console.error("Failed to load dashboard:", error);
-      } finally {
-        setIsLoading(false);
+  const reload = useCallback(async () => {
+    try {
+      const response = await fetch("/api/dashboard");
+      if (response.ok) {
+        setData(await response.json());
       }
-    };
-    load();
+    } catch (error) {
+      console.error("Failed to load dashboard:", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -68,7 +69,7 @@ export function Dashboard() {
       </div>
 
       <DailyBriefing />
-      <DailyStartCard tasks={data.tasks} habits={data.habits} focus={data.focus} />
+      <DailyStartCard tasks={data.tasks} habits={data.habits} focus={data.focus} onTaskComplete={reload} />
       <InsightCards />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
