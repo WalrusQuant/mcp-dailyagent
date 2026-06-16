@@ -2,6 +2,18 @@
 
 > Multi-agent review focused on user ability across three audiences: the dashboard human user, the self-hoster/installer, and the OpenClaw (model-agnostic LLM) MCP consumer. 60 findings verified against the actual code/docs.
 
+## Implementation status
+
+**MCP — done** (branch `mcp-usability-fixes`): 13 of 17 MCP findings fixed across two commits — the save-loop blocker, all three highs, and the safe validation/discoverability items.
+
+**MCP — deferred for later** (4 items; these change the tool contract OpenClaw already calls or add a feature, so they need a heads-up to whoever runs OpenClaw before shipping):
+- `exercises` payload as a real array instead of a JSON-encoded string (`tools/workouts.ts`) — *medium*
+- `save_insights` shape tightening to a minimal insight-object schema (`tools/insights.ts`) — *low*
+- Stronger `expected_updated_at` guidance to nudge concurrency-safe writes by default — *low*
+- Instantiate a workout template into a log (optional `template_id` on `log_workout` or a new tool) — *low*
+
+**Dashboard / self-hoster — in progress / pending.** See findings below.
+
 ## Executive summary
 
 Cadence's three audiences experience sharply different levels of polish. The **MCP/OpenClaw consumer** has the most damaging defect: no generative prompt instructs the agent to save its output, so the entire read→generate→save loop silently produces nothing and the dashboard's agent-fed widgets stay empty forever — a blocker that masks several other prompt/data-keying correctness risks. The **dashboard user** hits multiple built-but-unwired core features (task rollover, goal close-out, space lifecycle fields) plus two hard blockers on mobile (unscrollable active workout, unsaved in-progress workout loss). The **self-hoster** is mostly served well but is steered by docs toward a non-existent/stale image tag and a false-security firewall rule. The three highest-leverage fixes: (1) append explicit save-tool instructions to every generative prompt and echo machine-targeted date keys; (2) wire up the orphaned dashboard features (rollover banner, goal/space status editors) that already have full backend support; (3) correct the image-tag and firewall guidance in README/quick-start so installs don't fail or feel insecure.
