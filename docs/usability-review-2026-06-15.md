@@ -12,9 +12,18 @@
 - Stronger `expected_updated_at` guidance to nudge concurrency-safe writes by default — *low*
 - Instantiate a workout template into a log (optional `template_id` on `log_workout` or a new tool) — *low*
 
-**Dashboard — highs done** (branch `mcp-usability-fixes`): all 8 high-severity dashboard findings fixed — task-rollover wiring, unscrollable active workout, in-progress workout persistence, editable goal status, space status/deadline, calendar error state, icon-button aria-labels, and a discoverable/touch-reachable command palette (plus the dead Cmd+Shift+S shortcut retired). Remaining: 13 medium + 12 low dashboard findings.
+**Dashboard — highs + mediums + most lows done** (branch `mcp-usability-fixes`):
+- *Highs (8):* task-rollover wiring, unscrollable active workout, in-progress workout persistence, editable goal status, space status/deadline, calendar error state, icon-button aria-labels, discoverable/touch-reachable command palette (dead Cmd+Shift+S retired).
+- *Mediums:* honest empty/error states (briefing placeholder, weekly-review error vs empty), dashboard refresh after Daily Start, confirm-before-delete (tasks/goals/habits/workout logs), settings tab aria + visible focus rings, future-date clamping (habits/journal), recurrence badge, focus-completion system notifications, goal↔task linking (discoverable + two-directional), calendar day-cell aria-labels.
+- *Lows:* `@tailwindcss/typography` so briefings render styled markdown, ErrorBoundary generic message + reload/dashboard escapes, toast lifted above mobile nav, goal target-date formatting, always-show habit completion badge, workout-finish hint, priority sub-rank caption, cross-priority drag feedback, forgiving wipe confirmation, journal mood-needs-text hint.
 
-**Self-hoster — doc fixes done** (branch `mcp-usability-fixes`): image-tag references corrected (`:v1`/`:1` → current major `:2`, no-`v`-prefix note) across README, quick-start, and the compose example; README firewall guidance aligned with the bind-based protection; `POSTGRES_PASSWORD` promoted to Required (blank default); `jq`/`curl`/`openssl`/`uuidgen` added to prerequisites; stale `0.1.0` health-check version dropped; compose-example usage header and update-command divergence clarified; `SELF_HOSTED_USER_ID` permanence documented. The TZ-keying concern was already handled (`.env.example` + compose document `TZ`). Remaining self-hoster item: the empty Briefing/Insight cards placeholder (a dashboard component change, grouped with the dashboard mediums).
+**Dashboard — deferred (judgment calls):**
+- Re-enable pinch-to-zoom (`layout.tsx`) — needs a sweep to bump all inputs to ≥16px first, or iOS will auto-zoom on focus. Accessibility-vs-UX tradeoff worth a deliberate decision. *low*
+- Mobile theme toggle / reachable full sidebar — theme is already reachable via Settings → Preferences; low value. *low*
+- Full mood-only journal entries — `content` is `NOT NULL` and the route requires it, so this needs a schema migration + route change (a text hint was added in the meantime). *low*
+- Blanket "every async view routes failures to ErrorBoundary" — the highest-traffic views (calendar, weekly review, briefing) now have explicit error/empty states; remaining views can adopt the same pattern incrementally. *medium*
+
+**Self-hoster — doc fixes done** (branch `mcp-usability-fixes`): image-tag references corrected (`:v1`/`:1` → current major `:2`, no-`v`-prefix note) across README, quick-start, and the compose example; README firewall guidance aligned with the bind-based protection; `POSTGRES_PASSWORD` promoted to Required (blank default); `jq`/`curl`/`openssl`/`uuidgen` added to prerequisites; stale `0.1.0` health-check version dropped; compose-example usage header and update-command divergence clarified; `SELF_HOSTED_USER_ID` permanence documented. The TZ-keying concern was already handled (`.env.example` + compose document `TZ`). The empty Briefing/Insight cards placeholder is covered by the briefing placeholder above.
 
 ## Executive summary
 
