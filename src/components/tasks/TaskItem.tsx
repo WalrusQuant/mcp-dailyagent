@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2, ChevronDown, ChevronRight, RotateCcw, GripVertical, Sparkles } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, RotateCcw, GripVertical, Sparkles, Repeat } from "lucide-react";
 import { Task } from "@/types/database";
 
 interface TaskItemProps {
@@ -81,6 +81,9 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDrag
           </span>
           {task.rolled_from && (
             <span title="Rolled over"><RotateCcw className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} /></span>
+          )}
+          {task.recurrence && (
+            <span title={`Repeats ${task.recurrence.type}`}><Repeat className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} /></span>
           )}
         </div>
 

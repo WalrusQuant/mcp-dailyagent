@@ -211,7 +211,7 @@ export function HabitTracker() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Habits</h1>
         <div className="flex items-center gap-3">
-          <DateNavigation date={date} onDateChange={setDate} mode="week" />
+          <DateNavigation date={date} onDateChange={setDate} mode="week" maxDate={getToday()} />
           <button
             onClick={() => { setEditingHabit(null); setShowForm(true); }}
             className="p-2 rounded-lg transition-opacity hover:opacity-90"
