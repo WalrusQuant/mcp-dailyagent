@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema, habitFrequencySchema } from "./validators";
+import { dateSchema, habitFrequencySchema, uuidSchema } from "./validators";
 import { getHabitStats } from "@/lib/mcp/queries/habits";
 import { updateWithVersion } from "@/lib/db/optimistic";
 
@@ -177,7 +177,7 @@ export function registerHabitTools(server: McpServer) {
     "get_habit_stats",
     "Get completion statistics for a specific habit",
     {
-      habit_id: z.string().describe("Habit ID"),
+      habit_id: uuidSchema.describe("Habit ID (from list_habits)"),
       days: z.number().optional().describe("Number of days to analyze (default: 30)"),
     },
     async (args, extra: Extra) => {
@@ -205,7 +205,7 @@ export function registerHabitTools(server: McpServer) {
       target_days: z
         .array(z.number().int().min(1).max(7))
         .optional()
-        .describe("ISO days of week to target (1=Monday, 7=Sunday). Defaults to all 7 days."),
+        .describe("ISO days of week the habit is expected (1=Monday, 7=Sunday). Defaults to all 7 days. Completion stats are scored against these days regardless of frequency, so for a weekly habit list the specific day(s) it should be done."),
       color: z.string().optional().describe("Color hex code for display"),
     },
     async (args, extra: Extra) => {
@@ -227,7 +227,7 @@ export function registerHabitTools(server: McpServer) {
     "toggle_habit",
     "Toggle habit completion for a given date (defaults to today)",
     {
-      habit_id: z.string().describe("Habit ID"),
+      habit_id: uuidSchema.describe("Habit ID (from list_habits)"),
       date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
     },
     async (args, extra: Extra) => {
@@ -249,7 +249,7 @@ export function registerHabitTools(server: McpServer) {
     "update_habit",
     "Update a habit's details, or archive/unarchive it via the 'archived' flag. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      habit_id: z.string().describe("Habit ID"),
+      habit_id: uuidSchema.describe("Habit ID (from list_habits)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -261,7 +261,7 @@ export function registerHabitTools(server: McpServer) {
       target_days: z
         .array(z.number().int().min(1).max(7))
         .optional()
-        .describe("ISO days of week to target (1=Monday, 7=Sunday)"),
+        .describe("ISO days of week the habit is expected (1=Monday, 7=Sunday). Completion stats are scored against these days regardless of frequency."),
       color: z.string().optional().describe("New color hex code for display"),
       archived: z.boolean().optional().describe("Set true to archive (hide) the habit, false to restore it"),
     },
@@ -299,7 +299,7 @@ export function registerHabitTools(server: McpServer) {
     "delete_habit",
     "Delete a habit permanently, including all of its completion logs. To keep history, archive it with update_habit instead.",
     {
-      habit_id: z.string().describe("Habit ID to delete"),
+      habit_id: uuidSchema.describe("Habit ID to delete (from list_habits)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

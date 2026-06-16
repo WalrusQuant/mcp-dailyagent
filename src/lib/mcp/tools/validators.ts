@@ -4,6 +4,15 @@ export const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format");
 
+// Mirrors Postgres's `uuid` type: any hex in 8-4-4-4-12 shape, without RFC
+// version/variant strictness (which would reject ids Postgres accepts).
+export const uuidSchema = z
+  .string()
+  .regex(
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+    "Must be a valid UUID — copy the id from a list_*/get_* result rather than inventing one"
+  );
+
 export const prioritySchema = z
   .string()
   .regex(/^[A-C][1-9]$/, "Must be A1-C9 (letter A/B/C + digit 1-9)");

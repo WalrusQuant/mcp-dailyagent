@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { goals } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema, goalCategorySchema, goalStatusSchema } from "./validators";
+import { dateSchema, goalCategorySchema, goalStatusSchema, uuidSchema } from "./validators";
 import { logGoalProgress } from "@/lib/mcp/queries/goals";
 import { updateWithVersion } from "@/lib/db/optimistic";
 
@@ -168,7 +168,7 @@ export function registerGoalTools(server: McpServer) {
     "update_goal",
     "Update an existing goal's details or status. Pass expected_updated_at to opt into concurrency-safe writes.",
     {
-      goal_id: z.string().describe("Goal ID"),
+      goal_id: uuidSchema.describe("Goal ID (from list_goals)"),
       expected_updated_at: z
         .string()
         .datetime()
@@ -213,7 +213,7 @@ export function registerGoalTools(server: McpServer) {
     "log_goal_progress",
     "Update the progress percentage for a goal",
     {
-      goal_id: z.string().describe("Goal ID"),
+      goal_id: uuidSchema.describe("Goal ID (from list_goals)"),
       progress: z.number().int().min(0).max(100).describe("Progress percentage (0-100)"),
     },
     async (args, extra: Extra) => {
@@ -235,7 +235,7 @@ export function registerGoalTools(server: McpServer) {
     "delete_goal",
     "Delete a goal permanently, including its progress logs. To keep the record, set its status to 'abandoned' via update_goal instead.",
     {
-      goal_id: z.string().describe("Goal ID to delete"),
+      goal_id: uuidSchema.describe("Goal ID to delete (from list_goals)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
