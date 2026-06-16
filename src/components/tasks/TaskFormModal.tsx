@@ -12,19 +12,20 @@ interface TaskFormModalProps {
   spaces?: Space[];
   defaultDate?: string;
   defaultSpaceId?: string;
+  defaultGoalId?: string;
   onClose: () => void;
   onSave: (task: Task) => void;
 }
 
 const PRIORITY_LABELS: Record<string, string> = { A: "Must Do", B: "Should Do", C: "Nice to Do" };
 
-export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, onClose, onSave }: TaskFormModalProps) {
+export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defaultGoalId, onClose, onSave }: TaskFormModalProps) {
   const [title, setTitle] = useState(task?.title || "");
   const [notes, setNotes] = useState(task?.notes || "");
   const [priority, setPriority] = useState(task?.priority || "B1");
   const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || getToday());
   const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
-  const [goalId, setGoalId] = useState(task?.goal_id || "");
+  const [goalId, setGoalId] = useState(task?.goal_id || defaultGoalId || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();

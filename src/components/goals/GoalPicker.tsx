@@ -23,7 +23,23 @@ export function GoalPicker({ value, onChange }: GoalPickerProps) {
     load();
   }, []);
 
-  if (goals.length === 0) return null;
+  if (goals.length === 0) {
+    return (
+      <div>
+        <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          Goal
+        </label>
+        <select
+          disabled
+          value=""
+          className="w-full rounded-lg px-3 py-2 text-sm opacity-60 cursor-not-allowed"
+          style={{ background: "var(--bg-base)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }}
+        >
+          <option>No goals yet — create one to link tasks</option>
+        </select>
+      </div>
+    );
+  }
 
   return (
     <div>
