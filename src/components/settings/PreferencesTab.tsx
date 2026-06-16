@@ -33,7 +33,7 @@ export function PreferencesTab() {
             <button
               key={id}
               onClick={() => setTheme(id)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
               style={{
                 background: theme === id ? "var(--accent-primary)" : "var(--bg-elevated)",
                 color: theme === id ? "var(--bg-base)" : "var(--text-secondary)",

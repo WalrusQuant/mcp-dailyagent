@@ -79,7 +79,7 @@ export function AccountTab() {
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full rounded-lg px-4 py-3 focus:outline-none transition-colors"
+            className="w-full rounded-lg px-4 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] transition-colors"
             style={{
               background: "var(--bg-input)",
               color: "var(--text-primary)",
@@ -98,7 +98,7 @@ export function AccountTab() {
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="w-full rounded-lg px-4 py-3 focus:outline-none transition-colors"
+            className="w-full rounded-lg px-4 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] transition-colors"
             style={{
               background: "var(--bg-input)",
               color: "var(--text-primary)",
