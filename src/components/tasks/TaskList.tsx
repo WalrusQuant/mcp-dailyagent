@@ -28,8 +28,18 @@ function useDragReorder(
 
   const handleDragOver = (taskId: string) => (e: React.DragEvent) => {
     e.preventDefault();
+    if (taskId === dragTaskId) return;
+    // Reordering only works within a priority group, so don't show a drop
+    // indicator (or a "move" cursor) when hovering a different group.
+    const src = tasks.find((t) => t.id === dragTaskId);
+    const tgt = tasks.find((t) => t.id === taskId);
+    if (src && tgt && src.priority[0] !== tgt.priority[0]) {
+      e.dataTransfer.dropEffect = "none";
+      setDragOverTaskId(null);
+      return;
+    }
     e.dataTransfer.dropEffect = "move";
-    if (taskId !== dragTaskId) setDragOverTaskId(taskId);
+    setDragOverTaskId(taskId);
   };
 
   const handleDragLeave = () => {

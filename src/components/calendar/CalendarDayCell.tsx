@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDate } from "@/lib/dates";
 import type { DaySummary } from "./types";
 
 interface CalendarDayCellProps {
@@ -78,9 +79,23 @@ export function CalendarDayCell({
   const isOutsideMonth = dateMonth !== currentMonth;
   const badges = summary ? getBadges(summary) : [];
 
+  // Screen readers otherwise hear just "15, button" with no month/year or
+  // activity context, and no way to tell the selected day apart.
+  const activity: string[] = [];
+  if (summary) {
+    if (summary.tasks.total > 0) activity.push(`${summary.tasks.done} of ${summary.tasks.total} tasks done`);
+    if (summary.habits.total > 0) activity.push(`${summary.habits.completed} of ${summary.habits.total} habits`);
+    if (summary.journal.hasEntry) activity.push("journal entry");
+    if (summary.workouts.count > 0) activity.push(`${summary.workouts.count} workout${summary.workouts.count > 1 ? "s" : ""}`);
+    if (summary.focus.sessions > 0) activity.push(`${summary.focus.minutes} min focus`);
+  }
+  const ariaLabel = `${formatDate(date, "long")}${isToday ? " (today)" : ""}, ${activity.length ? activity.join(", ") : "no activity"}`;
+
   return (
     <button
       onClick={() => onClick(date)}
+      aria-label={ariaLabel}
+      aria-pressed={isSelected}
       className="relative flex flex-col items-start p-1 md:p-2 transition-colors overflow-hidden w-full h-full"
       style={{
         borderRight: "1px solid var(--border-default)",
