@@ -122,6 +122,12 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
         })}
       </div>
 
+      {mood !== null && !content.trim() && (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Write something below to save today&apos;s mood.
+        </p>
+      )}
+
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
