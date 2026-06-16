@@ -14,7 +14,7 @@
 
 **Dashboard — highs done** (branch `mcp-usability-fixes`): all 8 high-severity dashboard findings fixed — task-rollover wiring, unscrollable active workout, in-progress workout persistence, editable goal status, space status/deadline, calendar error state, icon-button aria-labels, and a discoverable/touch-reachable command palette (plus the dead Cmd+Shift+S shortcut retired). Remaining: 13 medium + 12 low dashboard findings.
 
-**Self-hoster — pending.** See findings below (image-tag + firewall doc fixes are the highest-value, lowest-risk).
+**Self-hoster — doc fixes done** (branch `mcp-usability-fixes`): image-tag references corrected (`:v1`/`:1` → current major `:2`, no-`v`-prefix note) across README, quick-start, and the compose example; README firewall guidance aligned with the bind-based protection; `POSTGRES_PASSWORD` promoted to Required (blank default); `jq`/`curl`/`openssl`/`uuidgen` added to prerequisites; stale `0.1.0` health-check version dropped; compose-example usage header and update-command divergence clarified; `SELF_HOSTED_USER_ID` permanence documented. The TZ-keying concern was already handled (`.env.example` + compose document `TZ`). Remaining self-hoster item: the empty Briefing/Insight cards placeholder (a dashboard component change, grouped with the dashboard mediums).
 
 ## Executive summary
 

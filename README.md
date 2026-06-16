@@ -42,7 +42,7 @@ The container waits for Postgres, runs migrations, seeds the profile row, and st
 
 A `db-backup` sidecar also starts by default and writes nightly `pg_dump` files to `./backups/` next to your compose file, with 14d / 4w / 6m retention. Tune with `BACKUP_SCHEDULE`, `BACKUP_KEEP_DAYS`, etc. in `.env`. **You still need to copy `./backups` offsite** — see [docs/backup-restore.md](docs/backup-restore.md).
 
-For a VPS install, do the same thing on the box and add Tailscale + a firewall rule on port 3000. If you'd rather build the image yourself, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+For a VPS install, do the same thing on the box and add Tailscale. The compose file binds the app to `127.0.0.1` (and never publishes Postgres), so nothing is reachable from the public internet — don't rely on a `ufw` rule for port 3000, since Docker's iptables rules sit ahead of ufw and it has no effect. To expose the dashboard on your tailnet, change the bind to your Tailscale IP (see [docs/quick-start.md](docs/quick-start.md)), never `0.0.0.0`. If you'd rather build the image yourself, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ## Update
 
@@ -50,7 +50,7 @@ For a VPS install, do the same thing on the box and add Tailscale + a firewall r
 docker compose pull && docker compose up -d
 ```
 
-Pulls the latest image, swaps in a new container, runs any pending migrations automatically. Pin to `:v1` in `docker-compose.yml` for safe auto-upgrades within a major version, or `:latest` for newest.
+Pulls the latest image, swaps in a new container, runs any pending migrations automatically. Pin to the current major (`:2`) in `docker-compose.yml` for safe auto-upgrades within that major version, or `:latest` for newest. (Tags carry no `v` prefix — `:v1`/`:v2` do not exist.)
 
 ## OpenClaw connection
 
