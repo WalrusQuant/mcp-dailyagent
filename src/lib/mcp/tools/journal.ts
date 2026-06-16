@@ -192,7 +192,7 @@ export function registerJournalTools(server: McpServer) {
   // --- create_journal_entry (WRITE) ---
   server.tool(
     "create_journal_entry",
-    "Create or update a journal entry for a given date (defaults to today). Omitting mood keeps the entry's existing mood. When updating an existing entry, pass expected_updated_at to opt into concurrency-safe writes.",
+    "Create or update a journal entry for a given date (defaults to today). WARNING: this REPLACES the entire content for that date — it does not append. To add to an existing entry, first read it with get_journal_entries and include the existing text in `content`. Omitting mood keeps the entry's existing mood. When updating an existing entry, pass expected_updated_at to opt into concurrency-safe writes.",
     {
       content: z.string().describe("Journal entry content"),
       entry_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
