@@ -21,6 +21,7 @@ import { registerCalendarTools } from "./tools/calendar";
 import { registerBriefingTools } from "./tools/briefings";
 import { registerInsightTools } from "./tools/insights";
 import { registerReviewTools } from "./tools/reviews";
+import { registerTagTools } from "./tools/tags";
 import { registerPrompts } from "./prompts";
 import pkg from "../../../package.json";
 
@@ -87,6 +88,7 @@ export function createMcpServer(): McpServer {
   registerFocusTools(server);
   registerGoalTools(server);
   registerSpaceTools(server);
+  registerTagTools(server);
   registerCalendarTools(server);
   registerBriefingTools(server);
   registerInsightTools(server);

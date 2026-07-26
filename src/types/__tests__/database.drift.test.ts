@@ -50,7 +50,9 @@ const PAYLOAD_ONLY = new Set(["TaskRecurrence", "WorkoutSet", "Insight"]);
 // Per-interface allowlist for interface fields that don't correspond to a
 // SQL column (e.g. nested joined rows, computed flags). Empty for now —
 // extend as the serializer surface grows.
-const COMPUTED_FIELDS: Record<string, string[]> = {};
+const COMPUTED_FIELDS: Record<string, string[]> = {
+  Task: ["tags"],
+};
 
 // Per-interface allowlist for SQL columns intentionally omitted from the
 // wire-format interface (e.g. internal sort orders never sent to clients).

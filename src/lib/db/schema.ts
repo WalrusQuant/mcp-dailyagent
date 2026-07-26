@@ -163,6 +163,24 @@ export const tasks = pgTable(
   ]
 );
 
+// Task ↔ Tag join
+export const taskTags = pgTable(
+  "task_tags",
+  {
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("task_tags_task_tag_unique").on(t.taskId, t.tagId),
+    index("idx_task_tags_task").on(t.taskId),
+    index("idx_task_tags_tag").on(t.tagId),
+  ]
+);
+
 // ---------------------------------------------------------------------------
 // Habits
 // ---------------------------------------------------------------------------

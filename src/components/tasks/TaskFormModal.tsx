@@ -1,11 +1,11 @@
 "use client";
 
 import { getToday } from "@/lib/dates";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
 import { useToast } from "@/lib/toast-context";
-import { Task, Space } from "@/types/database";
+import { Task, Space, Tag } from "@/types/database";
 
 interface TaskFormModalProps {
   task?: Task | null;
@@ -27,8 +27,31 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
   const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
   const [goalId, setGoalId] = useState(task?.goal_id || defaultGoalId || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
+    () => task?.tags?.map((t) => t.id) ?? []
+  );
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/tags")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!cancelled) setAllTags(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleTag = (id: string) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +70,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
         space_id: spaceId || null,
         goal_id: goalId || null,
         recurrence: recurrenceType ? { type: recurrenceType } : null,
+        tag_ids: selectedTagIds,
       };
 
       if (task?.updated_at) {
@@ -204,6 +228,34 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+          </div>
+        )}
+
+        {allTags.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Tags
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map((tag) => {
+                const selected = selectedTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleTag(tag.id)}
+                    className="text-xs px-2 py-1 rounded-full font-medium transition-colors"
+                    style={{
+                      background: selected ? tag.color : "var(--bg-elevated)",
+                      color: selected ? "var(--bg-base)" : "var(--text-secondary)",
+                      border: `1px solid ${selected ? tag.color : "var(--border-default)"}`,
+                    }}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

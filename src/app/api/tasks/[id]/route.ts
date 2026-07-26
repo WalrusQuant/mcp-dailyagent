@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeTask, maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
+import { getTagsForTask, setTaskTags } from "@/lib/mcp/queries/tags";
 import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(
@@ -25,7 +26,8 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(serializeTask(rows[0]));
+    const taskTagsList = await getTagsForTask(id);
+    return NextResponse.json({ ...serializeTask(rows[0]), tags: taskTagsList });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -84,7 +86,8 @@ export async function PATCH(
     allowedFields.doneAt = null;
   }
 
-  if (Object.keys(allowedFields).length === 0) {
+  const hasTagUpdate = Array.isArray(body.tag_ids);
+  if (Object.keys(allowedFields).length === 0 && !hasTagUpdate) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
@@ -100,39 +103,60 @@ export async function PATCH(
 
     let row: typeof tasks.$inferSelect | null = null;
 
-    if (typeof body.expected_updated_at === "string") {
-      const result = await updateWithVersion<typeof tasks.$inferSelect>({
-        table: tasks,
-        id,
-        userId,
-        expectedUpdatedAt: body.expected_updated_at,
-        patch: allowedFields,
-      });
-      if (!result.ok) {
-        if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
-        if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
-        return conflictResponse(serializeTask(result.current));
+    if (Object.keys(allowedFields).length > 0) {
+      if (typeof body.expected_updated_at === "string") {
+        const result = await updateWithVersion<typeof tasks.$inferSelect>({
+          table: tasks,
+          id,
+          userId,
+          expectedUpdatedAt: body.expected_updated_at,
+          patch: allowedFields,
+        });
+        if (!result.ok) {
+          if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+          if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+          return conflictResponse(serializeTask(result.current));
+        }
+        row = result.row;
+      } else {
+        allowedFields.updatedAt = new Date();
+        [row] = await db
+          .update(tasks)
+          .set(allowedFields)
+          .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+          .returning();
       }
-      row = result.row;
+
+      if (!row) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+
+      if (body.done === true) {
+        await maybeSpawnNextOccurrence(userId, row, wasAlreadyDone);
+      }
     } else {
-      allowedFields.updatedAt = new Date();
-      [row] = await db
-        .update(tasks)
-        .set(allowedFields)
-        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
-        .returning();
+      // tag-only update — ensure task exists
+      const [existing] = await db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+      if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      row = existing;
     }
 
-    if (!row) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (hasTagUpdate) {
+      try {
+        await setTaskTags(userId, id, body.tag_ids as string[]);
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Invalid tag_ids" },
+          { status: 400 }
+        );
+      }
     }
 
-    // If marking done and task has recurrence, create next occurrence
-    if (body.done === true) {
-      await maybeSpawnNextOccurrence(userId, row, wasAlreadyDone);
-    }
-
-    return NextResponse.json(serializeTask(row));
+    const taskTagsList = await getTagsForTask(id);
+    return NextResponse.json({ ...serializeTask(row!), tags: taskTagsList });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

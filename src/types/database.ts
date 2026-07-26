@@ -63,6 +63,8 @@ export interface Task {
   recurrence: TaskRecurrence | null;
   created_at: string;
   updated_at: string;
+  /** Joined tags when the API includes them (not a SQL column). */
+  tags?: Tag[];
 }
 
 export interface Habit {

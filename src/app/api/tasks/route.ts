@@ -1,10 +1,11 @@
 import { getToday } from "@/lib/dates";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { tasks } from "@/lib/db/schema";
+import { tasks, taskTags } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
+import { getTagsByTaskIds, setTaskTags } from "@/lib/mcp/queries/tags";
 import { readJsonBody } from "@/lib/api-body";
 
 export async function GET(request: NextRequest) {
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
   const spaceId = searchParams.get("space_id");
+  const tagId = searchParams.get("tag_id");
 
   const today = getToday();
   const taskDate = dateParam || today;
@@ -44,7 +46,22 @@ export async function GET(request: NextRequest) {
         .orderBy(asc(tasks.priority), asc(tasks.sortOrder));
     }
 
-    return NextResponse.json(rows.map(serializeTask));
+    if (tagId) {
+      const tagged = await db
+        .select({ taskId: taskTags.taskId })
+        .from(taskTags)
+        .where(eq(taskTags.tagId, tagId));
+      const allowed = new Set(tagged.map((t) => t.taskId));
+      rows = rows.filter((r) => allowed.has(r.id));
+    }
+
+    const tagsMap = await getTagsByTaskIds(rows.map((r) => r.id));
+    return NextResponse.json(
+      rows.map((r) => ({
+        ...serializeTask(r),
+        tags: tagsMap.get(r.id) ?? [],
+      }))
+    );
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -61,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { title, notes, priority, task_date, space_id, goal_id, recurrence, sort_order } = body;
+  const { title, notes, priority, task_date, space_id, goal_id, recurrence, sort_order, tag_ids } = body;
 
   if (!title || typeof title !== "string") {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -103,7 +120,22 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    return NextResponse.json(serializeTask(row), { status: 201 });
+    if (Array.isArray(tag_ids)) {
+      try {
+        await setTaskTags(userId, row.id, tag_ids as string[]);
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Invalid tag_ids" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const tags = await getTagsByTaskIds([row.id]);
+    return NextResponse.json(
+      { ...serializeTask(row), tags: tags.get(row.id) ?? [] },
+      { status: 201 }
+    );
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

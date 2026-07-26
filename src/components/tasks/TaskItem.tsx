@@ -79,6 +79,19 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDrag
           >
             {task.title}
           </span>
+          {task.tags && task.tags.length > 0 && (
+            <span className="hidden sm:flex items-center gap-1 shrink-0">
+              {task.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag.id}
+                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                  style={{ background: `${tag.color}22`, color: tag.color }}
+                >
+                  {tag.name}
+                </span>
+              ))}
+            </span>
+          )}
           {task.rolled_from && (
             <span title="Rolled over"><RotateCcw className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} /></span>
           )}
