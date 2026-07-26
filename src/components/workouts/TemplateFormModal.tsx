@@ -11,8 +11,6 @@ type TemplateWithExercises = WorkoutTemplate & { workout_exercises?: WorkoutExer
 interface TemplateFormModalProps {
   template?: TemplateWithExercises | null;
   onClose: () => void;
-  // The API echoes back the saved exercises, so the caller can refresh the
-  // template's exercise count without refetching.
   onSave: (template: TemplateWithExercises) => void;
 }
 
@@ -23,7 +21,18 @@ interface ExerciseInput {
   default_reps: number;
   default_weight: number;
   default_duration: number;
+  notes: string;
 }
+
+const emptyExercise = (): ExerciseInput => ({
+  name: "",
+  exercise_type: "strength",
+  default_sets: 3,
+  default_reps: 10,
+  default_weight: 0,
+  default_duration: 60,
+  notes: "",
+});
 
 export function TemplateFormModal({ template, onClose, onSave }: TemplateFormModalProps) {
   const [name, setName] = useState(template?.name || "");
@@ -36,17 +45,18 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
       default_reps: e.default_reps || 10,
       default_weight: e.default_weight || 0,
       default_duration: e.default_duration || 60,
-    })) || [{ name: "", exercise_type: "strength", default_sets: 3, default_reps: 10, default_weight: 0, default_duration: 60 }]
+      notes: e.notes || "",
+    })) || [emptyExercise()]
   );
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
 
   const addExercise = () => {
-    setExercises((prev) => [...prev, { name: "", exercise_type: "strength", default_sets: 3, default_reps: 10, default_weight: 0, default_duration: 60 }]);
+    setExercises((prev) => [...prev, emptyExercise()]);
   };
 
   const updateExercise = (index: number, field: string, value: string | number) => {
-    setExercises((prev) => prev.map((e, i) => i === index ? { ...e, [field]: value } : e));
+    setExercises((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
   };
 
   const removeExercise = (index: number) => {
@@ -68,7 +78,16 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null,
-          exercises: exercises.map((ex, i) => ({ ...ex, sort_order: i })),
+          exercises: exercises.map((ex, i) => ({
+            name: ex.name.trim(),
+            exercise_type: ex.exercise_type,
+            default_sets: ex.default_sets,
+            default_reps: ex.default_reps,
+            default_weight: ex.default_weight,
+            default_duration: ex.default_duration,
+            notes: ex.notes.trim() || null,
+            sort_order: i,
+          })),
         }),
       });
 
@@ -78,7 +97,6 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
         return;
       }
 
-      // A silent failure here reads as "saved" and loses the whole form.
       const err = await response.json().catch(() => ({}));
       addToast(err.error || "Failed to save template", "error", 4000);
     } catch (error) {
@@ -89,61 +107,199 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
     }
   };
 
+  const inputClass =
+    "w-full rounded-lg px-3 py-2 text-sm focus:outline-none";
+  const inputStyle = {
+    background: "var(--bg-base)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border-default)",
+  } as const;
+
   return (
-    <FormModal title={template ? "Edit Template" : "New Template"} onClose={onClose} width="500px">
+    <FormModal title={template ? "Edit Template" : "New Template"} onClose={onClose} width="560px">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Name *</label>
+          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            Name *
+          </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+            className={inputClass}
+            style={inputStyle}
             placeholder="e.g., Upper Body Push"
             autoFocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Description</label>
+          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            Description
+          </label>
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+            className={inputClass}
+            style={inputStyle}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Exercises</label>
-          <div className="space-y-2">
+          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+            Exercises
+          </label>
+          <div className="space-y-3">
             {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg p-2" style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)" }}>
+              <div
+                key={i}
+                className="rounded-lg p-3 space-y-2"
+                style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)" }}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={ex.name}
+                    onChange={(e) => updateExercise(i, "name", e.target.value)}
+                    className="flex-1 rounded px-2 py-1.5 text-sm focus:outline-none"
+                    style={{
+                      background: "var(--bg-surface)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                    placeholder="Exercise name"
+                  />
+                  <select
+                    value={ex.exercise_type}
+                    onChange={(e) => updateExercise(i, "exercise_type", e.target.value)}
+                    className="rounded px-2 py-1.5 text-xs focus:outline-none"
+                    style={{
+                      background: "var(--bg-surface)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  >
+                    <option value="strength">Strength</option>
+                    <option value="timed">Timed</option>
+                    <option value="cardio">Cardio</option>
+                  </select>
+                  {exercises.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeExercise(i)}
+                      className="p-1"
+                      style={{ color: "var(--text-muted)" }}
+                      aria-label="Remove exercise"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Defaults by type */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <label className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                    Sets
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={ex.default_sets}
+                      onChange={(e) => updateExercise(i, "default_sets", parseInt(e.target.value) || 1)}
+                      className="w-12 rounded px-1.5 py-1 text-center focus:outline-none"
+                      style={{
+                        background: "var(--bg-surface)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border-default)",
+                      }}
+                    />
+                  </label>
+                  {ex.exercise_type === "strength" && (
+                    <>
+                      <label className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                        Reps
+                        <input
+                          type="number"
+                          min={0}
+                          value={ex.default_reps}
+                          onChange={(e) => updateExercise(i, "default_reps", parseInt(e.target.value) || 0)}
+                          className="w-12 rounded px-1.5 py-1 text-center focus:outline-none"
+                          style={{
+                            background: "var(--bg-surface)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--border-default)",
+                          }}
+                        />
+                      </label>
+                      <label className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                        Weight
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.5}
+                          value={ex.default_weight}
+                          onChange={(e) => updateExercise(i, "default_weight", parseFloat(e.target.value) || 0)}
+                          className="w-14 rounded px-1.5 py-1 text-center focus:outline-none"
+                          style={{
+                            background: "var(--bg-surface)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--border-default)",
+                          }}
+                        />
+                        <span>lbs</span>
+                      </label>
+                    </>
+                  )}
+                  {(ex.exercise_type === "timed" || ex.exercise_type === "cardio") && (
+                    <label className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                      Duration
+                      <input
+                        type="number"
+                        min={0}
+                        value={ex.default_duration}
+                        onChange={(e) => updateExercise(i, "default_duration", parseInt(e.target.value) || 0)}
+                        className="w-14 rounded px-1.5 py-1 text-center focus:outline-none"
+                        style={{
+                          background: "var(--bg-surface)",
+                          color: "var(--text-primary)",
+                          border: "1px solid var(--border-default)",
+                        }}
+                      />
+                      <span>sec</span>
+                    </label>
+                  )}
+                  {ex.exercise_type === "cardio" && (
+                    <label className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                      Default reps
+                      <input
+                        type="number"
+                        min={0}
+                        value={ex.default_reps}
+                        onChange={(e) => updateExercise(i, "default_reps", parseInt(e.target.value) || 0)}
+                        className="w-12 rounded px-1.5 py-1 text-center focus:outline-none"
+                        style={{
+                          background: "var(--bg-surface)",
+                          color: "var(--text-primary)",
+                          border: "1px solid var(--border-default)",
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
                 <input
                   type="text"
-                  value={ex.name}
-                  onChange={(e) => updateExercise(i, "name", e.target.value)}
-                  className="flex-1 rounded px-2 py-1 text-sm focus:outline-none"
-                  style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-                  placeholder="Exercise name"
+                  value={ex.notes}
+                  onChange={(e) => updateExercise(i, "notes", e.target.value)}
+                  className="w-full rounded px-2 py-1 text-xs focus:outline-none"
+                  style={{
+                    background: "var(--bg-surface)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border-default)",
+                  }}
+                  placeholder="Notes (optional)"
                 />
-                <select
-                  value={ex.exercise_type}
-                  onChange={(e) => updateExercise(i, "exercise_type", e.target.value)}
-                  className="rounded px-2 py-1 text-xs focus:outline-none"
-                  style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-                >
-                  <option value="strength">Strength</option>
-                  <option value="timed">Timed</option>
-                  <option value="cardio">Cardio</option>
-                </select>
-                {exercises.length > 1 && (
-                  <button type="button" onClick={() => removeExercise(i)} className="p-1" style={{ color: "var(--text-muted)" }}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
               </div>
             ))}
           </div>

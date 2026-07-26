@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Save, X } from "lucide-react";
-import { WorkoutTemplate, WorkoutExercise } from "@/types/database";
+import { WorkoutTemplate, WorkoutExercise, WorkoutLog, WorkoutLogExercise } from "@/types/database";
 import { ExerciseSetInput } from "./ExerciseSetInput";
 import { getToday } from "@/lib/dates";
 import { useToast } from "@/lib/toast-context";
@@ -14,15 +14,15 @@ interface ExerciseEntry {
   sets: Array<{ reps?: number; weight?: number; duration?: number }>;
 }
 
-// An in-progress workout is mirrored to localStorage so a refresh, PWA kill,
-// or accidental navigation doesn't discard a multi-minute logging session.
 export const WORKOUT_DRAFT_KEY = "cadence:workout-draft";
 
 export interface WorkoutDraft {
-  templateId: string | null; // null = quick workout
+  templateId: string | null;
   name: string;
   exercises: ExerciseEntry[];
   startTime: number;
+  notes?: string;
+  logDate?: string;
 }
 
 export function loadWorkoutDraft(): WorkoutDraft | null {
@@ -44,42 +44,76 @@ export function clearWorkoutDraft() {
   }
 }
 
+type LogWithExercises = WorkoutLog & { workout_log_exercises?: WorkoutLogExercise[] };
+
 interface WorkoutLoggerProps {
   template?: WorkoutTemplate & { workout_exercises?: WorkoutExercise[] };
+  /** When set, logger is in edit mode (PATCH existing log) */
+  existingLog?: LogWithExercises | null;
   onSave: () => void;
   onCancel: () => void;
 }
 
-export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps) {
-  // Restore a saved draft only if it belongs to this workout slot (same
-  // template, or both "quick"); otherwise start fresh from the template.
-  const [draft] = useState<WorkoutDraft | null>(() => loadWorkoutDraft());
-  const matchesDraft = !!draft && draft.templateId === (template?.id ?? null);
+function setsFromTemplateExercise(e: WorkoutExercise) {
+  const count = e.default_sets || 3;
+  return Array.from({ length: count }, () => {
+    if (e.exercise_type === "timed") return { duration: e.default_duration || 60 };
+    if (e.exercise_type === "cardio") {
+      return { reps: e.default_reps || 10, duration: e.default_duration || 60 };
+    }
+    return { reps: e.default_reps || 10, weight: e.default_weight || 0 };
+  });
+}
 
-  const [name, setName] = useState(matchesDraft ? draft!.name : template?.name || "Quick Workout");
-  const [exercises, setExercises] = useState<ExerciseEntry[]>(
-    matchesDraft
-      ? draft!.exercises
-      : template?.workout_exercises?.map((e, i) => ({
-          exercise_name: e.name,
-          exercise_type: e.exercise_type,
-          sort_order: i,
-          sets: Array.from({ length: e.default_sets || 3 }, () =>
-            e.exercise_type === "timed"
-              ? { duration: e.default_duration || 60 }
-              : { reps: e.default_reps || 10, weight: e.default_weight || 0 }
-          ),
-        })) || []
+export function WorkoutLogger({ template, existingLog, onSave, onCancel }: WorkoutLoggerProps) {
+  const isEdit = !!existingLog;
+  const [draft] = useState<WorkoutDraft | null>(() => (isEdit ? null : loadWorkoutDraft()));
+  const matchesDraft = !isEdit && !!draft && draft.templateId === (template?.id ?? null);
+
+  const [name, setName] = useState(
+    isEdit ? existingLog!.name : matchesDraft ? draft!.name : template?.name || "Quick Workout"
   );
+  const [notes, setNotes] = useState(
+    isEdit ? existingLog!.notes || "" : matchesDraft ? draft!.notes || "" : ""
+  );
+  const [logDate, setLogDate] = useState(
+    isEdit ? existingLog!.log_date : matchesDraft && draft!.logDate ? draft!.logDate : getToday()
+  );
+  const [durationMinutes, setDurationMinutes] = useState<number | "">(
+    isEdit ? existingLog!.duration_minutes ?? "" : ""
+  );
+  const [exercises, setExercises] = useState<ExerciseEntry[]>(() => {
+    if (isEdit) {
+      return (existingLog!.workout_log_exercises || []).map((e, i) => ({
+        exercise_name: e.exercise_name,
+        exercise_type: e.exercise_type,
+        sort_order: e.sort_order ?? i,
+        sets: (e.sets || []).map((s) => ({
+          reps: s.reps,
+          weight: s.weight,
+          duration: s.duration,
+        })),
+      }));
+    }
+    if (matchesDraft) return draft!.exercises;
+    return (
+      template?.workout_exercises?.map((e, i) => ({
+        exercise_name: e.name,
+        exercise_type: e.exercise_type,
+        sort_order: i,
+        sets: setsFromTemplateExercise(e),
+      })) || []
+    );
+  });
   const [startTime] = useState(matchesDraft ? draft!.startTime : Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseType, setNewExerciseType] = useState("strength");
   const { addToast } = useToast();
 
-  // Persist the working session as it changes; clear once it has no exercises
-  // so an abandoned empty quick-start doesn't get restored later.
+  // Persist draft only for new sessions (not edit mode)
   useEffect(() => {
+    if (isEdit) return;
     if (exercises.length === 0) {
       clearWorkoutDraft();
       return;
@@ -87,35 +121,54 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
     try {
       window.localStorage.setItem(
         WORKOUT_DRAFT_KEY,
-        JSON.stringify({ templateId: template?.id ?? null, name, exercises, startTime } satisfies WorkoutDraft)
+        JSON.stringify({
+          templateId: template?.id ?? null,
+          name,
+          exercises,
+          startTime,
+          notes,
+          logDate,
+        } satisfies WorkoutDraft)
       );
     } catch {
       /* ignore */
     }
-  }, [name, exercises, startTime, template?.id]);
+  }, [name, exercises, startTime, template?.id, notes, logDate, isEdit]);
 
   const handleCancel = () => {
-    if (exercises.length > 0 && !confirm("Discard this workout? Your logged sets will be lost.")) return;
-    clearWorkoutDraft();
+    if (!isEdit && exercises.length > 0 && !confirm("Discard this workout? Your logged sets will be lost.")) {
+      return;
+    }
+    if (!isEdit) clearWorkoutDraft();
     onCancel();
   };
 
   const addExercise = () => {
     if (!newExerciseName.trim()) return;
+    const type = newExerciseType;
     setExercises((prev) => [
       ...prev,
       {
         exercise_name: newExerciseName.trim(),
-        exercise_type: newExerciseType,
+        exercise_type: type,
         sort_order: prev.length,
-        sets: [newExerciseType === "timed" ? { duration: 60 } : { reps: 10, weight: 0 }],
+        sets: [
+          type === "timed"
+            ? { duration: 60 }
+            : type === "cardio"
+              ? { reps: 10, duration: 60 }
+              : { reps: 10, weight: 0 },
+        ],
       },
     ]);
     setNewExerciseName("");
   };
 
-  const updateExerciseSets = (index: number, sets: Array<{ reps?: number; weight?: number; duration?: number }>) => {
-    setExercises((prev) => prev.map((e, i) => i === index ? { ...e, sets } : e));
+  const updateExerciseSets = (
+    index: number,
+    sets: Array<{ reps?: number; weight?: number; duration?: number }>
+  ) => {
+    setExercises((prev) => prev.map((e, i) => (i === index ? { ...e, sets } : e)));
   };
 
   const removeExercise = (index: number) => {
@@ -125,24 +178,45 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const durationMinutes = Math.round((Date.now() - startTime) / 60000);
-      const response = await fetch("/api/workouts/logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          template_id: template?.id || null,
-          log_date: getToday(),
-          duration_minutes: durationMinutes,
-          exercises,
-        }),
-      });
+      const computedDuration =
+        durationMinutes === ""
+          ? isEdit
+            ? existingLog?.duration_minutes ?? null
+            : Math.round((Date.now() - startTime) / 60000)
+          : Number(durationMinutes);
+
+      const payload = {
+        name: name.trim() || "Workout",
+        log_date: logDate,
+        duration_minutes: computedDuration,
+        notes: notes.trim() || null,
+        exercises: exercises.map((ex, i) => ({
+          exercise_name: ex.exercise_name,
+          exercise_type: ex.exercise_type,
+          sort_order: i,
+          sets: ex.sets,
+        })),
+        ...(isEdit
+          ? { expected_updated_at: existingLog!.updated_at }
+          : { template_id: template?.id || null }),
+      };
+
+      const response = await fetch(
+        isEdit ? `/api/workouts/logs/${existingLog!.id}` : "/api/workouts/logs",
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (response.ok) {
-        clearWorkoutDraft();
+        if (!isEdit) clearWorkoutDraft();
+        addToast(isEdit ? "Workout updated" : "Workout saved");
         onSave();
       } else {
-        addToast("Failed to save workout");
+        const err = await response.json().catch(() => ({}));
+        addToast(err.error || "Failed to save workout");
       }
     } catch (error) {
       console.error("Failed to save workout:", error);
@@ -154,16 +228,21 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="text-lg font-bold bg-transparent focus:outline-none"
+          className="text-lg font-bold bg-transparent focus:outline-none flex-1 min-w-0"
           style={{ color: "var(--text-primary)" }}
         />
-        <div className="flex items-center gap-2">
-          <button onClick={handleCancel} className="p-2 rounded-lg" style={{ color: "var(--text-muted)" }} aria-label="Cancel workout">
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleCancel}
+            className="p-2 rounded-lg"
+            style={{ color: "var(--text-muted)" }}
+            aria-label="Cancel"
+          >
             <X className="w-4 h-4" />
           </button>
           <button
@@ -174,15 +253,73 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
           >
             <Save className="w-4 h-4" />
-            {isSaving ? "Saving..." : "Finish"}
+            {isSaving ? "Saving..." : isEdit ? "Save" : "Finish"}
           </button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <div>
+          <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+            Date
+          </label>
+          <input
+            type="date"
+            value={logDate}
+            max={getToday()}
+            onChange={(e) => setLogDate(e.target.value)}
+            className="rounded-lg px-3 py-2 text-sm focus:outline-none"
+            style={{
+              background: "var(--bg-base)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-default)",
+            }}
+          />
+        </div>
+        <div>
+          <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+            Duration (min)
+          </label>
+          <input
+            type="number"
+            min={0}
+            value={durationMinutes}
+            onChange={(e) =>
+              setDurationMinutes(e.target.value === "" ? "" : parseInt(e.target.value) || 0)
+            }
+            placeholder={isEdit ? "—" : "auto"}
+            className="w-24 rounded-lg px-3 py-2 text-sm focus:outline-none"
+            style={{
+              background: "var(--bg-base)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-default)",
+            }}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+          Notes
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          placeholder="How did it feel?"
+          className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
+          style={{
+            background: "var(--bg-base)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border-default)",
+          }}
+        />
       </div>
 
       <div className="space-y-3">
         {exercises.length === 0 && (
           <p className="text-sm text-center py-2" style={{ color: "var(--text-muted)" }}>
-            Add at least one exercise, then tap Finish to save.
+            Add at least one exercise, then save.
           </p>
         )}
         {exercises.map((ex, i) => (
@@ -204,7 +341,11 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
           onChange={(e) => setNewExerciseName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addExercise()}
           className="flex-1 rounded-lg px-3 py-2.5 md:py-2 text-sm focus:outline-none"
-          style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+          style={{
+            background: "var(--bg-base)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border-default)",
+          }}
           placeholder="Add exercise..."
         />
         <div className="flex gap-2">
@@ -212,7 +353,11 @@ export function WorkoutLogger({ template, onSave, onCancel }: WorkoutLoggerProps
             value={newExerciseType}
             onChange={(e) => setNewExerciseType(e.target.value)}
             className="flex-1 md:flex-none rounded-lg px-2 py-2.5 md:py-2 text-sm focus:outline-none"
-            style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
+            style={{
+              background: "var(--bg-base)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-default)",
+            }}
           >
             <option value="strength">Strength</option>
             <option value="timed">Timed</option>
