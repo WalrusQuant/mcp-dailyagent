@@ -8,6 +8,7 @@ import { Habit } from "@/types/database";
 
 interface HabitFormModalProps {
   habit?: Habit | null;
+  defaultName?: string;
   onClose: () => void;
   onSave: (habit: Habit) => void;
 }
@@ -15,8 +16,8 @@ interface HabitFormModalProps {
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const COLORS = ["#8fb5f2", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
 
-export function HabitFormModal({ habit, onClose, onSave }: HabitFormModalProps) {
-  const [name, setName] = useState(habit?.name || "");
+export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFormModalProps) {
+  const [name, setName] = useState(habit?.name || defaultName || "");
   const [description, setDescription] = useState(habit?.description || "");
   const [frequency, setFrequency] = useState<"daily" | "weekly">(habit?.frequency || "daily");
   const [targetDays, setTargetDays] = useState<number[]>(habit?.target_days || [1, 2, 3, 4, 5, 6, 7]);
@@ -34,6 +35,10 @@ export function HabitFormModal({ habit, onClose, onSave }: HabitFormModalProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (targetDays.length === 0) {
+      addToast("Pick at least one target day");
+      return;
+    }
 
     setIsSaving(true);
     try {

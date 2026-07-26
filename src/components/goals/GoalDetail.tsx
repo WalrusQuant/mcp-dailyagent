@@ -125,6 +125,11 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           )}
           <span className="capitalize">{goal.progress_mode} progress</span>
         </div>
+        {goal.progress_mode === "auto" && (
+          <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+            Auto progress is the average of linked tasks done and habits completed today.
+          </p>
+        )}
       </div>
 
       {/* Progress chart */}

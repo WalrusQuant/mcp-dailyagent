@@ -13,14 +13,16 @@ interface TaskFormModalProps {
   defaultDate?: string;
   defaultSpaceId?: string;
   defaultGoalId?: string;
+  /** Prefill title for new tasks (e.g. empty-state suggestions) */
+  defaultTitle?: string;
   onClose: () => void;
   onSave: (task: Task) => void;
 }
 
 const PRIORITY_LABELS: Record<string, string> = { A: "Must Do", B: "Should Do", C: "Nice to Do" };
 
-export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defaultGoalId, onClose, onSave }: TaskFormModalProps) {
-  const [title, setTitle] = useState(task?.title || "");
+export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defaultGoalId, defaultTitle, onClose, onSave }: TaskFormModalProps) {
+  const [title, setTitle] = useState(task?.title || defaultTitle || "");
   const [notes, setNotes] = useState(task?.notes || "");
   const [priority, setPriority] = useState(task?.priority || "B1");
   const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || getToday());

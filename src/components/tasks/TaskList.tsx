@@ -135,6 +135,7 @@ export function TaskList() {
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [prefillTitle, setPrefillTitle] = useState("");
   const [rolloverCount, setRolloverCount] = useState(0);
   const [rolloverDismissed, setRolloverDismissed] = useState(false);
 
@@ -303,7 +304,11 @@ export function TaskList() {
             { label: "Weekly planning", data: { title: "Weekly planning" } },
             { label: "Exercise", data: { title: "Exercise" } },
           ]}
-          onSuggestionClick={() => { setEditingTask(null); setShowForm(true); }}
+          onSuggestionClick={(s) => {
+            setEditingTask(null);
+            setPrefillTitle((s.data?.title as string) || s.label);
+            setShowForm(true);
+          }}
         />
       ) : (
         <div className="space-y-6">
@@ -343,7 +348,12 @@ export function TaskList() {
           task={editingTask}
           spaces={spaces}
           defaultDate={date}
-          onClose={() => { setShowForm(false); setEditingTask(null); }}
+          defaultTitle={editingTask ? undefined : prefillTitle}
+          onClose={() => {
+            setShowForm(false);
+            setEditingTask(null);
+            setPrefillTitle("");
+          }}
           onSave={handleSave}
         />
       )}

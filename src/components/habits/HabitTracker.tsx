@@ -27,6 +27,7 @@ export function HabitTracker() {
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [prefillName, setPrefillName] = useState("");
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -332,7 +333,11 @@ export function HabitTracker() {
             { label: "Read 30 min" },
             { label: "Meditate" },
           ]}
-          onSuggestionClick={() => { setEditingHabit(null); setShowForm(true); }}
+          onSuggestionClick={(s) => {
+            setEditingHabit(null);
+            setPrefillName(s.label);
+            setShowForm(true);
+          }}
         />
       ) : (
         <div className="space-y-0.5">
@@ -369,7 +374,12 @@ export function HabitTracker() {
       {showForm && (
         <HabitFormModal
           habit={editingHabit}
-          onClose={() => { setShowForm(false); setEditingHabit(null); }}
+          defaultName={editingHabit ? undefined : prefillName}
+          onClose={() => {
+            setShowForm(false);
+            setEditingHabit(null);
+            setPrefillName("");
+          }}
           onSave={handleSave}
         />
       )}

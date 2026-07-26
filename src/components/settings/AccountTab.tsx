@@ -6,21 +6,27 @@ import { useToast } from "@/lib/toast-context";
 
 export function AccountTab() {
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
   const [timezone, setTimezone] = useState("UTC");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const { addToast } = useToast();
 
   useEffect(() => {
     async function loadProfile() {
       try {
         const res = await fetch("/api/profile");
-        if (!res.ok) return;
+        if (!res.ok) {
+          setLoadError(true);
+          return;
+        }
         const data = await res.json();
         setDisplayName(data.display_name || "");
+        setEmail(data.email || null);
         setTimezone(data.timezone || "UTC");
       } catch {
-        // non-fatal
+        setLoadError(true);
       } finally {
         setIsLoading(false);
       }
@@ -59,6 +65,14 @@ export function AccountTab() {
     );
   }
 
+  if (loadError) {
+    return (
+      <p className="text-sm py-8" style={{ color: "var(--text-muted)" }}>
+        Couldn&apos;t load profile. Check that the app can reach the database.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -66,11 +80,21 @@ export function AccountTab() {
           Account
         </h2>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          Manage your profile information.
+          Manage your profile. AI generation lives in OpenClaw — this dashboard is your data UI.
         </p>
       </div>
 
       <div className="space-y-4">
+        {email && (
+          <div>
+            <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+              Email
+            </label>
+            <p className="text-sm px-4 py-3 rounded-lg" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+              {email}
+            </p>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
             Display Name

@@ -34,6 +34,7 @@ async function createHabit(
     frequency?: "daily" | "weekly";
     target_days?: number[];
     color?: string;
+    goal_id?: string;
   }
 ) {
   try {
@@ -46,6 +47,7 @@ async function createHabit(
         frequency: args.frequency ?? "daily",
         targetDays: args.target_days ?? [1, 2, 3, 4, 5, 6, 7],
         color: args.color ?? "#8fb5f2",
+        goalId: args.goal_id ?? null,
         archived: false,
       })
       .returning();
@@ -62,6 +64,7 @@ function buildHabitPatch(args: {
   target_days?: number[];
   color?: string;
   archived?: boolean;
+  goal_id?: string | null;
 }): Partial<typeof habits.$inferInsert> {
   const patch: Partial<typeof habits.$inferInsert> = {};
   if (args.name !== undefined) patch.name = args.name;
@@ -70,6 +73,7 @@ function buildHabitPatch(args: {
   if (args.target_days !== undefined) patch.targetDays = args.target_days;
   if (args.color !== undefined) patch.color = args.color;
   if (args.archived !== undefined) patch.archived = args.archived;
+  if (args.goal_id !== undefined) patch.goalId = args.goal_id;
   return patch;
 }
 
@@ -83,6 +87,7 @@ async function updateHabitLegacy(
     target_days?: number[];
     color?: string;
     archived?: boolean;
+    goal_id?: string | null;
   }
 ) {
   const updates = buildHabitPatch(args);
@@ -207,6 +212,7 @@ export function registerHabitTools(server: McpServer) {
         .optional()
         .describe("ISO days of week the habit is expected (1=Monday, 7=Sunday). Defaults to all 7 days. Completion stats are scored against these days regardless of frequency, so for a weekly habit list the specific day(s) it should be done."),
       color: z.string().optional().describe("Color hex code for display"),
+      goal_id: uuidSchema.optional().describe("Optional goal to link this habit to"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -264,6 +270,7 @@ export function registerHabitTools(server: McpServer) {
         .describe("ISO days of week the habit is expected (1=Monday, 7=Sunday). Completion stats are scored against these days regardless of frequency."),
       color: z.string().optional().describe("New color hex code for display"),
       archived: z.boolean().optional().describe("Set true to archive (hide) the habit, false to restore it"),
+      goal_id: uuidSchema.nullable().optional().describe("Goal ID to link, or null to unlink"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
