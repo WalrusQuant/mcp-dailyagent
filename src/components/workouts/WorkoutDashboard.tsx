@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Dumbbell, Play, FileText } from "lucide-react";
+import { Plus, Dumbbell, Play, FileText, Pencil, Trash2 } from "lucide-react";
 import { CardSkeleton } from "@/components/shared/Skeleton";
 import { WorkoutTemplate, WorkoutExercise, WorkoutLog, WorkoutLogExercise } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -72,11 +72,30 @@ export function WorkoutDashboard() {
     }
   };
 
-  const handleTemplateSave = (template: WorkoutTemplate) => {
+  const handleDeleteTemplate = async (template: TemplateWithExercises) => {
+    if (!confirm(`Delete the "${template.name}" template? Workouts already logged from it are kept.`)) return;
+    const previous = templates;
+    setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+    try {
+      const response = await fetch(`/api/workouts/templates/${template.id}`, { method: "DELETE" });
+      if (response.ok) {
+        addToast("Template deleted");
+      } else {
+        setTemplates(previous);
+        addToast("Failed to delete template");
+      }
+    } catch (error) {
+      console.error("Failed to delete template:", error);
+      setTemplates(previous);
+      addToast("Failed to delete template");
+    }
+  };
+
+  const handleTemplateSave = (template: TemplateWithExercises) => {
     if (editingTemplate) {
       setTemplates((prev) => prev.map((t) => t.id === template.id ? { ...t, ...template } : t));
     } else {
-      setTemplates((prev) => [template as TemplateWithExercises, ...prev]);
+      setTemplates((prev) => [template, ...prev]);
     }
     addToast(editingTemplate ? "Template updated" : "Template created");
     setShowTemplateForm(false);
@@ -86,7 +105,7 @@ export function WorkoutDashboard() {
   if (activeWorkout) {
     const template = activeWorkout === "quick" ? undefined : activeWorkout;
     return (
-      <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+      <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-4 md:p-6">
           <WorkoutLogger
             template={template}
@@ -100,7 +119,7 @@ export function WorkoutDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+      <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-4 md:p-6">
           <CardSkeleton />
         </div>
@@ -109,7 +128,7 @@ export function WorkoutDashboard() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+    <div className="flex-1 overflow-y-auto">
     <div className="max-w-2xl mx-auto p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Workouts</h1>
@@ -150,16 +169,19 @@ export function WorkoutDashboard() {
           />
         ) : (
           <div className="grid gap-2">
+            {/*
+              Starting a workout is its own button rather than the whole card:
+              when the card itself was the trigger, opening a template to check
+              or edit it dropped you straight into the logger, where Finish
+              writes a workout you never did.
+            */}
             {templates.map((t) => (
-              <button
+              <div
                 key={t.id}
-                onClick={() => setActiveWorkout(t)}
-                className="w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center justify-between"
+                className="w-full px-4 py-3 rounded-lg flex items-center justify-between gap-2"
                 style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-surface)"}
               >
-                <div>
+                <div className="min-w-0">
                   <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{t.name}</span>
                   {t.description && (
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{t.description}</p>
@@ -168,8 +190,33 @@ export function WorkoutDashboard() {
                     {t.workout_exercises?.length || 0} exercises
                   </p>
                 </div>
-                <Play className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
-              </button>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <button
+                    onClick={() => { setEditingTemplate(t); setShowTemplateForm(true); }}
+                    className="p-2.5 md:p-2 rounded-lg"
+                    style={{ color: "var(--text-muted)" }}
+                    aria-label={`Edit ${t.name}`}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTemplate(t)}
+                    className="p-2.5 md:p-2 rounded-lg"
+                    style={{ color: "var(--text-muted)" }}
+                    aria-label={`Delete ${t.name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setActiveWorkout(t)}
+                    className="flex items-center gap-1.5 ml-1 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
+                    style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+                    aria-label={`Start ${t.name}`}
+                  >
+                    <Play className="w-3.5 h-3.5" /> Start
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         )}

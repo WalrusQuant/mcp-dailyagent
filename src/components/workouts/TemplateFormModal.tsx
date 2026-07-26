@@ -3,12 +3,17 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { FormModal } from "@/components/shared/FormModal";
+import { useToast } from "@/lib/toast-context";
 import { WorkoutTemplate, WorkoutExercise } from "@/types/database";
 
+type TemplateWithExercises = WorkoutTemplate & { workout_exercises?: WorkoutExercise[] };
+
 interface TemplateFormModalProps {
-  template?: (WorkoutTemplate & { workout_exercises?: WorkoutExercise[] }) | null;
+  template?: TemplateWithExercises | null;
   onClose: () => void;
-  onSave: (template: WorkoutTemplate) => void;
+  // The API echoes back the saved exercises, so the caller can refresh the
+  // template's exercise count without refetching.
+  onSave: (template: TemplateWithExercises) => void;
 }
 
 interface ExerciseInput {
@@ -34,6 +39,7 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
     })) || [{ name: "", exercise_type: "strength", default_sets: 3, default_reps: 10, default_weight: 0, default_duration: 60 }]
   );
   const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
   const addExercise = () => {
     setExercises((prev) => [...prev, { name: "", exercise_type: "strength", default_sets: 3, default_reps: 10, default_weight: 0, default_duration: 60 }]);
@@ -69,9 +75,15 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
       if (response.ok) {
         const data = await response.json();
         onSave(data);
+        return;
       }
+
+      // A silent failure here reads as "saved" and loses the whole form.
+      const err = await response.json().catch(() => ({}));
+      addToast(err.error || "Failed to save template", "error", 4000);
     } catch (error) {
       console.error("Failed to save template:", error);
+      addToast(error instanceof Error ? error.message : "Failed to save template", "error", 4000);
     } finally {
       setIsSaving(false);
     }
