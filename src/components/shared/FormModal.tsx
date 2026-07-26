@@ -25,28 +25,36 @@ export function FormModal({ title, onClose, children, width = "420px" }: FormMod
   // devices; the panel is then capped to whatever space is left.
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div
-        className="relative rounded-xl shadow-lg z-10 max-h-full overflow-y-auto"
+        className="fixed inset-0"
+        style={{ background: "rgba(15, 17, 21, 0.55)", backdropFilter: "blur(4px)" }}
+        onClick={onClose}
+      />
+      <div
+        className="relative z-10 max-h-full overflow-y-auto"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-2xl)",
+          boxShadow: "var(--shadow-lg)",
           width,
           maxWidth: "calc(100vw - 2rem)",
         }}
       >
         <div
-          className="flex items-center justify-between p-4"
-          style={{ borderBottom: "1px solid var(--border-default)" }}
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
         >
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            {title}
-          </h2>
-          <button onClick={onClose} className="p-1" style={{ color: "var(--text-muted)" }}>
-            <X className="w-5 h-5" />
+          <h2 className="heading-md">{title}</h2>
+          <button
+            onClick={onClose}
+            className="btn-ghost p-1.5"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );

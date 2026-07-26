@@ -97,7 +97,7 @@ Located at `/api/mcp`. Uses the official `@modelcontextprotocol/sdk` with Stream
 
 - CSS variables in `globals.css` for light/dark themes
 - Theming via `style={{ color: "var(--text-primary)" }}` — no Tailwind color classes for text
-- Warm accent color (#d4a574 dark / #b8845a light)
+- Accent color (#8fb5f2 dark / #5b8fd4 light)
 - Collapsible sidebar: 280px full / 60px icon-only on desktop, hidden on mobile (BottomNav instead)
 - PWA with iOS viewport fix
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b0d10">
+  <meta name="theme-color" content="#0f1115">
 
   <title>Cadence — Productivity data layer for OpenClaw</title>
   <meta name="description" content="Self-hosted productivity data layer for OpenClaw. Postgres behind a typed MCP interface, plus a Next.js dashboard that reads and edits the same database. Single-user, Tailscale-gated.">
@@ -13,9 +13,10 @@
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-  <!-- Preload the two most critical font weights (headings + primary CTA) -->
+  <!-- Preload critical fonts -->
   <link rel="preload" href="fonts/inter-tight-700-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/inter-tight-600-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-tight-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
@@ -62,7 +63,7 @@
   </script>
 
   <style>
-    /* ── Self-hosted fonts (latin + latin-ext only; English content) ── */
+    /* ── Self-hosted fonts ── */
     @font-face {
       font-family: 'Inter Tight';
       font-style: normal; font-weight: 400; font-display: swap;
@@ -137,22 +138,25 @@
     }
 
     :root {
-      /* Control Room — dark, structured, instrument-panel.
-         Keeps the dashboard's --accent #d4a574 so landing + app read as one product. */
-      --bg: #0b0d10;
-      --bg-2: #111419;
-      --bg-card: #15181f;
-      --bg-elev: #1a1e26;
-      --ink: #eef0f3;
-      --ink-2: #9aa1ac;
-      --ink-3: #5f6772;
-      --accent: #d4a574;
-      --accent-2: #e8bd8a;
-      --line: #222732;
-      --line-2: #2e3543;
-      --grid: rgba(212, 165, 116, 0.045);   /* faint 44px grid — the signature tell */
+      /* Editorial Minimal — cool charcoal + amber, matches app tokens */
+      --bg: #0f1115;
+      --bg-2: #171a20;
+      --bg-card: #171a20;
+      --bg-elev: #1f242c;
+      --ink: #e8eaed;
+      --ink-2: #9aa3b2;
+      --ink-3: #6b7380;
+      --accent: #8fb5f2;
+      --accent-2: #a5c6f5;
+      --accent-soft: rgba(143, 181, 242, 0.14);
+      --line: #2a303a;
+      --line-2: #3a4250;
       --sans: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.28), 0 1px 3px rgba(0,0,0,0.18);
+      --shadow-md: 0 4px 14px rgba(0,0,0,0.32), 0 1px 3px rgba(0,0,0,0.2);
+      --shadow-lg: 0 16px 40px rgba(0,0,0,0.4);
+      --radius: 14px;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -161,15 +165,11 @@
     body {
       font-family: var(--sans);
       background: var(--bg);
-      background-image:
-        linear-gradient(var(--grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-      background-size: 44px 44px;
       color: var(--ink);
       line-height: 1.55;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      letter-spacing: -0.012em;
+      letter-spacing: -0.011em;
     }
 
     a { color: inherit; text-decoration: none; }
@@ -178,17 +178,17 @@
       font-size: 0.85em;
       background: var(--bg-elev);
       padding: 2px 6px;
-      border-radius: 4px;
+      border-radius: 6px;
       color: var(--accent);
       border: 1px solid var(--line);
     }
 
-    .container { max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
 
     /* ── Nav ── */
     nav.top {
       position: sticky; top: 0; z-index: 50;
-      background: rgba(11, 13, 16, 0.78);
+      background: rgba(15, 17, 21, 0.82);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--line);
@@ -198,14 +198,18 @@
     }
     .brand {
       display: flex; align-items: center; gap: 10px;
-      font-weight: 700; font-size: 17px; letter-spacing: -0.02em;
+      font-weight: 600; font-size: 16px; letter-spacing: -0.02em;
     }
     .brand .mark {
-      width: 28px; height: 28px; border-radius: 7px;
-      border: 1px solid var(--accent);
+      width: 30px; height: 30px; border-radius: 8px;
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
       display: grid; place-items: center;
-      color: var(--accent); font-family: var(--mono); font-size: 14px; font-weight: 700;
+      color: var(--accent);
+      padding: 5px;
+      box-sizing: border-box;
     }
+    .brand .mark svg { width: 100%; height: 100%; display: block; }
     .nav-links { display: flex; align-items: center; gap: 28px; }
     .nav-links a {
       color: var(--ink-2); font-size: 14px; font-weight: 500; transition: color 0.2s;
@@ -213,45 +217,42 @@
     .nav-links a:hover { color: var(--ink); }
     .nav-links .github {
       border: 1px solid var(--line-2); padding: 8px 16px; border-radius: 100px;
-      font-weight: 600; font-size: 13.5px; transition: border-color 0.2s, color 0.2s;
+      font-weight: 600; font-size: 13.5px; transition: border-color 0.2s, color 0.2s, background 0.2s;
       display: inline-flex; align-items: center; gap: 6px;
     }
-    .nav-links .github:hover { border-color: var(--accent); color: var(--accent); }
+    .nav-links .github:hover {
+      border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+    }
 
     /* ── Hero ── */
-    .hero { padding: 110px 0 70px; position: relative; }
+    .hero { padding: 100px 0 72px; position: relative; }
     .hero .grid {
-      display: grid; grid-template-columns: 1.3fr 1fr; gap: 60px; align-items: center;
+      display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center;
     }
     .hero .eyebrow {
-      display: inline-flex; align-items: center; gap: 10px;
-      font-family: var(--mono); font-size: 11.5px; font-weight: 500;
-      letter-spacing: 0.06em; color: var(--accent);
-      margin-bottom: 26px; text-transform: uppercase;
-    }
-    .hero .eyebrow .led {
-      width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
-      box-shadow: 0 0 8px var(--accent), 0 0 0 3px rgba(212, 165, 116, 0.18);
-      animation: pulse 2.4s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 8px var(--accent), 0 0 0 3px rgba(212, 165, 116, 0.18); }
-      50%      { box-shadow: 0 0 12px var(--accent), 0 0 0 6px rgba(212, 165, 116, 0.08); }
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12.5px; font-weight: 500;
+      letter-spacing: 0.04em; color: var(--accent);
+      margin-bottom: 22px;
+      padding: 6px 12px;
+      background: var(--accent-soft);
+      border-radius: 100px;
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
     }
     .hero h1 {
-      font-size: clamp(40px, 5.4vw, 62px);
-      font-weight: 700; line-height: 1.04;
-      letter-spacing: -0.035em; margin-bottom: 22px;
+      font-size: clamp(40px, 5.2vw, 58px);
+      font-weight: 600; line-height: 1.08;
+      letter-spacing: -0.035em; margin-bottom: 20px;
     }
     .hero h1 .ac { color: var(--accent); }
     .hero p.tagline {
-      font-size: clamp(16px, 1.5vw, 19px);
-      color: var(--ink-2); max-width: 520px; margin-bottom: 36px; line-height: 1.6;
+      font-size: clamp(16px, 1.5vw, 18.5px);
+      color: var(--ink-2); max-width: 480px; margin-bottom: 32px; line-height: 1.65;
     }
     .cta-group { display: inline-flex; gap: 12px; flex-wrap: wrap; }
     .cta-primary, .cta-secondary {
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 13px 24px; border-radius: 100px;
+      padding: 13px 22px; border-radius: 100px;
       font-weight: 600; font-size: 14.5px;
       transition: transform 0.15s, background 0.2s, color 0.2s, border-color 0.2s;
     }
@@ -260,135 +261,207 @@
     .cta-secondary {
       background: transparent; color: var(--ink); border: 1px solid var(--line-2);
     }
-    .cta-secondary:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+    .cta-secondary:hover {
+      border-color: var(--accent); color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-1px);
+    }
 
-    /* Status panel — the instrument flourish that replaces decorative motion */
-    .panel {
-      background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px;
-      padding: 22px; font-family: var(--mono); font-size: 12.5px; position: relative;
+    /* Product preview — soft dashboard mock */
+    .preview {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
     }
-    .panel .phead {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+    .preview .p-chrome {
+      display: flex; align-items: center; gap: 6px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-elev);
     }
-    .panel .phead .t { color: var(--ink-3); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
-    .panel .phead .live { color: var(--accent); font-size: 10.5px; display: flex; align-items: center; gap: 6px; }
-    .panel .phead .live .d {
-      width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-      box-shadow: 0 0 6px var(--accent); animation: pulse 2.4s ease-in-out infinite;
+    .preview .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--line-2);
     }
-    .panel .row { display: flex; justify-content: space-between; padding: 7px 0; color: var(--ink-2); }
-    .panel .row .k { color: var(--ink-3); }
-    .panel .row .v { color: var(--ink); }
-    .panel .row .v.ac { color: var(--accent); }
-    .panel .spark { margin-top: 14px; height: 42px; display: flex; align-items: end; gap: 3px; }
-    .panel .spark span { flex: 1; background: var(--accent); border-radius: 2px; opacity: 0.55; }
+    .preview .p-body { padding: 18px 16px 16px; }
+    .preview .p-greeting {
+      font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 2px;
+    }
+    .preview .p-date { font-size: 12px; color: var(--ink-3); margin-bottom: 14px; }
+    .preview .p-pulse {
+      font-size: 12px; color: var(--ink-2); margin-bottom: 14px; font-weight: 500;
+    }
+    .preview .p-hero {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      background: var(--bg-elev);
+    }
+    .preview .p-hero .label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--accent); font-weight: 500; margin-bottom: 6px;
+    }
+    .preview .p-hero .task {
+      font-size: 13.5px; font-weight: 500; color: var(--ink);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .preview .p-hero .badge {
+      font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+      background: var(--accent-soft); color: var(--accent);
+    }
+    .preview .p-widgets {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .preview .p-widget {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--bg);
+    }
+    .preview .p-widget .w-title {
+      font-size: 11.5px; font-weight: 500; color: var(--ink-2); margin-bottom: 8px;
+      display: flex; justify-content: space-between;
+    }
+    .preview .p-widget .w-val {
+      font-size: 20px; font-weight: 600; letter-spacing: -0.02em;
+    }
+    .preview .p-widget .bar {
+      height: 4px; border-radius: 100px; background: var(--bg-elev); margin-top: 8px; overflow: hidden;
+    }
+    .preview .p-widget .bar > i {
+      display: block; height: 100%; border-radius: 100px; background: var(--accent); width: 62%;
+    }
+    .preview .p-widget .bar.habits > i { width: 80%; background: #8aaf8e; }
 
-    /* ── Blueprint diagram ── */
-    .blueprint { padding: 60px 0 100px; }
-    .bp-head { text-align: center; max-width: 620px; margin: 0 auto 48px; }
-    .bp-head .label {
-      font-family: var(--mono); font-size: 11.5px; font-weight: 500;
-      letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    /* ── Architecture ── */
+    .architecture { padding: 48px 0 88px; }
+    .section-head { text-align: center; max-width: 560px; margin: 0 auto 40px; }
+    .section-head .label {
+      font-size: 12px; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 12px;
     }
-    .bp-head h2 {
-      font-size: clamp(26px, 3.4vw, 36px); font-weight: 700;
-      letter-spacing: -0.025em; margin-bottom: 12px;
+    .section-head h2 {
+      font-size: clamp(26px, 3.2vw, 34px); font-weight: 600;
+      letter-spacing: -0.025em; margin-bottom: 12px; line-height: 1.2;
     }
-    .bp-head p { color: var(--ink-2); font-size: 16.5px; }
-    .bp-frame {
-      background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 40px;
+    .section-head p { color: var(--ink-2); font-size: 16px; line-height: 1.6; }
+    .arch-frame {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 36px;
+      box-shadow: var(--shadow-sm);
     }
-    .bp-frame svg { width: 100%; height: auto; display: block; }
+    .arch-frame svg { width: 100%; height: auto; display: block; }
 
-    /* ── Features as a dense table ── */
-    .features { padding: 80px 0; }
-    .features .head { margin-bottom: 40px; }
+    /* ── Features ── */
+    .features { padding: 72px 0; }
+    .features .head { margin-bottom: 36px; max-width: 620px; }
     .features .head .label {
-      font-family: var(--mono); font-size: 11.5px; font-weight: 500;
-      letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+      font-size: 12px; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 12px;
     }
     .features .head h2 {
-      font-size: clamp(26px, 3.4vw, 34px); font-weight: 700; letter-spacing: -0.025em;
+      font-size: clamp(26px, 3.2vw, 34px); font-weight: 600; letter-spacing: -0.025em;
     }
-    .features .head p { color: var(--ink-2); font-size: 16.5px; margin-top: 8px; max-width: 620px; }
-    .ftable { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-    .ftable .frow {
-      display: grid; grid-template-columns: 64px 170px 1fr 110px;
-      align-items: center; gap: 20px; padding: 18px 22px;
-      border-top: 1px solid var(--line); transition: background 0.2s;
+    .features .head p { color: var(--ink-2); font-size: 16px; margin-top: 10px; line-height: 1.6; }
+    .flist {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
     }
-    .ftable .frow:first-child { border-top: 0; }
-    .ftable .frow:hover { background: var(--bg-2); }
-    .ftable .code {
-      font-family: var(--mono); color: var(--accent); font-size: 12px; font-weight: 600;
+    .fcard {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px 22px;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      box-shadow: var(--shadow-sm);
     }
-    .ftable .name { font-weight: 600; font-size: 15px; }
-    .ftable .desc { color: var(--ink-2); font-size: 14px; line-height: 1.5; }
-    .ftable .stat { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); text-align: right; }
+    .fcard:hover {
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+    .fcard .f-top {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .fcard .name { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+    .fcard .code {
+      font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+      color: var(--accent); letter-spacing: 0.04em;
+      padding: 3px 7px; border-radius: 6px;
+      background: var(--accent-soft);
+    }
+    .fcard .desc { color: var(--ink-2); font-size: 13.5px; line-height: 1.55; }
 
     /* ── Stack ── */
-    .stack { padding: 80px 0; text-align: center; }
+    .stack { padding: 72px 0; text-align: center; }
     .stack .label {
-      font-family: var(--mono); font-size: 11.5px; font-weight: 500;
-      letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+      font-size: 12px; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 12px;
     }
     .stack h2 {
-      font-size: clamp(28px, 4vw, 36px); font-weight: 700; margin-bottom: 12px; letter-spacing: -0.025em;
+      font-size: clamp(26px, 3.5vw, 34px); font-weight: 600;
+      margin-bottom: 12px; letter-spacing: -0.025em;
     }
-    .stack p.lead { color: var(--ink-2); font-size: 16px; max-width: 560px; margin: 0 auto 40px; }
-    .stack-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 820px; margin: 0 auto; }
+    .stack p.lead { color: var(--ink-2); font-size: 16px; max-width: 480px; margin: 0 auto 36px; }
+    .stack-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 780px; margin: 0 auto; }
     .chip {
       padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--line);
       border-radius: 100px; font-size: 13.5px; color: var(--ink-2); font-weight: 500;
-      transition: border-color 0.2s, color 0.2s;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      box-shadow: var(--shadow-sm);
     }
-    .chip:hover { border-color: var(--accent); color: var(--ink); }
+    .chip:hover {
+      border-color: var(--accent); color: var(--ink); background: var(--accent-soft);
+    }
 
     /* ── CTA ── */
-    .cta-section { padding: 100px 0; text-align: center; }
+    .cta-section { padding: 88px 0 100px; text-align: center; }
     .cta-section h2 {
-      font-size: clamp(32px, 5vw, 48px); font-weight: 700;
-      margin-bottom: 16px; letter-spacing: -0.025em; line-height: 1.1;
+      font-size: clamp(30px, 4.5vw, 44px); font-weight: 600;
+      margin-bottom: 14px; letter-spacing: -0.03em; line-height: 1.15;
     }
     .cta-section p {
-      color: var(--ink-2); font-size: 18px; max-width: 520px; margin: 0 auto 40px;
+      color: var(--ink-2); font-size: 17px; max-width: 480px; margin: 0 auto 36px; line-height: 1.6;
     }
     .cta-section .cta-group { justify-content: center; }
 
     /* ── Footer ── */
     footer {
-      padding: 40px 0;
-      background: rgba(11, 13, 16, 0.78);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      padding: 32px 0;
       border-top: 1px solid var(--line);
-      color: var(--ink-3); font-size: 13px; font-family: var(--mono);
+      color: var(--ink-3); font-size: 13px;
     }
     footer .container {
       display: flex; justify-content: space-between; align-items: center;
       flex-wrap: wrap; gap: 16px;
     }
     footer .links { display: flex; gap: 22px; }
-    footer a { transition: color 0.2s; }
+    footer a { transition: color 0.2s; color: var(--ink-3); }
     footer a:hover { color: var(--accent); }
 
     /* ── Responsive ── */
     @media (max-width: 900px) {
       .hero .grid { grid-template-columns: 1fr; gap: 40px; }
-      .ftable .frow { grid-template-columns: 48px 1fr; gap: 12px; }
-      .ftable .desc, .ftable .stat { grid-column: 2; }
-      .ftable .stat { text-align: left; margin-top: 4px; }
+      .flist { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
       .nav-links a:not(.github) { display: none; }
+      .hero { padding: 64px 0 48px; }
+      .arch-frame { padding: 20px; }
     }
 
-    /* ── Reduced motion: flatten everything ── */
     @media (prefers-reduced-motion: reduce) {
-      .hero .eyebrow .led, .panel .phead .live .d { animation: none !important; }
       .cta-primary, .cta-secondary, .nav-links a, .nav-links .github,
-      .chip, .ftable .frow { transition: none !important; }
+      .chip, .fcard { transition: none !important; }
+      .cta-primary:hover, .cta-secondary:hover, .fcard:hover { transform: none; }
       html { scroll-behavior: auto; }
     }
   </style>
@@ -398,7 +471,19 @@
   <nav class="top">
     <div class="container">
       <a href="./" class="brand">
-        <span class="mark">♪</span>
+        <span class="mark" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Cadence">
+            <g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="26" y="36" width="72" height="56" rx="10"/>
+              <rect x="26" y="164" width="72" height="56" rx="10"/>
+              <path d="M 98 64 Q 140 64 155 100" stroke-width="13"/>
+              <path d="M 98 192 Q 140 192 155 156" stroke-width="13"/>
+              <ellipse cx="195" cy="96" rx="42" ry="16"/>
+              <path d="M 153 96 L 153 160 A 42 16 0 0 0 237 160 L 237 96"/>
+              <path d="M 153 128 A 42 16 0 0 0 237 128" stroke-width="12" opacity="0.55"/>
+            </g>
+          </svg>
+        </span>
         Cadence
       </a>
       <div class="nav-links">
@@ -419,11 +504,11 @@
     <div class="container">
       <div class="grid">
         <div>
-          <div class="eyebrow"><span class="led"></span> MCP_DATA_LAYER · v2.3 · ONLINE</div>
+          <div class="eyebrow">Self-hosted · for OpenClaw</div>
           <h1>Your <span class="ac">tasks</span>.<br>Your agent.<br>Your rules.</h1>
           <p class="tagline">
-            A typed MCP server and a clean dashboard over one self-hosted Postgres.
-            Your OpenClaw agent writes. Your browser reads. No SaaS — that's the point.
+            A typed MCP server and a calm dashboard over one self-hosted Postgres.
+            Your OpenClaw agent writes. Your browser reads. No SaaS — that&rsquo;s the point.
           </p>
           <div class="cta-group">
             <a href="docs/quick-start/" class="cta-primary">
@@ -435,76 +520,86 @@
             <a href="docs/" class="cta-secondary">View docs</a>
           </div>
         </div>
-        <div class="panel" aria-label="System status">
-          <div class="phead"><span class="t">cadence ▸ status</span><span class="live"><span class="d"></span>LIVE</span></div>
-          <div class="row"><span class="k">db</span><span class="v">postgres@16 ▸ ok</span></div>
-          <div class="row"><span class="k">mcp tools</span><span class="v ac">45 typed</span></div>
-          <div class="row"><span class="k">tables</span><span class="v">17</span></div>
-          <div class="row"><span class="k">prompts</span><span class="v">13 templates</span></div>
-          <div class="row"><span class="k">auth</span><span class="v">bearer · 256-bit</span></div>
-          <div class="row"><span class="k">perimeter</span><span class="v">tailscale</span></div>
-          <div class="row"><span class="k">uptime</span><span class="v">99.9%</span></div>
-          <div class="spark" aria-hidden="true">
-            <span style="height:40%"></span><span style="height:65%"></span><span style="height:50%"></span>
-            <span style="height:80%"></span><span style="height:55%"></span><span style="height:90%"></span>
-            <span style="height:70%"></span><span style="height:60%"></span><span style="height:85%"></span>
-            <span style="height:75%"></span><span style="height:95%"></span><span style="height:68%"></span>
+
+        <!-- Soft product preview matching the app dashboard -->
+        <div class="preview" aria-label="Dashboard preview">
+          <div class="p-chrome" aria-hidden="true">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          </div>
+          <div class="p-body">
+            <div class="p-greeting">Good morning</div>
+            <div class="p-date">Thursday, March 26, 2026</div>
+            <div class="p-pulse">3/5 habits  ·  2 tasks left  ·  45m focus</div>
+            <div class="p-hero">
+              <div class="label">Daily Start</div>
+              <div class="task">
+                <span class="badge">A1</span>
+                Ship the weekly review prompt
+              </div>
+            </div>
+            <div class="p-widgets">
+              <div class="p-widget">
+                <div class="w-title"><span>Tasks</span><span>4/7</span></div>
+                <div class="w-val">57%</div>
+                <div class="bar"><i></i></div>
+              </div>
+              <div class="p-widget">
+                <div class="w-title"><span>Habits</span><span>80%</span></div>
+                <div class="w-val">4d</div>
+                <div class="bar habits"><i></i></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="blueprint">
+  <section class="architecture">
     <div class="container">
-      <div class="bp-head">
-        <div class="label">The shape</div>
+      <div class="section-head">
+        <div class="label">Architecture</div>
         <h2>Two front doors. One database.</h2>
-        <p>Orthogonal lines, named hops, no decoration. The agent and the browser both resolve to the same Postgres.</p>
+        <p>Your agent and your browser both resolve to the same Postgres — typed MCP tools on one side, a clean dashboard on the other.</p>
       </div>
-      <div class="bp-frame">
-        <svg viewBox="0 0 900 280" role="img" aria-label="Architecture blueprint: OpenClaw agent and Browser dashboard both reach a single Postgres via the MCP server and API routes">
+      <div class="arch-frame">
+        <svg viewBox="0 0 900 280" role="img" aria-label="Architecture: OpenClaw agent and Browser dashboard both reach a single Postgres via the MCP server and API routes">
           <defs>
             <marker id="arrowhead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-              <path d="M0 0 L9 4.5 L0 9 z" fill="#d4a574"/>
+              <path d="M0 0 L9 4.5 L0 9 z" fill="#8fb5f2"/>
             </marker>
           </defs>
-          <!-- Clients -->
-          <g font-family="'JetBrains Mono', monospace">
-            <rect x="30" y="36" width="180" height="56" rx="6" fill="none" stroke="#d4a574" stroke-width="1.5"/>
-            <text x="120" y="60" text-anchor="middle" fill="#eef0f3" font-size="12.5" font-weight="600">OpenClaw agent</text>
-            <text x="120" y="78" text-anchor="middle" font-size="10" fill="#9aa1ac">MCP client</text>
+          <g font-family="'Inter Tight', sans-serif">
+            <rect x="30" y="36" width="180" height="56" rx="10" fill="#171a20" stroke="#8fb5f2" stroke-width="1.5"/>
+            <text x="120" y="60" text-anchor="middle" fill="#e8eaed" font-size="13" font-weight="600">OpenClaw agent</text>
+            <text x="120" y="78" text-anchor="middle" font-size="11" fill="#9aa3b2">MCP client</text>
 
-            <rect x="30" y="188" width="180" height="56" rx="6" fill="none" stroke="#d4a574" stroke-width="1.5"/>
-            <text x="120" y="212" text-anchor="middle" fill="#eef0f3" font-size="12.5" font-weight="600">Browser</text>
-            <text x="120" y="230" text-anchor="middle" font-size="10" fill="#9aa1ac">Next.js dashboard</text>
+            <rect x="30" y="188" width="180" height="56" rx="10" fill="#171a20" stroke="#8fb5f2" stroke-width="1.5"/>
+            <text x="120" y="212" text-anchor="middle" fill="#e8eaed" font-size="13" font-weight="600">Browser</text>
+            <text x="120" y="230" text-anchor="middle" font-size="11" fill="#9aa3b2">Next.js dashboard</text>
           </g>
-          <!-- Interfaces -->
-          <g font-family="'JetBrains Mono', monospace">
-            <rect x="340" y="36" width="170" height="56" rx="6" fill="#15181f" stroke="#d4a574" stroke-width="1.5"/>
-            <text x="425" y="60" text-anchor="middle" fill="#eef0f3" font-size="12.5" font-weight="600">/api/mcp</text>
-            <text x="425" y="78" text-anchor="middle" font-size="10" fill="#9aa1ac">bearer auth · 45 tools</text>
+          <g font-family="'Inter Tight', sans-serif">
+            <rect x="340" y="36" width="170" height="56" rx="10" fill="#1f242c" stroke="#2a303a" stroke-width="1.5"/>
+            <text x="425" y="60" text-anchor="middle" fill="#e8eaed" font-size="13" font-weight="600">/api/mcp</text>
+            <text x="425" y="78" text-anchor="middle" font-size="11" fill="#9aa3b2">bearer auth · 45 tools</text>
 
-            <rect x="340" y="188" width="170" height="56" rx="6" fill="#15181f" stroke="#d4a574" stroke-width="1.5"/>
-            <text x="425" y="212" text-anchor="middle" fill="#eef0f3" font-size="12.5" font-weight="600">/api routes</text>
-            <text x="425" y="230" text-anchor="middle" font-size="10" fill="#9aa1ac">CRUD over HTTP</text>
+            <rect x="340" y="188" width="170" height="56" rx="10" fill="#1f242c" stroke="#2a303a" stroke-width="1.5"/>
+            <text x="425" y="212" text-anchor="middle" fill="#e8eaed" font-size="13" font-weight="600">/api routes</text>
+            <text x="425" y="230" text-anchor="middle" font-size="11" fill="#9aa3b2">CRUD over HTTP</text>
           </g>
-          <!-- Store -->
-          <g font-family="'JetBrains Mono', monospace">
-            <rect x="640" y="96" width="150" height="88" rx="6" fill="#15181f" stroke="#d4a574" stroke-width="1.5"/>
-            <text x="715" y="128" text-anchor="middle" fill="#d4a574" font-size="13" font-weight="700">Postgres</text>
-            <text x="715" y="148" text-anchor="middle" font-size="10" fill="#9aa1ac">17 tables</text>
-            <text x="715" y="164" text-anchor="middle" font-size="10" fill="#9aa1ac">Drizzle ORM</text>
+          <g font-family="'Inter Tight', sans-serif">
+            <rect x="640" y="96" width="150" height="88" rx="10" fill="#1f242c" stroke="#8fb5f2" stroke-width="1.5"/>
+            <text x="715" y="128" text-anchor="middle" fill="#8fb5f2" font-size="14" font-weight="600">Postgres</text>
+            <text x="715" y="148" text-anchor="middle" font-size="11" fill="#9aa3b2">17 tables</text>
+            <text x="715" y="164" text-anchor="middle" font-size="11" fill="#9aa3b2">Drizzle ORM</text>
           </g>
-          <!-- Ortho lines -->
-          <g fill="none" stroke="#d4a574" stroke-width="1.5">
+          <g fill="none" stroke="#8fb5f2" stroke-width="1.5">
             <path d="M210 64 L340 64" marker-end="url(#arrowhead)"/>
             <path d="M210 216 L340 216" marker-end="url(#arrowhead)"/>
             <path d="M510 64 L590 64 L590 100 L640 122" marker-end="url(#arrowhead)"/>
             <path d="M510 216 L590 216 L590 180 L640 160" marker-end="url(#arrowhead)"/>
           </g>
-          <!-- Hop labels -->
-          <g font-family="'JetBrains Mono', monospace" font-size="9.5" fill="#5f6772">
+          <g font-family="'JetBrains Mono', monospace" font-size="10" fill="#6b7380">
             <text x="275" y="56" text-anchor="middle">bearer</text>
             <text x="275" y="208" text-anchor="middle">fetch</text>
             <text x="600" y="56" text-anchor="middle">sql</text>
@@ -517,64 +612,42 @@
   <section class="features" id="features">
     <div class="container">
       <div class="head">
-        <div class="label">What's in it</div>
+        <div class="label">What&rsquo;s in it</div>
         <h2>A durable store for the life stuff you already track</h2>
         <p>Tasks, habits, journal, workouts, focus sessions, goals. All in Postgres, all behind one typed API.</p>
       </div>
-      <div class="ftable">
-        <div class="frow">
-          <span class="code">TASK</span>
-          <span class="name">Tasks</span>
-          <span class="desc">Franklin Covey <code>A1</code>–<code>C9</code> priority, rollover, recurrence, space + goal linking.</span>
-          <span class="stat">∞ depth</span>
+      <div class="flist">
+        <div class="fcard">
+          <div class="f-top"><span class="name">Tasks</span><span class="code">TASK</span></div>
+          <p class="desc">Franklin Covey <code>A1</code>–<code>C9</code> priority, rollover, recurrence, space + goal linking.</p>
         </div>
-        <div class="frow">
-          <span class="code">HABIT</span>
-          <span class="name">Habits</span>
-          <span class="desc">Daily or weekly, ISO-weekday target days, streak tracking via a dead-simple log table.</span>
-          <span class="stat">7d / 52w</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Habits</span><span class="code">HABIT</span></div>
+          <p class="desc">Daily or weekly, ISO-weekday target days, streak tracking via a simple log table.</p>
         </div>
-        <div class="frow">
-          <span class="code">JRNL</span>
-          <span class="name">Journal</span>
-          <span class="desc">One entry per day, mood 1–5, full-text search across everything you've ever written.</span>
-          <span class="stat">365/y</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Journal</span><span class="code">JRNL</span></div>
+          <p class="desc">One entry per day, mood 1–5, full-text search across everything you&rsquo;ve ever written.</p>
         </div>
-        <div class="frow">
-          <span class="code">WORK</span>
-          <span class="name">Workouts</span>
-          <span class="desc">Templates and logged sessions. Strength, timed, or cardio. Per-exercise sets, reps, weight.</span>
-          <span class="stat">per-set</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Workouts</span><span class="code">WORK</span></div>
+          <p class="desc">Templates and logged sessions. Strength, timed, or cardio. Per-exercise sets, reps, weight.</p>
         </div>
-        <div class="frow">
-          <span class="code">FOCUS</span>
-          <span class="name">Focus sessions</span>
-          <span class="desc">Pomodoro timer data, optionally linked to a task. 1–480 min duration, 0–120 min break.</span>
-          <span class="stat">1–480m</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Focus sessions</span><span class="code">FOCUS</span></div>
+          <p class="desc">Pomodoro timer data, optionally linked to a task. 1–480 min duration, 0–120 min break.</p>
         </div>
-        <div class="frow">
-          <span class="code">GOAL</span>
-          <span class="name">Goals</span>
-          <span class="desc">Categories, progress %, target dates, a progress log table for trend lines.</span>
-          <span class="stat">0–100%</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Goals</span><span class="code">GOAL</span></div>
+          <p class="desc">Categories, progress %, target dates, a progress log table for trend lines.</p>
         </div>
-        <div class="frow">
-          <span class="code">AREA</span>
-          <span class="name">Spaces</span>
-          <span class="desc">Projects / areas of life that group tasks, habits, and goals under a single umbrella.</span>
-          <span class="stat">nested</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Spaces</span><span class="code">AREA</span></div>
+          <p class="desc">Projects and areas of life that group tasks, habits, and goals under one umbrella.</p>
         </div>
-        <div class="frow">
-          <span class="code">BRIEF</span>
-          <span class="name">Daily briefings</span>
-          <span class="desc">Written by OpenClaw via <code>save_daily_briefing</code>. Displayed read-only on the dashboard.</span>
-          <span class="stat">read-only</span>
-        </div>
-        <div class="frow">
-          <span class="code">REVW</span>
-          <span class="name">Weekly reviews</span>
-          <span class="desc">Written by OpenClaw via <code>save_weekly_review</code>. Displayed read-only on the dashboard.</span>
-          <span class="stat">read-only</span>
+        <div class="fcard">
+          <div class="f-top"><span class="name">Briefings &amp; reviews</span><span class="code">AGENT</span></div>
+          <p class="desc">Written by OpenClaw via MCP save tools. Displayed read-only on the dashboard.</p>
         </div>
       </div>
     </div>
@@ -584,7 +657,7 @@
     <div class="container">
       <div class="label">Under the hood</div>
       <h2>Built with boring, battle-tested pieces</h2>
-      <p class="lead">No framework-of-the-week. Nothing you haven't seen before.</p>
+      <p class="lead">No framework-of-the-week. Nothing you haven&rsquo;t seen before.</p>
       <div class="stack-chips">
         <span class="chip">Next.js 16</span>
         <span class="chip">React 19</span>
@@ -623,7 +696,7 @@
 
   <footer>
     <div class="container">
-      <div>© <span id="year">2026</span> WALRUSQUANT · PERSONAL USE LICENSE</div>
+      <div>© <span id="year">2026</span> WalrusQuant · Personal use license</div>
       <div class="links">
         <a href="docs/">Documentation</a>
         <a href="docs/architecture/">Architecture</a>

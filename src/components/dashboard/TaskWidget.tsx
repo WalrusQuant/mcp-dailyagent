@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { CheckSquare } from "lucide-react";
 import { Task } from "@/types/database";
+import { WidgetCard } from "@/components/shared/WidgetCard";
 
 interface TaskWidgetProps {
   total: number;
@@ -10,42 +10,49 @@ interface TaskWidgetProps {
   topPriorities: Task[];
 }
 
+function priorityColor(priority: string): string {
+  const letter = priority[0];
+  if (letter === "A") return "var(--accent-negative)";
+  if (letter === "B") return "var(--accent-warning)";
+  return "var(--accent-positive)";
+}
+
 export function TaskWidget({ total, done, topPriorities }: TaskWidgetProps) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <Link
+    <WidgetCard
       href="/tasks"
-      className="block rounded-xl p-4 transition-colors"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--accent-primary)"}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-default)"}
+      title="Tasks"
+      icon={CheckSquare}
+      domainColor="var(--domain-tasks)"
+      meta={`${done}/${total}`}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <CheckSquare className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Tasks</span>
-        <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>{done}/{total}</span>
+      <div className="progress-track mb-3.5">
+        <div className="progress-fill" style={{ width: `${pct}%`, background: "var(--domain-tasks)" }} />
       </div>
 
-      <div className="w-full h-2 rounded-full mb-3" style={{ background: "var(--bg-base)" }}>
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, background: "var(--accent-primary)" }}
-        />
-      </div>
-
-      {topPriorities.length > 0 && (
-        <div className="space-y-1">
+      {topPriorities.length > 0 ? (
+        <div className="space-y-1.5">
           {topPriorities.slice(0, 3).map((t) => (
-            <div key={t.id} className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-              <span className="font-bold" style={{ color: t.priority[0] === "A" ? "#ef4444" : t.priority[0] === "B" ? "#f59e0b" : "#22c55e" }}>
+            <div
+              key={t.id}
+              className="flex items-center gap-2 text-[13px]"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              <span
+                className="text-[11px] font-semibold tabular-nums w-5 shrink-0"
+                style={{ color: priorityColor(t.priority) }}
+              >
                 {t.priority}
               </span>
               <span className="truncate">{t.title}</span>
             </div>
           ))}
         </div>
+      ) : (
+        <p className="caption">No open tasks</p>
       )}
-    </Link>
+    </WidgetCard>
   );
 }

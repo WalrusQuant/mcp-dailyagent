@@ -25,17 +25,15 @@ export function EmptyState({
   onSuggestionClick,
 }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 gap-3">
-      <Icon className="w-10 h-10" style={{ color: "var(--text-muted)" }} />
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+    <div className="flex flex-col items-center justify-center py-14 gap-3.5 px-4">
+      <div className="icon-badge w-12 h-12 rounded-2xl" style={{ width: "3rem", height: "3rem" }}>
+        <Icon className="w-5 h-5" strokeWidth={1.75} />
+      </div>
+      <p className="text-sm text-center max-w-xs" style={{ color: "var(--text-muted)" }}>
         {message}
       </p>
       {actionLabel && onAction && (
-        <button
-          onClick={onAction}
-          className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
-          style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
-        >
+        <button onClick={onAction} className="btn-primary mt-1">
           {actionLabel}
         </button>
       )}
@@ -45,7 +43,7 @@ export function EmptyState({
             <button
               key={s.label}
               onClick={() => onSuggestionClick(s)}
-              className="px-3 py-1.5 rounded-full text-xs transition-colors"
+              className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
               style={{
                 background: "var(--bg-elevated)",
                 color: "var(--text-secondary)",

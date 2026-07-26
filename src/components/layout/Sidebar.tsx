@@ -11,7 +11,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   FolderKanban,
-  Wrench,
   LayoutDashboard,
   CheckSquare,
   Target,
@@ -24,6 +23,7 @@ import {
   Search,
 } from "lucide-react";
 import { FocusTimerBadge } from "@/components/focus/FocusTimerBadge";
+import { CadenceMark } from "@/components/shared/CadenceMark";
 import { useTheme } from "@/lib/theme";
 import { useCommandPalette } from "@/lib/command-palette-context";
 
@@ -82,8 +82,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
     { href: "/review", icon: FileText, label: "Review", match: "/review" },
   ];
 
-  const secondaryLinks: typeof primaryLinks = [];
-
   const cycleTheme = () => {
     const order: Array<"light" | "dark" | "system"> = ["light", "dark", "system"];
     const idx = order.indexOf(theme as "light" | "dark" | "system");
@@ -92,13 +90,18 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
   const themeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
   const ThemeIcon = themeIcon;
+  const initial = (userDisplayName || "C").charAt(0).toUpperCase();
+
+  const isActive = (match: string) =>
+    match === "/settings" ? pathname === "/settings" : pathname.startsWith(match);
 
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 z-40 md:hidden"
+          style={{ background: "rgba(15, 17, 21, 0.55)", backdropFilter: "blur(2px)" }}
           onClick={onClose}
         />
       )}
@@ -109,39 +112,63 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
         style={{
-          width: collapsed ? "60px" : "280px",
+          width: collapsed ? "64px" : "260px",
           background: "var(--bg-surface)",
           borderRight: "1px solid var(--border-default)",
         }}
       >
         {/* Header */}
-        <div className={collapsed ? "px-2 pt-3 pb-2" : "px-3 pt-4 pb-3"} style={{ borderBottom: "1px solid var(--border-default)" }}>
+        <div
+          className={collapsed ? "px-2 pt-4 pb-3" : "px-4 pt-5 pb-4"}
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
+        >
           {collapsed ? (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center gap-2">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: "var(--accent-primary-soft)",
+                  color: "var(--accent-primary)",
+                  border: "1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent)",
+                }}
+                aria-hidden
+              >
+                <CadenceMark size={18} />
+              </div>
               <button
                 onClick={onToggleCollapse}
-                className="p-2 rounded-lg transition-colors"
-                style={{ color: "var(--text-secondary)" }}
+                className="nav-item-icon"
                 title="Expand sidebar"
+                aria-label="Expand sidebar"
               >
                 <PanelLeftOpen className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <div className="pl-[calc(16px+0.5rem)]">
-                <h1 className="text-base font-bold tracking-tight leading-none" style={{ color: "var(--text-primary)" }}>
-                  Cadence
-                </h1>
-                <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "var(--accent-primary)" }}>
-                  Productivity
-                </p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{
+                    background: "var(--accent-primary-soft)",
+                    color: "var(--accent-primary)",
+                    border: "1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent)",
+                  }}
+                  aria-hidden
+                >
+                  <CadenceMark size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-[15px] font-semibold tracking-tight leading-none truncate" style={{ color: "var(--text-primary)" }}>
+                    Cadence
+                  </h1>
+                </div>
               </div>
               <button
                 onClick={onToggleCollapse}
-                className="p-1.5 rounded-lg transition-colors hidden md:block"
-                style={{ color: "var(--text-secondary)" }}
+                className="nav-item-icon hidden md:flex shrink-0"
                 title="Collapse sidebar"
+                aria-label="Collapse sidebar"
               >
                 <PanelLeftClose className="w-4 h-4" />
               </button>
@@ -150,16 +177,14 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
         </div>
 
         {/* Navigation */}
-        <div className={`${collapsed ? "p-2" : "px-3 py-2"} flex-1 overflow-y-auto`}>
-          {/* Focus Timer Badge — shown when active */}
+        <div className={`${collapsed ? "p-2" : "px-3 py-3"} flex-1 overflow-y-auto`}>
           <FocusTimerBadge collapsed={collapsed} />
 
           {collapsed ? (
             <div className="flex flex-col items-center gap-0.5">
               <button
                 onClick={handleSearchClick}
-                className="p-2 rounded-lg transition-colors"
-                style={{ color: "var(--text-secondary)" }}
+                className="nav-item-icon"
                 title="Search (⌘K)"
                 aria-label="Search"
               >
@@ -171,123 +196,99 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
                   key={link.href}
                   href={link.href}
                   onClick={handleNavClick}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{
-                    color: pathname.startsWith(link.match) ? "var(--accent-primary)" : "var(--text-secondary)",
-                  }}
+                  className={isActive(link.match) ? "nav-item-icon nav-item-icon-active" : "nav-item-icon"}
                   title={link.label}
                 >
                   <link.icon className="w-4 h-4" />
                 </Link>
               ))}
 
-              <div className="w-6 my-1" style={{ borderTop: "1px solid var(--border-default)" }} />
-
-              <div className="relative group/tools">
-                <button
-                  className="p-2 rounded-lg transition-colors"
-                  style={{
-                    color: [...toolLinks, ...secondaryLinks].some((l) => pathname.startsWith(l.match))
-                      ? "var(--accent-primary)"
-                      : "var(--text-secondary)",
-                  }}
-                  title="Tools"
-                >
-                  <Wrench className="w-4 h-4" />
-                </button>
-                <div
-                  className="absolute left-full top-0 ml-1 hidden group-hover/tools:block rounded-lg py-1 z-50 min-w-[140px]"
-                  style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}
-                >
-                  {[...toolLinks, ...secondaryLinks].map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={handleNavClick}
-                      className="flex items-center gap-2 px-3 py-1.5 text-sm transition-colors"
-                      style={{
-                        color: pathname.startsWith(link.match) ? "var(--accent-primary)" : "var(--text-secondary)",
-                      }}
-                    >
-                      <link.icon className="w-3.5 h-3.5" />
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              <Link
-                href="/settings"
-                onClick={handleNavClick}
-                className="p-2 rounded-lg transition-colors"
-                style={{
-                  color: pathname === "/settings" ? "var(--accent-primary)" : "var(--text-secondary)",
-                }}
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              <button
-                onClick={handleSearchClick}
-                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <Search className="w-4 h-4" />
-                <span className="flex-1 text-left">Search</span>
-                <kbd
-                  className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                >
-                  ⌘K
-                </kbd>
-              </button>
-
-              {primaryLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={handleNavClick}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                  style={{
-                    color: pathname.startsWith(link.match) ? "var(--accent-primary)" : "var(--text-secondary)",
-                  }}
-                >
-                  <link.icon className="w-4 h-4" />
-                  {link.label}
-                </Link>
-              ))}
-
-              <div className="my-1 mx-2" style={{ borderTop: "1px solid var(--border-default)" }} />
+              <div className="w-6 my-2" style={{ borderTop: "1px solid var(--border-subtle)" }} />
 
               {toolLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={handleNavClick}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                  style={{
-                    color: pathname.startsWith(link.match) ? "var(--accent-primary)" : "var(--text-secondary)",
-                  }}
+                  className={isActive(link.match) ? "nav-item-icon nav-item-icon-active" : "nav-item-icon"}
+                  title={link.label}
                 >
                   <link.icon className="w-4 h-4" />
-                  {link.label}
                 </Link>
               ))}
 
-              <div className="my-1 mx-2" style={{ borderTop: "1px solid var(--border-default)" }} />
+              <div className="w-6 my-2" style={{ borderTop: "1px solid var(--border-subtle)" }} />
 
               <Link
                 href="/settings"
                 onClick={handleNavClick}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                style={{
-                  color: pathname === "/settings" ? "var(--accent-primary)" : "var(--text-secondary)",
-                }}
+                className={isActive("/settings") ? "nav-item-icon nav-item-icon-active" : "nav-item-icon"}
+                title="Settings"
               >
                 <Settings className="w-4 h-4" />
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <button
+                onClick={handleSearchClick}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[var(--radius-lg)] text-sm transition-colors"
+                style={{
+                  background: "var(--bg-elevated)",
+                  color: "var(--text-muted)",
+                  border: "1px solid var(--border-subtle)",
+                }}
+              >
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1 text-left text-[13px]">Search</span>
+                <kbd
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }}
+                >
+                  ⌘K
+                </kbd>
+              </button>
+
+              <div className="pt-2 space-y-0.5">
+                {primaryLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={handleNavClick}
+                    className={isActive(link.match) ? "nav-item nav-item-active" : "nav-item"}
+                  >
+                    <link.icon className="w-4 h-4 shrink-0" />
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+
+              <div className="pt-3 pb-1 px-3">
+                <span className="overline">Tools</span>
+              </div>
+
+              <div className="space-y-0.5">
+                {toolLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={handleNavClick}
+                    className={isActive(link.match) ? "nav-item nav-item-active" : "nav-item"}
+                  >
+                    <link.icon className="w-4 h-4 shrink-0" />
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+
+              <div className="my-2 mx-2" style={{ borderTop: "1px solid var(--border-subtle)" }} />
+
+              <Link
+                href="/settings"
+                onClick={handleNavClick}
+                className={isActive("/settings") ? "nav-item nav-item-active" : "nav-item"}
+              >
+                <Settings className="w-4 h-4 shrink-0" />
                 Settings
               </Link>
             </div>
@@ -295,26 +296,49 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
         </div>
 
         {/* Footer */}
-        <div className={`${collapsed ? "p-2" : "p-4"} space-y-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]`} style={{ borderTop: "1px solid var(--border-default)" }}>
-          <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "justify-between"}`}>
-            {!collapsed && userDisplayName && (
-              <span
-                className="text-sm truncate max-w-[150px]"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                {userDisplayName}
-              </span>
+        <div
+          className={`${collapsed ? "p-2" : "px-3 py-3"} pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]`}
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        >
+          <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "justify-between gap-2"}`}>
+            {!collapsed && (
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                  style={{
+                    background: "var(--accent-primary-soft)",
+                    color: "var(--accent-primary)",
+                  }}
+                >
+                  {initial}
+                </div>
+                {userDisplayName && (
+                  <span className="text-sm truncate max-w-[130px]" style={{ color: "var(--text-secondary)" }}>
+                    {userDisplayName}
+                  </span>
+                )}
+              </div>
             )}
-            <div className={`flex items-center ${collapsed ? "flex-col" : ""} gap-1`}>
-              <button
-                onClick={cycleTheme}
-                className="p-2 rounded-lg transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                title={`Theme: ${theme}`}
+            {collapsed && (
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                style={{
+                  background: "var(--accent-primary-soft)",
+                  color: "var(--accent-primary)",
+                }}
+                title={userDisplayName || "You"}
               >
-                <ThemeIcon className="w-4 h-4" />
-              </button>
-            </div>
+                {initial}
+              </div>
+            )}
+            <button
+              onClick={cycleTheme}
+              className="nav-item-icon shrink-0"
+              title={`Theme: ${theme}`}
+              aria-label={`Theme: ${theme}. Click to cycle.`}
+            >
+              <ThemeIcon className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

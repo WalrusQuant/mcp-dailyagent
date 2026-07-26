@@ -45,7 +45,7 @@ async function createHabit(
         description: args.description ?? null,
         frequency: args.frequency ?? "daily",
         targetDays: args.target_days ?? [1, 2, 3, 4, 5, 6, 7],
-        color: args.color ?? "#d4a574",
+        color: args.color ?? "#8fb5f2",
         archived: false,
       })
       .returning();

@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Crosshair } from "lucide-react";
+import { WidgetCard } from "@/components/shared/WidgetCard";
 
 interface GoalSummary {
   id: string;
@@ -17,50 +17,48 @@ interface GoalWidgetProps {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  health: "#22c55e",
-  career: "#3b82f6",
-  personal: "#d4a574",
-  financial: "#f59e0b",
-  learning: "#8b5cf6",
-  relationships: "#ec4899",
-  other: "#94a3b8",
+  health: "var(--domain-habits)",
+  career: "var(--domain-focus)",
+  personal: "var(--domain-goals)",
+  financial: "var(--domain-workouts)",
+  learning: "var(--domain-journal)",
+  relationships: "var(--accent-negative)",
+  other: "var(--text-muted)",
 };
 
 export function GoalWidget({ activeCount, topGoals }: GoalWidgetProps) {
   return (
-    <Link
+    <WidgetCard
       href="/goals"
-      className="block rounded-xl p-4 transition-colors"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--accent-primary)"}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-default)"}
+      title="Goals"
+      icon={Crosshair}
+      domainColor="var(--domain-goals)"
+      meta={`${activeCount} active`}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Crosshair className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Goals</span>
-        <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>{activeCount} active</span>
-      </div>
-
       {topGoals.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {topGoals.slice(0, 3).map((g) => {
             const color = CATEGORY_COLORS[g.category] || CATEGORY_COLORS.other;
             return (
               <div key={g.id}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{g.title}</span>
-                  <span className="text-xs font-medium ml-2" style={{ color }}>{g.progress}%</span>
+                  <span className="text-[13px] truncate" style={{ color: "var(--text-secondary)" }}>
+                    {g.title}
+                  </span>
+                  <span className="text-[11px] font-semibold ml-2 tabular-nums" style={{ color }}>
+                    {g.progress}%
+                  </span>
                 </div>
-                <div className="w-full h-1.5 rounded-full" style={{ background: "var(--bg-base)" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${g.progress}%`, background: color }} />
+                <div className="progress-track" style={{ height: "0.3rem" }}>
+                  <div className="progress-fill" style={{ width: `${g.progress}%`, background: color }} />
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>No active goals</p>
+        <p className="caption">No active goals</p>
       )}
-    </Link>
+    </WidgetCard>
   );
 }

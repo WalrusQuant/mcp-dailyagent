@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Local docker overrides (e.g. publishing Postgres on localhost:5432)
+docker-compose.override.yml
+
 # vercel
 .vercel
 

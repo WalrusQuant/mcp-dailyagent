@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Flame, Play } from "lucide-react";
+import { CheckCircle2, Circle, Flame, Play, X } from "lucide-react";
 import Link from "next/link";
 import { Task } from "@/types/database";
 import { useFocusTimerContext } from "@/lib/focus-timer-context";
@@ -35,7 +35,6 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
 
   const handleCompleteTask = async () => {
     if (!topTask) return;
-    // Optimistic update
     setCompletedId(topTask.id);
     try {
       const response = await fetch(`/api/tasks/${topTask.id}`, {
@@ -45,7 +44,6 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
       });
       if (response.ok) {
         addToast("Task completed");
-        // Refresh the dashboard widgets so counts/progress reflect the change.
         onTaskComplete?.();
       } else {
         setCompletedId(null);
@@ -59,14 +57,10 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
 
   if (dismissed) {
     return (
-      <button
-        onClick={() => {
-          setDismissed(false);
-          sessionStorage.removeItem("daily-start-dismissed");
-        }}
-        className="text-xs mb-4 px-2 py-1 rounded transition-colors"
-        style={{ color: "var(--text-muted)" }}
-      >
+      <button onClick={() => {
+        setDismissed(false);
+        sessionStorage.removeItem("daily-start-dismissed");
+      }} className="btn-ghost mb-4 text-xs">
         Show daily start
       </button>
     );
@@ -79,94 +73,101 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
   };
 
   return (
-    <div
-      className="mb-4 rounded-xl p-4"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border-default)",
-        borderLeftWidth: "3px",
-        borderLeftColor: "var(--accent-primary)",
-      }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-          Daily Start
-        </span>
-        <button onClick={handleDismiss} className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Dismiss
+    <div className="card-hero mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <span className="overline" style={{ color: "var(--accent-primary)" }}>Today</span>
+          <h2 className="heading-md mt-0.5">Daily Start</h2>
+        </div>
+        <button onClick={handleDismiss} className="btn-ghost p-1.5" aria-label="Dismiss daily start">
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="space-y-2.5">
-        {/* Top task */}
-        <div className="flex items-center gap-3">
-          <CheckCircle2
-            className="w-4 h-4 shrink-0"
-            style={{ color: showDone ? "var(--accent-positive)" : "var(--text-muted)" }}
-          />
+      <div className="space-y-3">
+        {/* Top task — primary action */}
+        <div
+          className="flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5"
+          style={{ background: "var(--bg-elevated)" }}
+        >
           {topTask && !showDone ? (
             <button
               onClick={handleCompleteTask}
-              className="flex-1 text-left text-sm transition-colors"
-              style={{ color: "var(--text-primary)" }}
+              className="shrink-0 rounded-full transition-colors"
+              style={{ color: "var(--text-muted)" }}
+              aria-label={`Complete task: ${topTask.title}`}
+            >
+              <Circle className="w-5 h-5" strokeWidth={1.75} />
+            </button>
+          ) : (
+            <CheckCircle2
+              className="w-5 h-5 shrink-0"
+              style={{ color: showDone ? "var(--accent-positive)" : "var(--text-muted)" }}
+            />
+          )}
+          {topTask && !showDone ? (
+            <button
+              onClick={handleCompleteTask}
+              className="flex-1 text-left min-w-0"
             >
               <span
-                className="text-xs font-medium mr-1.5 px-1 py-0.5 rounded"
-                style={{ background: "var(--bg-elevated)", color: "var(--accent-primary)" }}
+                className="text-[11px] font-semibold mr-2 px-1.5 py-0.5 rounded"
+                style={{ background: "var(--accent-primary-soft)", color: "var(--accent-primary)" }}
               >
                 {topTask.priority}
               </span>
-              {topTask.title}
+              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                {topTask.title}
+              </span>
             </button>
           ) : showDone ? (
             <span className="text-sm line-through" style={{ color: "var(--text-muted)" }}>
               {topTask?.title || "Task completed"}
             </span>
           ) : (
-            <Link href="/tasks" className="text-sm" style={{ color: "var(--accent-primary)" }}>
-              Add a task
+            <Link href="/tasks" className="text-sm font-medium" style={{ color: "var(--accent-primary)" }}>
+              Add a task for today
             </Link>
           )}
         </div>
 
-        {/* Habit streak */}
-        <div className="flex items-center gap-3">
+        {/* Secondary rows */}
+        <div className="flex items-center gap-3 px-1">
           <Flame
             className="w-4 h-4 shrink-0"
             style={{ color: habits.streak > 0 ? "var(--accent-warning)" : "var(--text-muted)" }}
           />
           {habits.total > 0 ? (
-            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
               {habits.completedToday}/{habits.total} habits today
               {habits.streak > 0 && (
-                <span className="ml-1.5 text-xs" style={{ color: "var(--accent-warning)" }}>
-                  {habits.streak} day streak
+                <span className="ml-1.5" style={{ color: "var(--accent-warning)" }}>
+                  · {habits.streak}d streak
                 </span>
               )}
             </span>
           ) : (
-            <Link href="/habits" className="text-sm" style={{ color: "var(--accent-primary)" }}>
+            <Link href="/habits" className="text-[13px]" style={{ color: "var(--accent-primary)" }}>
               Start a habit
             </Link>
           )}
         </div>
 
-        {/* Focus session */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 px-1">
           <Play
             className="w-4 h-4 shrink-0"
             style={{ color: timer.isActive ? "var(--accent-positive)" : "var(--text-muted)" }}
           />
           {timer.isActive ? (
-            <span className="text-sm" style={{ color: "var(--accent-positive)" }}>
-              Focus: {formatTime(timer.secondsLeft)} remaining
+            <span className="text-[13px] font-medium tabular-nums" style={{ color: "var(--accent-positive)" }}>
+              Focus · {formatTime(timer.secondsLeft)} remaining
             </span>
           ) : (
-            <Link href="/focus" className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            <Link href="/focus" className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
               Start focus session
               {focus.todayMinutes > 0 && (
-                <span className="ml-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                  ({focus.todayMinutes}min today)
+                <span className="ml-1.5" style={{ color: "var(--text-muted)" }}>
+                  ({focus.todayMinutes}m today)
                 </span>
               )}
             </Link>

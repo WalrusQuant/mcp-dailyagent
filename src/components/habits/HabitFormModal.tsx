@@ -13,14 +13,14 @@ interface HabitFormModalProps {
 }
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const COLORS = ["#d4a574", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
+const COLORS = ["#8fb5f2", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
 
 export function HabitFormModal({ habit, onClose, onSave }: HabitFormModalProps) {
   const [name, setName] = useState(habit?.name || "");
   const [description, setDescription] = useState(habit?.description || "");
   const [frequency, setFrequency] = useState<"daily" | "weekly">(habit?.frequency || "daily");
   const [targetDays, setTargetDays] = useState<number[]>(habit?.target_days || [1, 2, 3, 4, 5, 6, 7]);
-  const [color, setColor] = useState(habit?.color || "#d4a574");
+  const [color, setColor] = useState(habit?.color || "#8fb5f2");
   const [goalId, setGoalId] = useState(habit?.goal_id || "");
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();

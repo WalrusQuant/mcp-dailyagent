@@ -20,9 +20,9 @@ describe("StatCard", () => {
   });
 
   it("omits trend when not provided", () => {
-    const { container } = render(<StatCard label="Tasks" value={10} />);
-    // Should only have label and value divs
-    const texts = container.querySelectorAll(".text-xs");
-    expect(texts).toHaveLength(1); // just the label
+    render(<StatCard label="Tasks" value={10} />);
+    expect(screen.getByText("Tasks")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.queryByText(/\+/)).not.toBeInTheDocument();
   });
 });

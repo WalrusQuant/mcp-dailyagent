@@ -15,7 +15,7 @@ interface GoalItemProps {
 const CATEGORY_COLORS: Record<string, string> = {
   health: "#22c55e",
   career: "#3b82f6",
-  personal: "#d4a574",
+  personal: "#8fb5f2",
   financial: "#f59e0b",
   learning: "#8b5cf6",
   relationships: "#ec4899",

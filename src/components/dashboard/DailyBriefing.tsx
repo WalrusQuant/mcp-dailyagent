@@ -27,13 +27,10 @@ export function DailyBriefing() {
 
   if (isLoading) {
     return (
-      <div
-        className="rounded-xl p-4 mb-4 animate-pulse"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-      >
+      <div className="card mb-5 animate-pulse">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-4 h-4 rounded" style={{ background: "var(--bg-elevated)" }} />
-          <div className="h-4 w-32 rounded" style={{ background: "var(--bg-elevated)" }} />
+          <div className="h-4 w-28 rounded" style={{ background: "var(--bg-elevated)" }} />
         </div>
         <div className="space-y-2">
           <div className="h-3 w-full rounded" style={{ background: "var(--bg-elevated)" }} />
@@ -46,17 +43,9 @@ export function DailyBriefing() {
 
   if (!content) {
     return (
-      <div
-        className="rounded-xl p-4 mb-4"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <Sparkles className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
-          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-            Daily Briefing
-          </span>
-        </div>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="card-quiet mb-5 flex items-start gap-2.5">
+        <Sparkles className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "var(--text-muted)" }} />
+        <p className="caption leading-relaxed" style={{ color: "var(--text-muted)" }}>
           No briefing yet — your OpenClaw agent posts the morning briefing here once it runs.
         </p>
       </div>
@@ -64,18 +53,23 @@ export function DailyBriefing() {
   }
 
   return (
-    <div
-      className="rounded-xl p-4 mb-4"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-    >
+    <div className="card mb-5">
       <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="w-4 h-4" style={{ color: "var(--accent-primary)" }} />
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-          Daily Briefing
+        <span className="icon-badge" style={{ width: "1.5rem", height: "1.5rem" }}>
+          <Sparkles className="w-3 h-3" />
         </span>
+        <span className="heading-sm">Daily Briefing</span>
       </div>
 
-      <div className="prose prose-sm max-w-none text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+      <div
+        className="prose prose-sm max-w-none leading-relaxed"
+        style={{
+          color: "var(--text-secondary)",
+          fontFamily: "var(--font-display), var(--font-sans), serif",
+          fontSize: "0.9375rem",
+          lineHeight: 1.7,
+        }}
+      >
         <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     </div>

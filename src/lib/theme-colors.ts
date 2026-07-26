@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 const CSS_VARS = {
   accent: "--accent-primary",
-  accentSecondary: "--accent-secondary",
+  accentSecondary: "--accent-primary-hover",
   textPrimary: "--text-primary",
   textSecondary: "--text-secondary",
   textMuted: "--text-muted",
@@ -56,14 +56,14 @@ export function useThemeColors(): ThemeColors {
   return colors;
 }
 
-// Chart color palette for multi-series data
+// Chart color palette — accent + cool neutrals (not all-brown)
 export const CHART_COLORS = [
-  "#d4a574", // accent
-  "#7c9eb2", // blue-gray
-  "#9b8bb4", // purple
-  "#85b09a", // green
-  "#c47d7d", // red
-  "#b0a472", // olive
-  "#7db4c4", // teal
-  "#c49b7d", // tan
+  "#8fb5f2", // accent blue
+  "#6ba3d6", // steel blue
+  "#a78bfa", // violet
+  "#5ecf8a", // green
+  "#f0a060", // coral
+  "#9aa3b2", // cool gray
+  "#e0b050", // gold
+  "#7c9eb2", // slate
 ];

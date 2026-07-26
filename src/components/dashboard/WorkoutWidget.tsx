@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Dumbbell } from "lucide-react";
+import { WidgetCard } from "@/components/shared/WidgetCard";
 
 interface WorkoutWidgetProps {
   todayLog: { name: string } | null;
@@ -10,28 +10,23 @@ interface WorkoutWidgetProps {
 
 export function WorkoutWidget({ todayLog, weekCount }: WorkoutWidgetProps) {
   return (
-    <Link
+    <WidgetCard
       href="/workouts"
-      className="block rounded-xl p-4 transition-colors"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--accent-primary)"}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-default)"}
+      title="Workouts"
+      icon={Dumbbell}
+      domainColor="var(--domain-workouts)"
+      meta={`${weekCount} this week`}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Dumbbell className="w-4 h-4" style={{ color: "#f59e0b" }} />
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Workouts</span>
-        <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>{weekCount} this week</span>
-      </div>
-
       {todayLog ? (
         <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          {todayLog.name} ✓
+          {todayLog.name}
+          <span className="ml-1.5" style={{ color: "var(--accent-positive)" }}>✓</span>
         </span>
       ) : (
         <span className="text-sm" style={{ color: "var(--text-muted)" }}>
           Start a workout →
         </span>
       )}
-    </Link>
+    </WidgetCard>
   );
 }

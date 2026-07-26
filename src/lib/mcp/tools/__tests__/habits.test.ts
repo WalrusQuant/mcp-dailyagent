@@ -73,7 +73,7 @@ describe("create_habit + list_habits", () => {
     const created = await seedHabit({ name: "Read" });
     expect(created.name).toBe("Read");
     expect(created.frequency).toBe("daily");
-    expect(created.color).toBe("#d4a574");
+    expect(created.color).toBe("#8fb5f2");
     expect(created.archived).toBe(false);
     expect(created.targetDays).toEqual([1, 2, 3, 4, 5, 6, 7]);
     // Raw drizzle camelCase keys.

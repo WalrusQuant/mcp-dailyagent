@@ -14,7 +14,7 @@ export function TimerDisplay({ seconds, totalSeconds, isRunning, isBreak }: Time
   const circumference = 2 * Math.PI * 90;
   const strokeDashoffset = circumference * (1 - progress);
 
-  const color = isBreak ? "#22c55e" : "var(--accent-primary)";
+  const color = isBreak ? "var(--accent-positive)" : "var(--accent-primary)";
 
   return (
     <div className="relative w-44 h-44 md:w-56 md:h-56 mx-auto">

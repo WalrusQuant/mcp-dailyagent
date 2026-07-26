@@ -22,7 +22,7 @@ import {
 import { useCommandPalette } from "@/lib/command-palette-context";
 
 const TABS = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: "/dashboard" },
+  { href: "/dashboard", icon: LayoutDashboard, label: "Home", match: "/dashboard" },
   { href: "/tasks", icon: CheckSquare, label: "Tasks", match: "/tasks" },
 ];
 
@@ -50,7 +50,6 @@ export function BottomNav() {
     if (!vv) return;
 
     const handleResize = () => {
-      // If viewport height is significantly smaller than window height, keyboard is open
       setKeyboardOpen(vv.height < window.innerHeight * 0.75);
     };
 
@@ -67,31 +66,37 @@ export function BottomNav() {
       {/* More sheet overlay */}
       {showMore && (
         <div className="absolute inset-0 z-[70] md:hidden" onClick={() => setShowMore(false)}>
-          <div className="absolute inset-0 bg-black/50" />
+          <div className="absolute inset-0" style={{ background: "rgba(15, 17, 21, 0.55)", backdropFilter: "blur(2px)" }} />
           <div
-            className="absolute left-0 right-0 rounded-t-2xl p-4 pb-2"
+            className="absolute left-0 right-0 rounded-t-[var(--radius-2xl)] p-4 pb-2"
             style={{
               bottom: "calc(60px + env(safe-area-inset-bottom, 0px))",
               background: "var(--bg-surface)",
               borderTop: "1px solid var(--border-default)",
+              boxShadow: "var(--shadow-lg)",
               paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>More</span>
-              <button onClick={() => setShowMore(false)} style={{ color: "var(--text-muted)" }}>
+            <div
+              className="w-10 h-1 rounded-full mx-auto mb-4"
+              style={{ background: "var(--border-default)" }}
+              aria-hidden
+            />
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="heading-sm">More</span>
+              <button onClick={() => setShowMore(false)} className="btn-ghost p-1.5" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => { setShowMore(false); toggleCommandPalette(); }}
-                className="flex flex-col items-center gap-1 py-3 rounded-lg transition-colors"
+                className="flex flex-col items-center gap-1.5 py-3.5 rounded-[var(--radius-lg)] transition-colors"
                 style={{ color: "var(--text-secondary)" }}
               >
                 <Search className="w-5 h-5" />
-                <span className="text-xs">Search</span>
+                <span className="text-xs font-medium">Search</span>
               </button>
               {MORE_ITEMS.map((item) => {
                 const isActive = pathname.startsWith(item.href);
@@ -100,14 +105,14 @@ export function BottomNav() {
                     key={item.href}
                     href={item.href}
                     onClick={() => setShowMore(false)}
-                    className="flex flex-col items-center gap-1 py-3 rounded-lg transition-colors"
+                    className="flex flex-col items-center gap-1.5 py-3.5 rounded-[var(--radius-lg)] transition-colors"
                     style={{
                       color: isActive ? "var(--accent-primary)" : "var(--text-secondary)",
-                      background: isActive ? "var(--bg-elevated)" : undefined,
+                      background: isActive ? "var(--accent-primary-soft)" : undefined,
                     }}
                   >
                     <item.icon className="w-5 h-5" />
-                    <span className="text-xs">{item.label}</span>
+                    <span className="text-xs font-medium">{item.label}</span>
                   </Link>
                 );
               })}
@@ -120,34 +125,43 @@ export function BottomNav() {
       <div
         className="absolute bottom-0 left-0 right-0 z-[60] md:hidden"
         style={{
-          background: "var(--bg-surface)",
+          background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
           borderTop: "1px solid var(--border-default)",
+          boxShadow: "var(--shadow-up)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           height: "calc(60px + env(safe-area-inset-bottom, 0px))",
         }}
       >
-        <div className="flex items-center justify-around h-[60px]">
+        <div className="flex items-center justify-around h-[60px] px-2">
           {TABS.map((tab) => {
             const isActive = pathname.startsWith(tab.match);
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                className="flex flex-col items-center gap-0.5 py-2 px-4"
-                style={{ color: isActive ? "var(--accent-primary)" : "var(--text-muted)" }}
+                className="flex flex-col items-center gap-0.5 py-1.5 px-5 min-w-[72px] rounded-[var(--radius-lg)] transition-colors"
+                style={{
+                  color: isActive ? "var(--accent-primary)" : "var(--text-muted)",
+                  background: isActive ? "var(--accent-primary-soft)" : undefined,
+                }}
               >
-                <tab.icon className="w-5 h-5" />
-                <span className="text-[10px]">{tab.label}</span>
+                <tab.icon className="w-5 h-5" strokeWidth={isActive ? 2.25 : 1.75} />
+                <span className="text-[10px] font-medium">{tab.label}</span>
               </Link>
             );
           })}
           <button
             onClick={() => setShowMore(!showMore)}
-            className="flex flex-col items-center gap-0.5 py-2 px-4"
-            style={{ color: isMoreActive ? "var(--accent-primary)" : "var(--text-muted)" }}
+            className="flex flex-col items-center gap-0.5 py-1.5 px-5 min-w-[72px] rounded-[var(--radius-lg)] transition-colors"
+            style={{
+              color: isMoreActive || showMore ? "var(--accent-primary)" : "var(--text-muted)",
+              background: isMoreActive || showMore ? "var(--accent-primary-soft)" : undefined,
+            }}
           >
-            <MoreHorizontal className="w-5 h-5" />
-            <span className="text-[10px]">More</span>
+            <MoreHorizontal className="w-5 h-5" strokeWidth={isMoreActive || showMore ? 2.25 : 1.75} />
+            <span className="text-[10px] font-medium">More</span>
           </button>
         </div>
       </div>

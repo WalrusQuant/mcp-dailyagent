@@ -81,45 +81,54 @@ export function InsightCards() {
 
   if (visible.length === 0) return null;
 
-  const typeBg: Record<string, string> = {
-    encouragement: "rgba(74, 222, 128, 0.08)",
-    warning: "rgba(251, 191, 36, 0.08)",
-    suggestion: "rgba(96, 165, 250, 0.08)",
-  };
-
-  const typeBorder: Record<string, string> = {
-    encouragement: "rgba(74, 222, 128, 0.2)",
-    warning: "rgba(251, 191, 36, 0.2)",
-    suggestion: "rgba(96, 165, 250, 0.2)",
+  const typeStyles: Record<string, { bg: string; border: string }> = {
+    encouragement: {
+      bg: "color-mix(in srgb, var(--accent-positive) 10%, transparent)",
+      border: "color-mix(in srgb, var(--accent-positive) 28%, transparent)",
+    },
+    warning: {
+      bg: "color-mix(in srgb, var(--accent-warning) 10%, transparent)",
+      border: "color-mix(in srgb, var(--accent-warning) 28%, transparent)",
+    },
+    suggestion: {
+      bg: "color-mix(in srgb, var(--domain-focus) 12%, transparent)",
+      border: "color-mix(in srgb, var(--domain-focus) 28%, transparent)",
+    },
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
       {visible.map((insight) => {
         const key = insightKey(cacheDate, insight);
+        const styles = typeStyles[insight.type] || {
+          bg: "var(--bg-surface)",
+          border: "var(--border-default)",
+        };
         return (
           <div
             key={key}
-            className="rounded-xl p-3 relative"
+            className="rounded-[var(--radius-xl)] p-3.5 relative"
             style={{
-              background: typeBg[insight.type] || "var(--bg-surface)",
-              border: `1px solid ${typeBorder[insight.type] || "var(--border-default)"}`,
+              background: styles.bg,
+              border: `1px solid ${styles.border}`,
             }}
           >
             <button
               onClick={() => handleDismiss(key)}
-              className="absolute top-2 right-2 p-1 rounded-md transition-colors"
-              style={{ color: "var(--text-muted)" }}
+              className="btn-ghost absolute top-1.5 right-1.5 p-1"
+              aria-label="Dismiss insight"
             >
               <X className="w-3 h-3" />
             </button>
-            <div className="flex items-start gap-2">
-              <span className="text-lg">{insight.emoji}</span>
-              <div>
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            <div className="flex items-start gap-2.5 pr-5">
+              <span className="text-base leading-none mt-0.5" aria-hidden>
+                {insight.emoji}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-snug" style={{ color: "var(--text-primary)" }}>
                   {insight.title}
                 </p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                   {insight.body}
                 </p>
               </div>

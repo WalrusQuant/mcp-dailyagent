@@ -16,13 +16,18 @@ export function FocusTimerBadge({ collapsed }: FocusTimerBadgeProps) {
   const minutes = Math.floor(secondsLeft / 60);
   const secs = secondsLeft % 60;
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  const color = isBreak ? "#22c55e" : "var(--accent-primary)";
+  const color = isBreak ? "var(--accent-positive)" : "var(--accent-primary)";
 
   return (
     <Link
       href="/focus"
-      className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors mx-2 mb-1"
-      style={{ background: "var(--bg-elevated)", border: `1px solid ${color}` }}
+      className="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-lg)] transition-colors mb-2"
+      style={{
+        background: "var(--accent-primary-soft)",
+        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+        marginLeft: collapsed ? 0 : undefined,
+        marginRight: collapsed ? 0 : undefined,
+      }}
     >
       <Timer
         className="w-4 h-4 flex-shrink-0"
