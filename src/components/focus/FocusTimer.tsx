@@ -105,7 +105,7 @@ export function FocusTimer() {
       )}
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-3 mt-6">
+      <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
         {timer.isActive ? (
           <>
             {timer.isRunning ? (
@@ -113,6 +113,7 @@ export function FocusTimer() {
                 onClick={timer.pause}
                 className="p-3 rounded-full transition-opacity hover:opacity-90"
                 style={{ background: "var(--bg-elevated)", color: "var(--text-primary)" }}
+                aria-label="Pause"
               >
                 <Pause className="w-6 h-6" />
               </button>
@@ -121,19 +122,32 @@ export function FocusTimer() {
                 onClick={timer.resume}
                 className="p-3 rounded-full transition-opacity hover:opacity-90"
                 style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+                aria-label="Resume"
               >
                 <Play className="w-6 h-6" />
               </button>
             )}
+            {!timer.isBreak && (
+              <button
+                onClick={async () => {
+                  await timer.completeEarly();
+                  loadData();
+                  addToast("Session completed — break started");
+                }}
+                className="px-3 py-2 rounded-full text-xs font-medium"
+                style={{ background: "var(--accent-primary-soft)", color: "var(--accent-primary)" }}
+              >
+                Complete early
+              </button>
+            )}
             <button
               onClick={async () => {
-                // Refresh the session list so the cancelled session shows up,
-                // but without the completion toast (L5).
                 await timer.reset();
                 loadData();
               }}
               className="p-3 rounded-full transition-opacity hover:opacity-90"
               style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
+              aria-label="Cancel"
             >
               <RotateCcw className="w-5 h-5" />
             </button>
@@ -143,6 +157,7 @@ export function FocusTimer() {
             onClick={handleStart}
             className="p-3 rounded-full transition-opacity hover:opacity-90"
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+            aria-label="Start"
           >
             <Play className="w-6 h-6" />
           </button>
@@ -181,7 +196,7 @@ export function FocusTimer() {
         </div>
       )}
 
-      {/* Task selector — only when not active */}
+      {/* Task selector — only when not active (includes overdue open tasks via today API) */}
       {!timer.isActive && tasks.length > 0 && (
         <div className="mt-4">
           <select
@@ -192,9 +207,42 @@ export function FocusTimer() {
           >
             <option value="">No task linked</option>
             {tasks.map((t) => (
-              <option key={t.id} value={t.id}>{t.priority} — {t.title}</option>
+              <option key={t.id} value={t.id}>
+                {t.priority} — {t.title}
+                {t.task_date !== getToday() ? ` (${t.task_date})` : ""}
+              </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Today's sessions */}
+      {todaySessions.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+            Today&apos;s sessions
+          </h2>
+          <ul className="space-y-1.5">
+            {todaySessions.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between text-sm px-3 py-2 rounded-lg"
+                style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
+              >
+                <span style={{ color: "var(--text-primary)" }}>
+                  {s.duration_minutes}m
+                  <span className="ml-2 text-xs capitalize" style={{ color: "var(--text-muted)" }}>
+                    {s.status}
+                  </span>
+                </span>
+                {s.notes && (
+                  <span className="text-xs truncate max-w-[50%]" style={{ color: "var(--text-secondary)" }}>
+                    {s.notes}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

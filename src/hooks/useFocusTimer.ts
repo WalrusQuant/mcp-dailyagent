@@ -321,6 +321,41 @@ export function useFocusTimer() {
     completionHandledRef.current = false;
   };
 
+  /** Mark the current work session complete early (not cancel). */
+  const completeEarly = async (notes?: string) => {
+    if (!timerState || timerState.isBreak) return;
+    if (timerState.sessionId) {
+      try {
+        await fetch(`/api/focus/${timerState.sessionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "completed",
+            ...(notes ? { notes } : {}),
+          }),
+        });
+      } catch {
+        // ignore
+      }
+    }
+    setWorkSessionCompletedCount((n) => n + 1);
+    const breakState: TimerState = {
+      startTime: Date.now(),
+      duration: timerState.breakDuration,
+      breakDuration: timerState.breakDuration,
+      taskId: timerState.taskId,
+      taskName: timerState.taskName,
+      sessionId: null,
+      isBreak: true,
+      pausedAt: null,
+    };
+    storeState(breakState);
+    setTimerState(breakState);
+    setSecondsLeft(timerState.breakDuration);
+    completionHandledRef.current = false;
+    setIsRunning(true);
+  };
+
   const isActive = timerState !== null;
   const isBreak = timerState?.isBreak ?? false;
   const totalSeconds = timerState?.duration ?? 0;
@@ -335,9 +370,11 @@ export function useFocusTimer() {
     isPaused,
     workSessionCompletedCount,
     taskName: timerState?.taskName ?? null,
+    sessionId: timerState?.sessionId ?? null,
     start,
     pause,
     resume,
     reset,
+    completeEarly,
   };
 }

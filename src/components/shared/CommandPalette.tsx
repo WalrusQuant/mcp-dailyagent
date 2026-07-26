@@ -20,6 +20,8 @@ import {
   Settings,
   Plus,
   Search,
+  CalendarDays,
+  Crosshair,
 } from "lucide-react";
 import { useCommandPalette } from "@/lib/command-palette-context";
 
@@ -115,6 +117,22 @@ export function CommandPalette() {
         icon: <CheckSquare className={ICON_SIZE} />,
         keywords: ["todo", "checklist", "priorities", "franklin covey"],
         handler: () => navigate("/tasks"),
+      },
+      {
+        id: "nav-calendar",
+        label: "Calendar",
+        category: "Navigation",
+        icon: <CalendarDays className={ICON_SIZE} />,
+        keywords: ["month", "schedule", "heatmap", "agenda"],
+        handler: () => navigate("/calendar"),
+      },
+      {
+        id: "nav-goals",
+        label: "Goals",
+        category: "Navigation",
+        icon: <Crosshair className={ICON_SIZE} />,
+        keywords: ["objectives", "targets", "progress"],
+        handler: () => navigate("/goals"),
       },
       {
         id: "nav-habits",

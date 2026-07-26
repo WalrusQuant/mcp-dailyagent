@@ -23,10 +23,17 @@ function getBadges(summary: DaySummary): Badge[] {
 
   if (summary.tasks.total > 0) {
     const allDone = summary.tasks.done === summary.tasks.total;
+    // Priority density signal: A / B / C when present
+    const pri =
+      (summary.tasks.hasA ? "A" : "") +
+      (summary.tasks.hasB ? "B" : "") +
+      (summary.tasks.hasC ? "C" : "");
     badges.push({
-      label: `${summary.tasks.done}/${summary.tasks.total}T`,
-      bg: allDone ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.15)",
-      color: allDone ? "#22c55e" : "#ef4444",
+      label: pri
+        ? `${summary.tasks.done}/${summary.tasks.total}${pri}`
+        : `${summary.tasks.done}/${summary.tasks.total}T`,
+      bg: allDone ? "rgba(94,207,138,0.18)" : "rgba(240,113,120,0.15)",
+      color: allDone ? "#5ecf8a" : "#f07178",
     });
   }
 
@@ -34,15 +41,25 @@ function getBadges(summary: DaySummary): Badge[] {
     const allDone = summary.habits.completed === summary.habits.total && summary.habits.total > 0;
     badges.push({
       label: `${summary.habits.completed}/${summary.habits.total}H`,
-      bg: allDone ? "rgba(34,197,94,0.18)" : "rgba(168,85,247,0.15)",
-      color: allDone ? "#22c55e" : "#a855f7",
+      bg: allDone ? "rgba(94,207,138,0.18)" : "rgba(167,139,250,0.15)",
+      color: allDone ? "#5ecf8a" : "#a78bfa",
+    });
+  }
+
+  // Habit color dots when available
+  if (summary.habits.colors?.length > 0) {
+    // Encoded as a short "···" badge using first color
+    badges.push({
+      label: "●".repeat(Math.min(3, summary.habits.colors.length)),
+      bg: "transparent",
+      color: summary.habits.colors[0],
     });
   }
 
   if (summary.journal.hasEntry) {
     badges.push({
       label: summary.journal.mood ? ["", "😞", "😕", "😐", "🙂", "😄"][summary.journal.mood] : "J",
-      bg: "rgba(212,165,116,0.18)",
+      bg: "rgba(143,181,242,0.18)",
       color: "var(--accent-primary)",
     });
   }
