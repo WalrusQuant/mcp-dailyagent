@@ -19,6 +19,8 @@ interface SpaceRow {
   name: string;
   description: string | null;
   status: string;
+  progress?: number;
+  deadline?: string | null;
   updatedAt: string;
 }
 
@@ -101,6 +103,24 @@ describe("update_space — legacy path", () => {
     expect(updated.name).toBe("New");
     expect(updated.description).toBe("new desc");
     expect(updated.status).toBe("paused");
+  });
+
+  it("updates progress and deadline", async () => {
+    const space = await seedSpace("Ship");
+    const updated = expectOk<SpaceRow>(
+      await h.call(
+        "update_space",
+        { space_id: space.id, progress: 42, deadline: "2026-12-31" },
+        ctx
+      )
+    );
+    expect(updated.progress).toBe(42);
+    expect(updated.deadline).toBe("2026-12-31");
+
+    const cleared = expectOk<SpaceRow>(
+      await h.call("update_space", { space_id: space.id, deadline: null }, ctx)
+    );
+    expect(cleared.deadline).toBeNull();
   });
 
   it("returns not found for an unknown space id", async () => {

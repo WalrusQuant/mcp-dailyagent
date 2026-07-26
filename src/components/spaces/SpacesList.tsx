@@ -129,26 +129,24 @@ export function SpacesList() {
                     </p>
                   )}
 
-                  {/* Progress bar */}
-                  {space.progress > 0 && (
-                    <div className="mb-3">
+                  {/* Progress bar — always show */}
+                  <div className="mb-3">
+                    <div
+                      className="h-1.5 rounded-full overflow-hidden"
+                      style={{ background: "var(--bg-base)" }}
+                    >
                       <div
-                        className="h-1.5 rounded-full overflow-hidden"
-                        style={{ background: "var(--bg-base)" }}
-                      >
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${space.progress}%`,
-                            background: "var(--accent-primary)",
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                        {space.progress}% complete
-                      </p>
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${space.progress}%`,
+                          background: "var(--accent-primary)",
+                        }}
+                      />
                     </div>
-                  )}
+                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                      {space.progress}% complete
+                    </p>
+                  </div>
 
                   <div className="flex items-center gap-4 text-xs" style={{ color: "var(--text-muted)" }}>
                     {space.deadline && (

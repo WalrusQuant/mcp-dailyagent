@@ -51,11 +51,15 @@ function buildSpacePatch(args: {
   name?: string;
   description?: string;
   status?: string;
+  progress?: number;
+  deadline?: string | null;
 }): Partial<typeof spaces.$inferInsert> {
   const patch: Partial<typeof spaces.$inferInsert> = {};
   if (args.name !== undefined) patch.name = args.name.trim();
   if (args.description !== undefined) patch.description = args.description?.trim();
   if (args.status !== undefined) patch.status = args.status as "active" | "paused" | "completed";
+  if (args.progress !== undefined) patch.progress = args.progress;
+  if (args.deadline !== undefined) patch.deadline = args.deadline;
   return patch;
 }
 
@@ -66,6 +70,8 @@ async function updateSpaceLegacy(
     name?: string;
     description?: string;
     status?: string;
+    progress?: number;
+    deadline?: string | null;
   }
 ) {
   const updates = buildSpacePatch(args);
@@ -144,7 +150,7 @@ export function registerSpaceTools(server: McpServer) {
   // --- update_space (WRITE) ---
   server.tool(
     "update_space",
-    "Update a space's name, description, or status. Pass expected_updated_at to opt into concurrency-safe writes.",
+    "Update a space's name, description, status, progress (0–100), or deadline (YYYY-MM-DD). Pass expected_updated_at to opt into concurrency-safe writes.",
     {
       space_id: z.string().describe("Space ID"),
       expected_updated_at: z
@@ -155,6 +161,19 @@ export function registerSpaceTools(server: McpServer) {
       name: z.string().optional().describe("New name"),
       description: z.string().optional().describe("New description"),
       status: spaceStatusSchema.optional().describe("New status: active, paused, or completed"),
+      progress: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe("Progress percent 0–100"),
+      deadline: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional()
+        .describe("Deadline date YYYY-MM-DD, or null to clear"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
