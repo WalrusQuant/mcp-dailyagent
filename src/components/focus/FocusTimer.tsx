@@ -58,9 +58,17 @@ export function FocusTimer() {
     }
   }, [timer.workSessionCompletedCount, loadData, addToast]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     const task = tasks.find((t) => t.id === selectedTaskId);
-    timer.start(workMinutes, breakMinutes, selectedTaskId || null, task?.title || null);
+    const ok = await timer.start(
+      workMinutes,
+      breakMinutes,
+      selectedTaskId || null,
+      task?.title || null
+    );
+    if (!ok) {
+      addToast("Couldn't start focus session — try again");
+    }
   };
 
   const displaySeconds = timer.isActive ? timer.secondsLeft : workMinutes * 60;

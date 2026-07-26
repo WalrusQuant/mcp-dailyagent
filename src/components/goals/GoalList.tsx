@@ -10,8 +10,10 @@ import { GoalDetail } from "./GoalDetail";
 
 type StatusTab = "active" | "completed" | "abandoned";
 
+type GoalWithCounts = Goal & { task_count?: number; habit_count?: number };
+
 export function GoalList() {
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goals, setGoals] = useState<GoalWithCounts[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusTab, setStatusTab] = useState<StatusTab>("active");
   const [showForm, setShowForm] = useState(false);
@@ -114,6 +116,8 @@ export function GoalList() {
               <GoalItem
                 key={goal.id}
                 goal={goal}
+                taskCount={goal.task_count ?? 0}
+                habitCount={goal.habit_count ?? 0}
                 onEdit={(g) => { setEditingGoal(g); setShowForm(true); }}
                 onDelete={handleDelete}
                 onClick={(g) => setSelectedGoalId(g.id)}

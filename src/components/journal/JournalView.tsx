@@ -117,9 +117,11 @@ export function JournalView() {
         entryId={todayEntry?.id}
         initialContent={todayEntry?.content || ""}
         initialMood={todayEntry?.mood}
+        initialUpdatedAt={todayEntry?.updated_at ?? null}
         date={date}
         onSave={handleSave}
         onDelete={handleDelete}
+        onConflictReload={() => loadData(date)}
       />
 
       {/* Search */}

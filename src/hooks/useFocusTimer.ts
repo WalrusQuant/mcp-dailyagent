@@ -224,7 +224,7 @@ export function useFocusTimer() {
       // ignore
     }
 
-    // Create session in DB
+    // Create session in DB — do not run a timer without a server record
     let sessionId: string | null = null;
     try {
       const response = await fetch("/api/focus", {
@@ -241,7 +241,11 @@ export function useFocusTimer() {
         sessionId = data.id;
       }
     } catch {
-      // ignore
+      // fall through to failure path
+    }
+
+    if (!sessionId) {
+      return false;
     }
 
     const state: TimerState = {
@@ -259,6 +263,7 @@ export function useFocusTimer() {
     setSecondsLeft(workMinutes * 60);
     completionHandledRef.current = false;
     setIsRunning(true);
+    return true;
   };
 
   const pause = () => {
@@ -267,6 +272,13 @@ export function useFocusTimer() {
     const updated = { ...timerState, pausedAt: secondsLeft };
     storeState(updated);
     setTimerState(updated);
+    if (timerState.sessionId && !timerState.isBreak) {
+      fetch(`/api/focus/${timerState.sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "paused" }),
+      }).catch(() => {});
+    }
   };
 
   const resume = () => {
@@ -281,6 +293,13 @@ export function useFocusTimer() {
     setTimerState(updated);
     completionHandledRef.current = false;
     setIsRunning(true);
+    if (timerState.sessionId && !timerState.isBreak) {
+      fetch(`/api/focus/${timerState.sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "active" }),
+      }).catch(() => {});
+    }
   };
 
   const reset = async () => {

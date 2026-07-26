@@ -9,53 +9,61 @@ import ReactMarkdown from "react-markdown";
 import { StatCard } from "@/components/shared/StatCard";
 import { ReviewSection } from "./ReviewSection";
 
+interface WeekStats {
+  week_start: string;
+  week_end: string;
+  tasks_total: number;
+  tasks_done: number;
+  habit_logs: number;
+  focus_minutes: number;
+  focus_sessions: number;
+  workouts: number;
+}
+
 export function WeeklyReview() {
   const [weekStart, setWeekStart] = useState(startOfWeek(getToday()));
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [dashboardStats, setDashboardStats] = useState<{
-    tasks?: { total: number; done: number };
-    habits?: { total: number; completedToday: number; streak: number };
-    focus?: { todayMinutes: number; todaySessions: number };
-    workouts?: { weekCount: number };
-  } | null>(null);
+  const [weekStats, setWeekStats] = useState<WeekStats | null>(null);
 
   const loadReview = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     setError(false);
     try {
-      const response = await fetch(`/api/weekly-review?week=${weekStart}`, signal ? { signal } : undefined);
-      if (response.ok) {
-        const data = await response.json();
+      const [reviewRes, statsRes] = await Promise.all([
+        fetch(`/api/weekly-review?week=${weekStart}`, signal ? { signal } : undefined),
+        fetch(`/api/weekly-review/stats?week=${weekStart}`, signal ? { signal } : undefined),
+      ]);
+
+      if (reviewRes.ok) {
+        const data = await reviewRes.json();
         setContent(data && data.content ? data.content : "");
       } else {
-        // A failed fetch is not the same as "no review yet" — don't blame the agent.
         setError(true);
         setContent("");
+      }
+
+      if (statsRes.ok) {
+        setWeekStats(await statsRes.json());
+      } else {
+        setWeekStats(null);
       }
     } catch {
       if (signal?.aborted) return;
       setError(true);
       setContent("");
+      setWeekStats(null);
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
   }, [weekStart]);
 
   useEffect(() => {
-    // Abort on week change/unmount so a slow response can't render a stale week.
     const controller = new AbortController();
     loadReview(controller.signal);
     return () => controller.abort();
   }, [loadReview]);
-
-  useEffect(() => {
-    fetch("/api/dashboard")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setDashboardStats)
-      .catch(() => {});
-  }, []);
 
   const handleDateChange = (date: string) => {
     setWeekStart(startOfWeek(date));
@@ -63,88 +71,106 @@ export function WeeklyReview() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-    <div className="max-w-2xl mx-auto p-4 md:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Weekly Review</h1>
-        <DateNavigation date={weekStart} onDateChange={handleDateChange} mode="week" />
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+      <div className="max-w-2xl mx-auto p-4 md:p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
+            Weekly Review
+          </h1>
+          <DateNavigation date={weekStart} onDateChange={handleDateChange} mode="week" />
         </div>
-      ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-12">
-          <AlertCircle className="w-6 h-6" style={{ color: "var(--text-muted)" }} />
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Couldn&apos;t load this week&apos;s review.
-          </p>
-          <button
-            onClick={() => loadReview()}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
-            style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
-          >
-            Retry
-          </button>
-        </div>
-      ) : !content ? (
-        <EmptyState
-          icon={FileText}
-          message="No review for this week yet. Weekly reviews are written by the OpenClaw agent."
-        />
-      ) : (
-        <div>
-          {dashboardStats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-              <StatCard label="Tasks Done" value={`${dashboardStats.tasks?.done ?? 0}/${dashboardStats.tasks?.total ?? 0}`} />
-              <StatCard label="Habit Streak" value={`${dashboardStats.habits?.streak ?? 0}d`} />
-              <StatCard label="Focus" value={`${dashboardStats.focus?.todayMinutes ?? 0}m`} />
-              <StatCard label="Workouts" value={dashboardStats.workouts?.weekCount ?? 0} />
-            </div>
-          )}
 
-          {(() => {
-            const sections = content.split(/^## /m).filter(Boolean);
-            if (sections.length <= 1) {
+        {/* Always show week stats when available — independent of whether agent wrote a review */}
+        {!isLoading && !error && weekStats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <StatCard
+              label="Tasks Done"
+              value={`${weekStats.tasks_done}/${weekStats.tasks_total}`}
+            />
+            <StatCard label="Habit Logs" value={weekStats.habit_logs} />
+            <StatCard label="Focus" value={`${weekStats.focus_minutes}m`} />
+            <StatCard label="Workouts" value={weekStats.workouts} />
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-3 py-12">
+            <AlertCircle className="w-6 h-6" style={{ color: "var(--text-muted)" }} />
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Couldn&apos;t load this week&apos;s review.
+            </p>
+            <button
+              onClick={() => loadReview()}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+              style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : !content ? (
+          <EmptyState
+            icon={FileText}
+            message="No review for this week yet. Weekly reviews are written by the OpenClaw agent."
+          />
+        ) : (
+          <div>
+            {(() => {
+              const sections = content.split(/^## /m).filter(Boolean);
+              if (sections.length <= 1) {
+                return (
+                  <div
+                    className="prose prose-sm max-w-none rounded-lg p-6"
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border-default)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    <ReactMarkdown>{content}</ReactMarkdown>
+                  </div>
+                );
+              }
+              const firstSection = content.startsWith("## ") ? null : sections[0];
+              const headingSections = content.startsWith("## ") ? sections : sections.slice(1);
               return (
-                <div
-                  className="prose prose-sm max-w-none rounded-lg p-6"
-                  style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
-                >
-                  <ReactMarkdown>{content}</ReactMarkdown>
+                <div className="space-y-2">
+                  {firstSection && (
+                    <div
+                      className="prose prose-sm max-w-none rounded-lg p-4"
+                      style={{
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border-default)",
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      <ReactMarkdown>{firstSection.trim()}</ReactMarkdown>
+                    </div>
+                  )}
+                  {headingSections.map((section, i) => {
+                    const newlineIdx = section.indexOf("\n");
+                    const title =
+                      newlineIdx > -1 ? section.slice(0, newlineIdx).trim() : section.trim();
+                    const body = newlineIdx > -1 ? section.slice(newlineIdx + 1).trim() : "";
+                    return (
+                      <ReviewSection key={i} title={title} defaultExpanded={i < 3}>
+                        <div
+                          className="prose prose-sm max-w-none"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          <ReactMarkdown>{body}</ReactMarkdown>
+                        </div>
+                      </ReviewSection>
+                    );
+                  })}
                 </div>
               );
-            }
-            const firstSection = content.startsWith("## ") ? null : sections[0];
-            const headingSections = content.startsWith("## ") ? sections : sections.slice(1);
-            return (
-              <div className="space-y-2">
-                {firstSection && (
-                  <div
-                    className="prose prose-sm max-w-none rounded-lg p-4"
-                    style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
-                  >
-                    <ReactMarkdown>{firstSection.trim()}</ReactMarkdown>
-                  </div>
-                )}
-                {headingSections.map((section, i) => {
-                  const newlineIdx = section.indexOf("\n");
-                  const title = newlineIdx > -1 ? section.slice(0, newlineIdx).trim() : section.trim();
-                  const body = newlineIdx > -1 ? section.slice(newlineIdx + 1).trim() : "";
-                  return (
-                    <ReviewSection key={i} title={title} defaultExpanded={i < 3}>
-                      <div className="prose prose-sm max-w-none" style={{ color: "var(--text-primary)" }}>
-                        <ReactMarkdown>{body}</ReactMarkdown>
-                      </div>
-                    </ReviewSection>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </div>
-      )}
-    </div>
+            })()}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

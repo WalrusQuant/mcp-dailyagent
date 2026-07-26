@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { goals, tasks, habits } from "@/lib/db/schema";
+import { goals, tasks, habits, goalProgressLogs } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { updateWithVersion } from "@/lib/db/optimistic";
@@ -9,6 +9,7 @@ import { serializeGoal } from "@/lib/mcp/queries/goals";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
+import { getToday } from "@/lib/dates";
 
 export async function GET(
   _request: NextRequest,
@@ -122,6 +123,8 @@ export async function PATCH(
   }
 
   try {
+    let row: typeof goals.$inferSelect | undefined;
+
     if (typeof body.expected_updated_at === "string") {
       const result = await updateWithVersion<typeof goals.$inferSelect>({
         table: goals,
@@ -135,18 +138,37 @@ export async function PATCH(
         if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
         return conflictResponse(serializeGoal(result.current));
       }
-      return NextResponse.json(serializeGoal(result.row));
+      row = result.row;
+    } else {
+      allowedFields.updatedAt = new Date();
+      const [updated] = await db
+        .update(goals)
+        .set(allowedFields)
+        .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+        .returning();
+
+      if (!updated) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      row = updated;
     }
 
-    allowedFields.updatedAt = new Date();
-    const [row] = await db
-      .update(goals)
-      .set(allowedFields)
-      .where(and(eq(goals.id, id), eq(goals.userId, userId)))
-      .returning();
-
-    if (!row) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    // Manual progress changes should feed the progress history chart
+    // (same day upsert as MCP log_goal_progress).
+    if (typeof body.progress === "number" && row) {
+      const today = getToday();
+      await db
+        .insert(goalProgressLogs)
+        .values({
+          goalId: id,
+          userId,
+          logDate: today,
+          progress: body.progress,
+        })
+        .onConflictDoUpdate({
+          target: [goalProgressLogs.goalId, goalProgressLogs.logDate],
+          set: { progress: body.progress },
+        });
     }
 
     return NextResponse.json(serializeGoal(row));

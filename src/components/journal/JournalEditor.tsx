@@ -3,20 +3,34 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { JournalEntry } from "@/types/database";
-
+import { useToast } from "@/lib/toast-context";
 
 interface JournalEditorProps {
   entryId?: string;
   initialContent?: string;
   initialMood?: number | null;
+  /** ISO timestamp from last known server version (for optimistic concurrency) */
+  initialUpdatedAt?: string | null;
   date: string;
   onSave: (entry: JournalEntry) => void;
   onDelete?: () => void;
+  /** Called when a 409 conflict requires reloading the entry from the server */
+  onConflictReload?: () => void;
 }
 
 const MOOD_LABELS = ["Bad", "Meh", "OK", "Good", "Great"];
 
-export function JournalEditor({ entryId, initialContent = "", initialMood = null, date, onSave, onDelete }: JournalEditorProps) {
+export function JournalEditor({
+  entryId,
+  initialContent = "",
+  initialMood = null,
+  initialUpdatedAt = null,
+  date,
+  onSave,
+  onDelete,
+  onConflictReload,
+}: JournalEditorProps) {
+  const { addToast } = useToast();
   const [content, setContent] = useState(initialContent);
   const [mood, setMood] = useState<number | null>(initialMood);
   const [isSaving, setIsSaving] = useState(false);
@@ -24,16 +38,24 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef(initialContent);
 
-  // The editor must not remount when the first save assigns an id (that would
-  // discard keystrokes typed during the request), so the id lives in a ref
-  // that flips POST -> PATCH in place.
   const entryIdRef = useRef<string | undefined>(entryId);
   useEffect(() => {
     if (entryId) entryIdRef.current = entryId;
   }, [entryId]);
 
-  // Latest-value refs so a save always writes what's currently on screen,
-  // even when it was queued behind an in-flight request.
+  // Server version for optimistic concurrency (PATCH only)
+  const updatedAtRef = useRef<string | null>(initialUpdatedAt);
+  useEffect(() => {
+    if (initialUpdatedAt) updatedAtRef.current = initialUpdatedAt;
+  }, [initialUpdatedAt]);
+
+  // When parent reloads entry after conflict, resync local state
+  useEffect(() => {
+    setContent(initialContent);
+    setMood(initialMood);
+    lastSavedRef.current = initialContent;
+  }, [entryId, date]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on identity change
+
   const contentRef = useRef(content);
   contentRef.current = content;
   const moodRef = useRef(mood);
@@ -43,8 +65,6 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
   const pendingRef = useRef(false);
 
   const save = useCallback(async () => {
-    // Never run two saves concurrently: a second POST before the first
-    // returns would create a duplicate entry for the date. Queue instead.
     if (inFlightRef.current) {
       pendingRef.current = true;
       return;
@@ -61,34 +81,62 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
       try {
         const id = entryIdRef.current;
         const url = id ? `/api/journal/${id}` : "/api/journal";
+        const body: Record<string, unknown> = {
+          content: text,
+          mood: moodVal,
+          entry_date: date,
+        };
+        if (id && updatedAtRef.current) {
+          body.expected_updated_at = updatedAtRef.current;
+        }
+
         const response = await fetch(url, {
           method: id ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: text, mood: moodVal, entry_date: date }),
+          body: JSON.stringify(body),
         });
+
+        if (response.status === 409) {
+          addToast("Entry changed elsewhere — reloading");
+          onConflictReload?.();
+          pendingRef.current = false;
+          break;
+        }
+
         if (response.ok) {
           const data = await response.json();
           if (data.id) entryIdRef.current = data.id;
+          if (data.updated_at) updatedAtRef.current = data.updated_at;
           lastSavedRef.current = text;
           onSave(data);
-          // Re-run if more changes arrived while this save was in flight.
           if (contentRef.current !== lastSavedRef.current) pendingRef.current = true;
+        } else {
+          let msg = "Failed to save journal entry";
+          try {
+            const err = await response.json();
+            if (err?.error) msg = String(err.error);
+          } catch {
+            // ignore
+          }
+          addToast(msg);
         }
       } catch (error) {
         console.error("Failed to save:", error);
+        addToast("Failed to save journal entry");
       } finally {
         inFlightRef.current = false;
         setIsSaving(false);
       }
     } while (pendingRef.current);
-  }, [date, onSave]);
+  }, [date, onSave, addToast, onConflictReload]);
 
-  // Auto-save on content change
   useEffect(() => {
     if (content === lastSavedRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(save, 2000);
-    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
   }, [content, mood, save]);
 
   const handleMoodChange = (newMood: number) => {
@@ -101,7 +149,9 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Mood:</span>
+        <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+          Mood:
+        </span>
         {MOOD_LABELS.map((label, i) => {
           const val = i + 1;
           const isSelected = mood === val;
@@ -154,9 +204,14 @@ export function JournalEditor({ entryId, initialContent = "", initialMood = null
               setIsDeleting(true);
               try {
                 const response = await fetch(`/api/journal/${entryId}`, { method: "DELETE" });
-                if (response.ok) onDelete();
+                if (response.ok) {
+                  onDelete();
+                } else {
+                  addToast("Failed to delete entry");
+                }
               } catch (error) {
                 console.error("Failed to delete:", error);
+                addToast("Failed to delete entry");
               } finally {
                 setIsDeleting(false);
               }

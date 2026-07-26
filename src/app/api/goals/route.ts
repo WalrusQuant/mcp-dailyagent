@@ -138,7 +138,43 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(goalRows.map(serializeGoal));
+    // Attach linked task/habit counts for list badges
+    const allIds = goalRows.map((g) => g.id);
+    const countByGoal = new Map<string, { tasks: number; habits: number }>();
+    for (const id of allIds) countByGoal.set(id, { tasks: 0, habits: 0 });
+
+    if (allIds.length > 0) {
+      const [allTasks, allHabits] = await Promise.all([
+        db
+          .select({ goalId: tasks.goalId })
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), inArray(tasks.goalId, allIds))),
+        db
+          .select({ goalId: habits.goalId })
+          .from(habits)
+          .where(
+            and(eq(habits.userId, userId), eq(habits.archived, false), inArray(habits.goalId, allIds))
+          ),
+      ]);
+      for (const t of allTasks) {
+        if (!t.goalId) continue;
+        const c = countByGoal.get(t.goalId);
+        if (c) c.tasks += 1;
+      }
+      for (const h of allHabits) {
+        if (!h.goalId) continue;
+        const c = countByGoal.get(h.goalId);
+        if (c) c.habits += 1;
+      }
+    }
+
+    return NextResponse.json(
+      goalRows.map((g) => ({
+        ...serializeGoal(g),
+        task_count: countByGoal.get(g.id)?.tasks ?? 0,
+        habit_count: countByGoal.get(g.id)?.habits ?? 0,
+      }))
+    );
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

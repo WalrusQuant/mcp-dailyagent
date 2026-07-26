@@ -28,6 +28,7 @@ export function HabitTracker() {
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const { addToast } = useToast();
   const weekStart = startOfWeek(date);
@@ -37,8 +38,9 @@ export function HabitTracker() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const habitsUrl = showArchived ? "/api/habits?archived=true" : "/api/habits";
       const [habitsRes, statsRes] = await Promise.all([
-        fetch("/api/habits"),
+        fetch(habitsUrl),
         fetch("/api/habits/stats?days=30"),
       ]);
 
@@ -73,13 +75,21 @@ export function HabitTracker() {
         };
       });
 
-      setHabitsWithStats(result);
+      // When showing archived, keep active first then archived
+      const sorted = showArchived
+        ? [
+            ...result.filter((r) => !r.habit.archived),
+            ...result.filter((r) => r.habit.archived),
+          ]
+        : result;
+
+      setHabitsWithStats(sorted);
     } catch (error) {
       console.error("Failed to load habits:", error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     loadData();
@@ -184,9 +194,59 @@ export function HabitTracker() {
     setEditingHabit(null);
   };
 
+  const handleArchive = async (habit: Habit) => {
+    const nextArchived = !habit.archived;
+    const prevHabitsWithStats = habitsWithStats;
+
+    // Optimistic: hide if archiving while not showing archived list; otherwise flip flag
+    if (nextArchived && !showArchived) {
+      setHabitsWithStats((prev) => prev.filter((hs) => hs.habit.id !== habit.id));
+    } else {
+      setHabitsWithStats((prev) =>
+        prev.map((hs) =>
+          hs.habit.id === habit.id ? { ...hs, habit: { ...hs.habit, archived: nextArchived } } : hs
+        )
+      );
+    }
+
+    try {
+      const response = await fetch(`/api/habits/${habit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          archived: nextArchived,
+          expected_updated_at: habit.updated_at,
+        }),
+      });
+      if (response.ok) {
+        const updated: Habit = await response.json();
+        addToast(nextArchived ? "Habit archived" : "Habit restored");
+        if (nextArchived && !showArchived) {
+          // already removed optimistically
+        } else {
+          setHabitsWithStats((prev) =>
+            prev.map((hs) => (hs.habit.id === habit.id ? { ...hs, habit: updated } : hs))
+          );
+        }
+      } else {
+        setHabitsWithStats(prevHabitsWithStats);
+        addToast(nextArchived ? "Failed to archive habit" : "Failed to restore habit");
+      }
+    } catch (error) {
+      console.error("Failed to archive habit:", error);
+      setHabitsWithStats(prevHabitsWithStats);
+      addToast(nextArchived ? "Failed to archive habit" : "Failed to restore habit");
+    }
+  };
+
   const handleDelete = async (habit: Habit) => {
-    if (!confirm(`Delete "${habit.name}"? This removes all of its logged history and streaks and cannot be undone. To keep the history, archive it instead.`)) return;
-    // Optimistic removal
+    if (
+      !confirm(
+        `Permanently delete "${habit.name}"? This removes all of its logged history and streaks and cannot be undone.\n\nPrefer Archive if you want to keep history.`
+      )
+    ) {
+      return;
+    }
     const prevHabitsWithStats = habitsWithStats;
     setHabitsWithStats((prev) => prev.filter((hs) => hs.habit.id !== habit.id));
     try {
@@ -194,7 +254,6 @@ export function HabitTracker() {
       if (response.ok) {
         addToast("Habit deleted");
       } else {
-        // Revert — restore the removed habit
         setHabitsWithStats(prevHabitsWithStats);
         addToast("Failed to delete habit");
       }
@@ -208,14 +267,27 @@ export function HabitTracker() {
   return (
     <div className="flex-1 overflow-y-auto">
     <div className="max-w-3xl mx-auto p-4 md:p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Habits</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <label
+            className="flex items-center gap-1.5 text-xs cursor-pointer select-none"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="rounded"
+            />
+            Show archived
+          </label>
           <DateNavigation date={date} onDateChange={setDate} mode="week" maxDate={getToday()} />
           <button
             onClick={() => { setEditingHabit(null); setShowForm(true); }}
             className="p-2 rounded-lg transition-opacity hover:opacity-90"
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
+            aria-label="Add habit"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -276,6 +348,7 @@ export function HabitTracker() {
                 onToggle={handleToggle}
                 onNameClick={() => setExpandedHabitId(expandedHabitId === hs.habit.id ? null : hs.habit.id)}
                 onEdit={(h) => { setEditingHabit(h); setShowForm(true); }}
+                onArchive={handleArchive}
                 onDelete={handleDelete}
               />
               {expandedHabitId === hs.habit.id && (
