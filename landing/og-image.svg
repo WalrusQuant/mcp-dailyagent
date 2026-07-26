@@ -1,3 +1,16 @@
+<!--
+  Source of truth for the social card. The exported PNG is what scrapers
+  actually fetch, so editing this file alone changes nothing — re-export, and
+  bump the -vN suffix on the PNG plus the og:image/twitter:image tags in
+  index.html, because X/Slack/iMessage cache cards by URL.
+
+  Export (macOS):
+    printf '<!doctype html><style>html,body{margin:0}svg{display:block}</style>' > /tmp/og.html
+    cat landing/og-image.svg >> /tmp/og.html
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+      --window-size=1200,630 --force-device-scale-factor=1 \
+      --screenshot=/tmp/og.png file:///tmp/og.html
+-->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
