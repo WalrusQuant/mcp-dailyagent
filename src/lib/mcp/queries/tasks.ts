@@ -73,8 +73,18 @@ export function getNextOccurrence(taskDate: string, recurrence: { type: string; 
       while (getDayOfWeek(next) === 6 || getDayOfWeek(next) === 7) next = addDays(next, 1);
       return next;
     }
-    case "weekly":
+    case "weekly": {
+      // Optional ISO weekday list (1=Mon … 7=Sun). Advance to the next matching day.
+      const days = recurrence.days?.filter((d) => d >= 1 && d <= 7);
+      if (days && days.length > 0) {
+        let next = addDays(taskDate, 1);
+        for (let i = 0; i < 14; i++) {
+          if (days.includes(getDayOfWeek(next))) return next;
+          next = addDays(next, 1);
+        }
+      }
       return addDays(taskDate, 7);
+    }
     case "monthly": {
       const [y, m, d] = taskDate.split("-").map(Number);
       const next = new Date(Date.UTC(y, m, d));

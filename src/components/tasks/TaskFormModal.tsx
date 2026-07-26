@@ -29,12 +29,25 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
   const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
   const [goalId, setGoalId] = useState(task?.goal_id || defaultGoalId || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>(
+    () => task?.recurrence?.days ?? []
+  );
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
     () => task?.tags?.map((t) => t.id) ?? []
   );
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+
+  const DAY_LABELS = [
+    { n: 1, label: "Mon" },
+    { n: 2, label: "Tue" },
+    { n: 3, label: "Wed" },
+    { n: 4, label: "Thu" },
+    { n: 5, label: "Fri" },
+    { n: 6, label: "Sat" },
+    { n: 7, label: "Sun" },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +77,14 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
       const url = task ? `/api/tasks/${task.id}` : "/api/tasks";
       const method = task ? "PATCH" : "POST";
 
+      let recurrence: { type: string; days?: number[] } | null = null;
+      if (recurrenceType) {
+        recurrence = { type: recurrenceType };
+        if (recurrenceType === "weekly" && recurrenceDays.length > 0) {
+          recurrence.days = [...recurrenceDays].sort();
+        }
+      }
+
       const body: Record<string, unknown> = {
         title: title.trim(),
         notes: notes.trim() || null,
@@ -71,7 +92,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
         task_date: taskDate,
         space_id: spaceId || null,
         goal_id: goalId || null,
-        recurrence: recurrenceType ? { type: recurrenceType } : null,
+        recurrence,
         tag_ids: selectedTagIds,
       };
 
@@ -199,7 +220,10 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
             </label>
             <select
               value={recurrenceType}
-              onChange={(e) => setRecurrenceType(e.target.value)}
+              onChange={(e) => {
+                setRecurrenceType(e.target.value);
+                if (e.target.value !== "weekly") setRecurrenceDays([]);
+              }}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
               style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             >
@@ -211,6 +235,41 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
             </select>
           </div>
         </div>
+
+        {recurrenceType === "weekly" && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Weekly on
+            </label>
+            <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+              Optional. Leave empty to repeat every 7 days from the task date.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {DAY_LABELS.map(({ n, label }) => {
+                const on = recurrenceDays.includes(n);
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() =>
+                      setRecurrenceDays((prev) =>
+                        on ? prev.filter((d) => d !== n) : [...prev, n].sort()
+                      )
+                    }
+                    className="text-xs px-2 py-1 rounded-md font-medium"
+                    style={{
+                      background: on ? "var(--accent-primary)" : "var(--bg-elevated)",
+                      color: on ? "var(--bg-base)" : "var(--text-secondary)",
+                      border: `1px solid ${on ? "var(--accent-primary)" : "var(--border-default)"}`,
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <GoalPicker value={goalId} onChange={setGoalId} />
 

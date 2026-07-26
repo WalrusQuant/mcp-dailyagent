@@ -54,6 +54,23 @@ async function getTasksForDate(userId: string, date?: string, spaceId?: string) 
   }
 }
 
+const RECURRENCE_TYPES = new Set(["daily", "weekdays", "weekly", "monthly"]);
+
+function normalizeRecurrence(
+  rec: unknown
+): { type: string; days?: number[] } | null | undefined {
+  if (rec === undefined) return undefined;
+  if (rec === null) return null;
+  if (typeof rec !== "object" || Array.isArray(rec)) return undefined;
+  const r = rec as { type?: string; days?: number[] };
+  if (!r.type || !RECURRENCE_TYPES.has(r.type)) return undefined;
+  const out: { type: string; days?: number[] } = { type: r.type };
+  if (Array.isArray(r.days) && r.days.length > 0) {
+    out.days = r.days.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+  }
+  return out;
+}
+
 async function createTask(
   userId: string,
   args: {
@@ -63,6 +80,7 @@ async function createTask(
     task_date?: string;
     space_id?: string;
     goal_id?: string;
+    recurrence?: { type: string; days?: number[] } | null;
   }
 ) {
   const today = getToday();
@@ -77,6 +95,7 @@ async function createTask(
         taskDate: args.task_date ?? today,
         spaceId: args.space_id ?? null,
         goalId: args.goal_id ?? null,
+        recurrence: args.recurrence ?? null,
         done: false,
       })
       .returning();
@@ -92,12 +111,18 @@ function buildTaskPatch(args: {
   priority?: string;
   task_date?: string;
   done?: boolean;
+  space_id?: string | null;
+  goal_id?: string | null;
+  recurrence?: { type: string; days?: number[] } | null;
 }): Partial<typeof tasks.$inferInsert> {
   const patch: Partial<typeof tasks.$inferInsert> = {};
   if (args.title !== undefined) patch.title = args.title;
   if (args.notes !== undefined) patch.notes = args.notes;
   if (args.priority !== undefined) patch.priority = args.priority;
   if (args.task_date !== undefined) patch.taskDate = args.task_date;
+  if (args.space_id !== undefined) patch.spaceId = args.space_id;
+  if (args.goal_id !== undefined) patch.goalId = args.goal_id;
+  if (args.recurrence !== undefined) patch.recurrence = args.recurrence;
   if (args.done !== undefined) {
     patch.done = args.done;
     patch.doneAt = args.done ? new Date() : null;
@@ -114,6 +139,9 @@ async function updateTaskLegacy(
     priority?: string;
     task_date?: string;
     done?: boolean;
+    space_id?: string | null;
+    goal_id?: string | null;
+    recurrence?: { type: string; days?: number[] } | null;
   }
 ) {
   const updates = buildTaskPatch(args);
@@ -183,10 +211,21 @@ export function registerTaskTools(server: McpServer) {
     }
   );
 
+  const recurrenceSchema = z
+    .object({
+      type: z.enum(["daily", "weekdays", "weekly", "monthly"]),
+      days: z
+        .array(z.number().int().min(1).max(7))
+        .optional()
+        .describe("ISO weekdays 1=Mon…7=Sun (used when type is weekly)"),
+    })
+    .nullable()
+    .optional();
+
   // --- create_task (WRITE) ---
   server.tool(
     "create_task",
-    "Create a new task",
+    "Create a new task. Supports recurrence (daily/weekdays/weekly/monthly) and links to space or goal.",
     {
       title: z.string().describe("Task title"),
       notes: z.string().optional().describe("Additional notes"),
@@ -194,6 +233,9 @@ export function registerTaskTools(server: McpServer) {
       task_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       space_id: uuidSchema.optional().describe("Space/project ID to assign to (from list_spaces)"),
       goal_id: uuidSchema.optional().describe("Goal ID to link to (from list_goals)"),
+      recurrence: recurrenceSchema.describe(
+        "Recurrence rule, or null/omit for one-off. Weekly may include days (1=Mon…7=Sun)."
+      ),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -202,7 +244,15 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      const result = await createTask(auth.userId, args);
+      const recurrence = normalizeRecurrence(args.recurrence);
+      if (args.recurrence !== undefined && args.recurrence !== null && recurrence === undefined) {
+        return errorResult("Invalid recurrence");
+      }
+
+      const result = await createTask(auth.userId, {
+        ...args,
+        recurrence: recurrence === undefined ? null : recurrence,
+      });
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
@@ -225,6 +275,9 @@ export function registerTaskTools(server: McpServer) {
       priority: prioritySchema.optional().describe(priorityDescription),
       task_date: dateSchema.optional().describe("New date in YYYY-MM-DD format"),
       done: z.boolean().optional().describe("Mark as done or not done"),
+      space_id: uuidSchema.nullable().optional().describe("Space ID, or null to unlink"),
+      goal_id: uuidSchema.nullable().optional().describe("Goal ID, or null to unlink"),
+      recurrence: recurrenceSchema.describe("Recurrence rule, or null to clear"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -235,8 +288,29 @@ export function registerTaskTools(server: McpServer) {
 
       const wasAlreadyDone = args.done === true ? await getPriorDone(auth.userId, args.task_id) : false;
 
+      let recurrencePatch: { type: string; days?: number[] } | null | undefined = undefined;
+      if (args.recurrence !== undefined) {
+        if (args.recurrence === null) {
+          recurrencePatch = null;
+        } else {
+          recurrencePatch = normalizeRecurrence(args.recurrence);
+          if (recurrencePatch === undefined) return errorResult("Invalid recurrence");
+        }
+      }
+
+      const patchArgs = {
+        title: args.title,
+        notes: args.notes,
+        priority: args.priority,
+        task_date: args.task_date,
+        done: args.done,
+        space_id: args.space_id,
+        goal_id: args.goal_id,
+        recurrence: recurrencePatch,
+      };
+
       if (args.expected_updated_at) {
-        const patch = buildTaskPatch(args);
+        const patch = buildTaskPatch(patchArgs);
         const result = await updateWithVersion<typeof tasks.$inferSelect>({
           table: tasks,
           id: args.task_id,
@@ -255,7 +329,10 @@ export function registerTaskTools(server: McpServer) {
         return textResult(result.row);
       }
 
-      const result = await updateTaskLegacy(auth.userId, args);
+      const result = await updateTaskLegacy(auth.userId, {
+        task_id: args.task_id,
+        ...patchArgs,
+      });
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       if (args.done === true && result.data) {

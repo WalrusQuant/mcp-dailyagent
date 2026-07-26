@@ -227,18 +227,17 @@ describe("complete_task", () => {
   });
 
   it("spawns the next occurrence when the task is recurring", async () => {
-    // create_task does not accept recurrence, so seed a recurring task directly.
-    const { db } = await getTestDb();
-    const [recurring] = await db
-      .insert(tasks)
-      .values({
-        userId: TEST_USER_ID,
-        title: "Daily standup",
-        taskDate: "2026-06-05",
-        recurrence: { type: "daily" },
-        done: false,
-      })
-      .returning();
+    const recurring = expectOk<TaskRow>(
+      await h.call(
+        "create_task",
+        {
+          title: "Daily standup",
+          task_date: "2026-06-05",
+          recurrence: { type: "daily" },
+        },
+        ctx
+      )
+    );
 
     expectOk<TaskRow>(await h.call("complete_task", { task_id: recurring.id }, ctx));
 
@@ -248,6 +247,70 @@ describe("complete_task", () => {
     expect(next[0].title).toBe("Daily standup");
     expect(next[0].done).toBe(false);
     expect(next[0].recurrence).toEqual({ type: "daily" });
+  });
+});
+
+describe("create_task / update_task — recurrence and links", () => {
+  it("creates a task with recurrence and weekly days", async () => {
+    const created = expectOk<TaskRow>(
+      await h.call(
+        "create_task",
+        {
+          title: "Team sync",
+          task_date: "2026-06-02", // Monday
+          recurrence: { type: "weekly", days: [1, 3, 5] },
+        },
+        ctx
+      )
+    );
+    expect(created.recurrence).toEqual({ type: "weekly", days: [1, 3, 5] });
+  });
+
+  it("updates space_id, goal_id, and recurrence", async () => {
+    const { db } = await getTestDb();
+    const [goal] = await db
+      .insert(goals)
+      .values({ userId: TEST_USER_ID, title: "Ship it", status: "active", progress: 0 })
+      .returning();
+
+    const task = await seedTask({ title: "Linked" });
+    const updated = expectOk<TaskRow>(
+      await h.call(
+        "update_task",
+        {
+          task_id: task.id,
+          goal_id: goal.id,
+          recurrence: { type: "weekdays" },
+        },
+        ctx
+      )
+    );
+    expect(updated.goalId).toBe(goal.id);
+    expect(updated.recurrence).toEqual({ type: "weekdays" });
+
+    const cleared = expectOk<TaskRow>(
+      await h.call("update_task", { task_id: task.id, goal_id: null, recurrence: null }, ctx)
+    );
+    expect(cleared.goalId).toBeNull();
+    expect(cleared.recurrence).toBeNull();
+  });
+
+  it("spawns weekly next day from days list", async () => {
+    // Monday 2026-06-01 with weekly Mon/Wed → next is Wed 2026-06-03
+    const created = expectOk<TaskRow>(
+      await h.call(
+        "create_task",
+        {
+          title: "MW sync",
+          task_date: "2026-06-01",
+          recurrence: { type: "weekly", days: [1, 3] },
+        },
+        ctx
+      )
+    );
+    expectOk(await h.call("complete_task", { task_id: created.id }, ctx));
+    const wed = expectOk<TaskRow[]>(await h.call("list_tasks", { date: "2026-06-03" }, ctx));
+    expect(wed.some((t) => t.title === "MW sync")).toBe(true);
   });
 });
 

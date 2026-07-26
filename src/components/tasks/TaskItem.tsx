@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2, ChevronDown, ChevronRight, RotateCcw, GripVertical, Sparkles, Repeat } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, RotateCcw, GripVertical, Repeat } from "lucide-react";
 import { Task } from "@/types/database";
 
 interface TaskItemProps {
   task: Task;
+  spaceName?: string | null;
+  goalTitle?: string | null;
   onToggle: (task: Task) => void;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-  onBreakdown?: (task: Task) => void;
   isDragging?: boolean;
   isDragOver?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
@@ -25,7 +26,21 @@ const PRIORITY_COLORS: Record<string, string> = {
   C: "#22c55e",
 };
 
-export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDragging, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: TaskItemProps) {
+export function TaskItem({
+  task,
+  spaceName,
+  goalTitle,
+  onToggle,
+  onEdit,
+  onDelete,
+  isDragging,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+}: TaskItemProps) {
   const [showNotes, setShowNotes] = useState(false);
   const priorityLetter = task.priority[0];
   const color = PRIORITY_COLORS[priorityLetter] || "var(--text-muted)";
@@ -44,10 +59,17 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDrag
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onMouseEnter={(e) => { if (!task.done) e.currentTarget.style.background = "var(--bg-hover)"; }}
-      onMouseLeave={(e) => { if (!task.done) e.currentTarget.style.background = ""; }}
+      onMouseEnter={(e) => {
+        if (!task.done) e.currentTarget.style.background = "var(--bg-hover)";
+      }}
+      onMouseLeave={(e) => {
+        if (!task.done) e.currentTarget.style.background = "";
+      }}
     >
-      <div className="opacity-40 md:opacity-0 md:group-hover:opacity-100 cursor-grab pt-0.5 flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+      <div
+        className="opacity-40 md:opacity-0 md:group-hover:opacity-100 cursor-grab pt-0.5 flex-shrink-0"
+        style={{ color: "var(--text-muted)" }}
+      >
         <GripVertical className="w-4 h-4" />
       </div>
       <button
@@ -93,12 +115,37 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDrag
             </span>
           )}
           {task.rolled_from && (
-            <span title="Rolled over"><RotateCcw className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} /></span>
+            <span title="Rolled over">
+              <RotateCcw className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+            </span>
           )}
           {task.recurrence && (
-            <span title={`Repeats ${task.recurrence.type}`}><Repeat className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} /></span>
+            <span title={`Repeats ${task.recurrence.type}`}>
+              <Repeat className="w-3 h-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+            </span>
           )}
         </div>
+
+        {(spaceName || goalTitle) && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1 pl-0.5">
+            {spaceName && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+              >
+                {spaceName}
+              </span>
+            )}
+            {goalTitle && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                style={{ background: "var(--accent-primary-soft)", color: "var(--accent-primary)" }}
+              >
+                {goalTitle}
+              </span>
+            )}
+          </div>
+        )}
 
         {task.notes && (
           <button
@@ -118,11 +165,6 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, onBreakdown, isDrag
       </div>
 
       <div className="flex md:hidden md:group-hover:flex items-center gap-0 shrink-0">
-        {onBreakdown && !task.done && (
-          <button onClick={() => onBreakdown(task)} className="p-2 md:p-1" style={{ color: "var(--accent-primary)" }} title="Break down">
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-        )}
         <button onClick={() => onEdit(task)} className="p-2 md:p-1" style={{ color: "var(--text-muted)" }}>
           <Pencil className="w-3.5 h-3.5" />
         </button>

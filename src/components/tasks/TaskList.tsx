@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, CheckSquare } from "lucide-react";
 import { TaskListSkeleton } from "@/components/shared/Skeleton";
-import { Task, Space } from "@/types/database";
+import { Task, Space, Goal } from "@/types/database";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TaskItem } from "./TaskItem";
@@ -132,6 +132,8 @@ export function TaskList() {
   const [date, setDate] = useState(getToday());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [spaceFilter, setSpaceFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -144,7 +146,9 @@ export function TaskList() {
   const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/tasks?date=${date}`, signal ? { signal } : undefined);
+      const params = new URLSearchParams({ date });
+      if (spaceFilter) params.set("space_id", spaceFilter);
+      const response = await fetch(`/api/tasks?${params}`, signal ? { signal } : undefined);
       if (response.ok) setTasks(await response.json());
     } catch (error) {
       if (signal?.aborted) return;
@@ -152,7 +156,7 @@ export function TaskList() {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [date]);
+  }, [date, spaceFilter]);
 
   useEffect(() => {
     // Abort on date change/unmount so a slow response can't render a stale day.
@@ -176,11 +180,19 @@ export function TaskList() {
   }, [isToday]);
 
   useEffect(() => {
-    fetch("/api/spaces")
-      .then((r) => r.ok ? r.json() : [])
-      .then(setSpaces)
+    Promise.all([
+      fetch("/api/spaces").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/goals?status=all").then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([sp, go]) => {
+        setSpaces(sp);
+        setGoals(go);
+      })
       .catch(() => {});
   }, []);
+
+  const spaceNameById = Object.fromEntries(spaces.map((s) => [s.id, s.name]));
+  const goalTitleById = Object.fromEntries(goals.map((g) => [g.id, g.title]));
 
   const handleToggle = async (task: Task) => {
     const newDone = !task.done;
@@ -271,10 +283,34 @@ export function TaskList() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          {spaces.length > 0 && (
+            <select
+              value={spaceFilter}
+              onChange={(e) => setSpaceFilter(e.target.value)}
+              className="rounded-lg px-2 py-1.5 text-xs focus:outline-none max-w-[140px]"
+              style={{
+                background: "var(--bg-base)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-default)",
+              }}
+              aria-label="Filter by space"
+            >
+              <option value="">All spaces</option>
+              {spaces.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
           <DateNavigation date={date} onDateChange={setDate} />
           <button
-            onClick={() => { setEditingTask(null); setShowForm(true); }}
+            onClick={() => {
+              setEditingTask(null);
+              setPrefillTitle("");
+              setShowForm(true);
+            }}
             className="p-2 rounded-lg transition-opacity hover:opacity-90"
             style={{ background: "var(--accent-primary)", color: "var(--bg-base)" }}
           >
@@ -325,8 +361,13 @@ export function TaskList() {
                   <TaskItem
                     key={task.id}
                     task={task}
+                    spaceName={task.space_id ? spaceNameById[task.space_id] : null}
+                    goalTitle={task.goal_id ? goalTitleById[task.goal_id] : null}
                     onToggle={handleToggle}
-                    onEdit={(t) => { setEditingTask(t); setShowForm(true); }}
+                    onEdit={(t) => {
+                      setEditingTask(t);
+                      setShowForm(true);
+                    }}
                     onDelete={handleDelete}
                     isDragging={drag.dragTaskId === task.id}
                     isDragOver={drag.dragOverTaskId === task.id}
