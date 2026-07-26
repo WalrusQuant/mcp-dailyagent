@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { classifyUpdate, parseExpectedUpdatedAt } from "@/lib/db/optimistic";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { classifyUpdate, parseExpectedUpdatedAt, versionPredicate } from "@/lib/db/optimistic";
+import { habits, tasks } from "@/lib/db/schema";
 
 describe("classifyUpdate", () => {
   it("returns ok when the update returned a row", () => {
@@ -47,5 +49,30 @@ describe("parseExpectedUpdatedAt", () => {
 
   it("returns null for an Invalid Date object", () => {
     expect(parseExpectedUpdatedAt(new Date("not a date"))).toBeNull();
+  });
+});
+
+describe("versionPredicate", () => {
+  const dialect = new PgDialect();
+  const expected = new Date("2026-04-21T13:22:11.123Z");
+
+  // Regression guard: a Date interpolated into a raw `sql` template gets a
+  // no-op encoder, so postgres.js receives it unserialized and throws
+  // ERR_INVALID_ARG_TYPE ("Received an instance of Date") on every versioned
+  // update. PGlite (used by the integration tests) serializes Dates itself, so
+  // only an assertion on the bound driver values catches this.
+  it.each([
+    ["habits", habits],
+    ["tasks", tasks],
+  ])("binds the token as a driver-safe string for %s", (_name, table) => {
+    const { params } = dialect.sqlToQuery(versionPredicate(table, expected));
+    expect(params).toEqual(["2026-04-21T13:22:11.123Z"]);
+    expect(params.some((p) => p instanceof Date)).toBe(false);
+  });
+
+  it("truncates the column side to milliseconds and casts the token", () => {
+    const { sql: text } = dialect.sqlToQuery(versionPredicate(habits, expected));
+    expect(text).toContain(`date_trunc('milliseconds', "habits"."updated_at")`);
+    expect(text).toContain("::timestamptz");
   });
 });

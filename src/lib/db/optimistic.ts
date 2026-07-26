@@ -21,6 +21,26 @@ export function parseExpectedUpdatedAt(value: string | Date): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/**
+ * Predicate matching a row whose `updated_at` equals the caller's token.
+ *
+ * `updated_at` round-trips through JS Date (ms precision); truncate the column
+ * side so legacy rows created with `defaultNow()` (µs precision) still match a
+ * client-sent ms-precision token.
+ *
+ * The token is bound as an ISO string, not a Date: values interpolated into a
+ * raw `sql` template get a no-op encoder, so postgres.js would receive the Date
+ * unserialized and throw ERR_INVALID_ARG_TYPE. Column-mapped values dodge this
+ * because the column's own encoder stringifies them.
+ */
+export function versionPredicate(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  table: any,
+  expected: Date
+) {
+  return sql`date_trunc('milliseconds', ${table.updatedAt}) = ${expected.toISOString()}::timestamptz`;
+}
+
 interface UpdateArgs {
   // Drizzle's per-table inferred types are incompatible across tables at the
   // generic level; callers pass a concrete table reference and get back the
@@ -49,10 +69,7 @@ export async function updateWithVersion<TRow = any>(
       and(
         eq(args.table.id, args.id),
         eq(args.table.userId, args.userId),
-        // `updated_at` round-trips through JS Date (ms precision); truncate the
-        // column side so legacy rows created with `defaultNow()` (µs precision)
-        // still match a client-sent ms-precision token.
-        sql`date_trunc('milliseconds', ${args.table.updatedAt}) = ${expected}`
+        versionPredicate(args.table, expected)
       )
     )
     .returning()) as TRow[];
