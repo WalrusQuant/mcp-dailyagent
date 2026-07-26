@@ -76,7 +76,7 @@ export function FocusTimer() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
+    <div className="flex-1 overflow-y-auto">
     <div className="max-w-lg mx-auto p-4 md:p-6">
       <h1 className="text-xl font-bold mb-6 text-center" style={{ color: "var(--text-primary)" }}>
         Focus Timer

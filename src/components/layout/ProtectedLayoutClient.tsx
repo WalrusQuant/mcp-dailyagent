@@ -67,7 +67,14 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       />
 
       <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
-        <main className="flex-1 flex flex-col min-h-0 pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0">
+        {/*
+          Safe-area insets live here, not in page components: `viewportFit:
+          "cover"` lets content run under the Dynamic Island / home indicator,
+          and every page needs the same treatment. Reserving the top inset once
+          keeps headers clear of the camera cutout on notched devices; on
+          desktop `env()` is 0 and the `md:` resets keep the box flush.
+        */}
+        <main className="flex-1 flex flex-col min-h-0 pt-[env(safe-area-inset-top,0px)] md:pt-0 pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
