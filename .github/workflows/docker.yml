@@ -6,6 +6,12 @@ on:
     tags: ["v*.*.*"]
   workflow_dispatch:
 
+# A release commit and its tag can arrive seconds apart. Serialize publishes so
+# two multi-arch Buildx jobs never contend for the same registries and GHA cache.
+concurrency:
+  group: cadence-docker-publish
+  cancel-in-progress: false
+
 jobs:
   # Gate: lint + test + build must pass before any image is published.
   # CI's own triggers don't cover tag pushes, so calling it here also gates
@@ -79,6 +85,7 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [ci, smoke-test]
     permissions:
       contents: read
