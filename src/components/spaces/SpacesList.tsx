@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Loader2, Calendar, FolderKanban } from "lucide-react";
 import { Space } from "@/types/database";
 import { SpaceFormModal } from "./SpaceFormModal";
+import { LoadError } from "@/components/shared/LoadError";
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   active: { bg: "var(--accent-primary)", text: "var(--bg-base)" },
@@ -17,29 +18,36 @@ export function SpacesList() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const router = useRouter();
 
-  const loadSpaces = useCallback(async () => {
+  const loadSpaces = useCallback(async (signal: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const url = statusFilter
         ? `/api/spaces?status=${statusFilter}`
         : "/api/spaces";
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setSpaces(data);
-      }
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error("Failed to load spaces");
+      const data = await response.json();
+      if (signal.aborted) return;
+      setSpaces(data);
     } catch (error) {
+      if (signal.aborted) return;
       console.error("Failed to load spaces:", error);
+      setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
   }, [statusFilter]);
 
   useEffect(() => {
-    loadSpaces();
-  }, [loadSpaces]);
+    const controller = new AbortController();
+    loadSpaces(controller.signal);
+    return () => controller.abort();
+  }, [loadSpaces, reloadKey]);
 
   const handleSpaceCreated = (space: Space) => {
     setShowModal(false);
@@ -84,6 +92,8 @@ export function SpacesList() {
           <div className="flex justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
           </div>
+        ) : loadError ? (
+          <LoadError message="Couldn’t load spaces." onRetry={() => setReloadKey((key) => key + 1)} />
         ) : spaces.length === 0 ? (
           <div className="text-center py-12">
             <FolderKanban className="w-12 h-12 mx-auto mb-3" style={{ color: "var(--text-muted)" }} />

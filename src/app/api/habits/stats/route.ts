@@ -4,7 +4,7 @@ import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
-import { getToday, addDays } from "@/lib/dates";
+import { getHistoricalDateOrToday, getToday, addDays } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -18,9 +18,15 @@ export async function GET(request: NextRequest) {
     }
   }
   const days = Math.max(1, parseInt(daysParam ?? "30", 10));
+  const includeArchived = searchParams.get("archived") === "true";
 
   const endDateStr = getToday();
   const startDateStr = addDays(endDateStr, -(days - 1));
+  const fromParam = searchParams.get("from");
+  if (fromParam !== null && getHistoricalDateOrToday(fromParam) !== fromParam) {
+    return NextResponse.json({ error: "Invalid from parameter" }, { status: 400 });
+  }
+  const queryStartDateStr = fromParam && fromParam < startDateStr ? fromParam : startDateStr;
 
   try {
     const habitRows = await db
@@ -31,7 +37,11 @@ export async function GET(request: NextRequest) {
         targetDays: habits.targetDays,
       })
       .from(habits)
-      .where(and(eq(habits.userId, userId), eq(habits.archived, false)))
+      .where(
+        includeArchived
+          ? eq(habits.userId, userId)
+          : and(eq(habits.userId, userId), eq(habits.archived, false))
+      )
       .orderBy(habits.sortOrder);
 
     if (habitRows.length === 0) {
@@ -46,7 +56,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           inArray(habitLogs.habitId, habitIds),
-          gte(habitLogs.logDate, startDateStr),
+          gte(habitLogs.logDate, queryStartDateStr),
           lte(habitLogs.logDate, endDateStr)
         )
       );
@@ -62,14 +72,15 @@ export async function GET(request: NextRequest) {
 
     const habitStats = habitRows.map((habit) => {
       const habitLogDates = logsByHabit[habit.id] ?? [];
+      const statsLogDates = habitLogDates.filter((date) => date >= startDateStr);
       const targetDays: number[] =
         Array.isArray(habit.targetDays) && habit.targetDays.length > 0
           ? habit.targetDays
           : [1, 2, 3, 4, 5, 6, 7];
 
-      const streak = calculateStreak(habitLogDates, targetDays);
+      const streak = calculateStreak(statsLogDates, targetDays);
       const applicableDays = getApplicableDays(startDateStr, endDateStr, targetDays);
-      const completionRate = applicableDays > 0 ? habitLogDates.length / applicableDays : 0;
+      const completionRate = applicableDays > 0 ? statsLogDates.length / applicableDays : 0;
       const recentLogs = [...new Set(habitLogDates)].sort().reverse();
 
       return {

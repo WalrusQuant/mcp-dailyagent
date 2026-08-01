@@ -1,7 +1,10 @@
-"use client";
-
 import { FocusTimer } from "@/components/focus/FocusTimer";
 
-export default function FocusPage() {
-  return <FocusTimer />;
+export default async function FocusPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  const { date } = await searchParams;
+  return <FocusTimer initialDate={date} />;
 }

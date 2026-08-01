@@ -24,6 +24,28 @@ export function getToday(): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Accept a calendar deep-link date only when it is a real YYYY-MM-DD date
+ * that is not later than today. This is intentionally evaluated in the
+ * browser so "today" follows the user's timezone.
+ */
+export function getHistoricalDateOrToday(date?: string): string {
+  const today = getToday();
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) return today;
+
+  const [year, month, day] = parseDateParts(date);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return formatUtcDate(parsed) === date ? date : today;
+}
+
+/** ISO timestamp bounds for a calendar day in the browser's local timezone. */
+export function getLocalDayIsoRange(date: string): { from: string; to: string } {
+  return {
+    from: new Date(`${date}T00:00:00.000`).toISOString(),
+    to: new Date(`${date}T23:59:59.999`).toISOString(),
+  };
+}
+
 /** Calendar date of a timestamp in the runtime's timezone — same day convention as getToday(). */
 export function toLocalDate(d: Date): string {
   const y = d.getFullYear();

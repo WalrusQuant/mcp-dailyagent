@@ -6,11 +6,14 @@ import { Skeleton } from "@/components/shared/Skeleton";
 import { Task, FocusSession } from "@/types/database";
 import { TimerDisplay } from "./TimerDisplay";
 import { FocusStats } from "./FocusStats";
-import { getToday } from "@/lib/dates";
+import { FocusSessionHistory } from "./FocusSessionHistory";
+import { DateNavigation } from "@/components/shared/DateNavigation";
+import { formatDate, getHistoricalDateOrToday, getLocalDayIsoRange, getToday } from "@/lib/dates";
 import { useFocusTimerContext } from "@/lib/focus-timer-context";
 import { useToast } from "@/lib/toast-context";
+import { LoadError } from "@/components/shared/LoadError";
 
-export function FocusTimer() {
+export function FocusTimer({ initialDate }: { initialDate?: string }) {
   const timer = useFocusTimerContext();
   const { addToast } = useToast();
   const [workMinutes, setWorkMinutes] = useState(25);
@@ -18,33 +21,42 @@ export function FocusTimer() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [todaySessions, setTodaySessions] = useState<FocusSession[]>([]);
+  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [statsRevision, setStatsRevision] = useState(0);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const today = getToday();
+      const dayRange = getLocalDayIsoRange(date);
       const [tasksRes, sessionsRes] = await Promise.all([
-        fetch(`/api/tasks?date=${today}`),
-        fetch(`/api/focus?from=${today}&to=${today}`),
+        fetch(`/api/tasks?date=${today}`, { signal }),
+        fetch(`/api/focus?from=${encodeURIComponent(dayRange.from)}&to=${encodeURIComponent(dayRange.to)}`, { signal }),
       ]);
 
-      if (tasksRes.ok) {
-        const data: Task[] = await tasksRes.json();
-        setTasks(data.filter((t) => !t.done));
-      }
-      if (sessionsRes.ok) {
-        setTodaySessions(await sessionsRes.json());
-      }
+      if (!tasksRes.ok || !sessionsRes.ok) throw new Error("Failed to load focus data");
+      const data: Task[] = await tasksRes.json();
+      const sessions: FocusSession[] = await sessionsRes.json();
+      if (signal?.aborted) return;
+      setTasks(data.filter((t) => !t.done));
+      setTodaySessions(sessions);
+      setStatsRevision((revision) => revision + 1);
     } catch (error) {
+      if (signal?.aborted) return;
       console.error("Failed to load data:", error);
+      setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
-  }, []);
+  }, [date]);
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
   }, [loadData]);
 
   // Reload sessions and toast only on natural work-session completion, not on
@@ -57,6 +69,12 @@ export function FocusTimer() {
       addToast("Focus session complete!");
     }
   }, [timer.workSessionCompletedCount, loadData, addToast]);
+
+  useEffect(() => {
+    if (!timer.mutationError) return;
+    addToast(timer.mutationError, "error", 5000);
+    timer.clearMutationError();
+  }, [timer.mutationError, timer, addToast]);
 
   const handleStart = async () => {
     const task = tasks.find((t) => t.id === selectedTaskId);
@@ -86,9 +104,12 @@ export function FocusTimer() {
   return (
     <div className="flex-1 overflow-y-auto">
     <div className="max-w-lg mx-auto p-4 md:p-6">
-      <h1 className="text-xl font-bold mb-6 text-center" style={{ color: "var(--text-primary)" }}>
-        Focus Timer
-      </h1>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
+          Focus Timer
+        </h1>
+        <DateNavigation date={date} onDateChange={setDate} maxDate={getToday()} />
+      </div>
 
       <TimerDisplay
         seconds={displaySeconds}
@@ -130,9 +151,10 @@ export function FocusTimer() {
             {!timer.isBreak && (
               <button
                 onClick={async () => {
-                  await timer.completeEarly();
-                  loadData();
-                  addToast("Session completed — break started");
+                  if (await timer.completeEarly()) {
+                    loadData();
+                    addToast("Session completed — break started");
+                  }
                 }}
                 className="px-3 py-2 rounded-full text-xs font-medium"
                 style={{ background: "var(--accent-primary-soft)", color: "var(--accent-primary)" }}
@@ -142,8 +164,7 @@ export function FocusTimer() {
             )}
             <button
               onClick={async () => {
-                await timer.reset();
-                loadData();
+                if (await timer.reset()) loadData();
               }}
               className="p-3 rounded-full transition-opacity hover:opacity-90"
               style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
@@ -216,37 +237,32 @@ export function FocusTimer() {
         </div>
       )}
 
-      {/* Today's sessions */}
+      {loadError && (
+        <LoadError message="Couldn’t load focus data." onRetry={() => loadData()} />
+      )}
+
+      {/* Selected day's sessions */}
       {todaySessions.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
-            Today&apos;s sessions
+            {date === getToday() ? "Today’s sessions" : `Sessions for ${formatDate(date)}`}
           </h2>
-          <ul className="space-y-1.5">
-            {todaySessions.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center justify-between text-sm px-3 py-2 rounded-lg"
-                style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
-              >
-                <span style={{ color: "var(--text-primary)" }}>
-                  {s.duration_minutes}m
-                  <span className="ml-2 text-xs capitalize" style={{ color: "var(--text-muted)" }}>
-                    {s.status}
-                  </span>
-                </span>
-                {s.notes && (
-                  <span className="text-xs truncate max-w-[50%]" style={{ color: "var(--text-secondary)" }}>
-                    {s.notes}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <FocusSessionHistory
+            sessions={todaySessions}
+            lockedSessionId={timer.sessionId}
+            onUpdated={(updated) => {
+              setTodaySessions((current) => current.map((session) => session.id === updated.id ? updated : session));
+              setStatsRevision((revision) => revision + 1);
+            }}
+            onDeleted={(id) => {
+              setTodaySessions((current) => current.filter((session) => session.id !== id));
+              setStatsRevision((revision) => revision + 1);
+            }}
+          />
         </div>
       )}
 
-      <FocusStats refreshKey={todaySessions.length} />
+      <FocusStats refreshKey={statsRevision} />
     </div>
     </div>
   );

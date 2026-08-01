@@ -37,11 +37,28 @@ export function useFocusTimer() {
   const [timerState, setTimerState] = useState<TimerState | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   // Incremented each time a work session naturally completes (not on cancel/reset).
   // Consumers can watch this to show a "session complete" toast.
   const [workSessionCompletedCount, setWorkSessionCompletedCount] = useState(0);
   const audioRef = useRef<AudioContext | null>(null);
   const completionHandledRef = useRef(false);
+
+  const updateSession = useCallback(async (sessionId: string, body: Record<string, unknown>) => {
+    setMutationError(null);
+    try {
+      const response = await fetch(`/api/focus/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Focus session update failed");
+      return true;
+    } catch {
+      setMutationError("Couldn’t update the focus session. Your timer was left unchanged; try again.");
+      return false;
+    }
+  }, []);
 
   const playNotification = useCallback(() => {
     try {
@@ -85,21 +102,24 @@ export function useFocusTimer() {
 
   const handleExpired = useCallback(async (state: TimerState) => {
     if (!state.isBreak && state.sessionId) {
-      try {
-        await fetch(`/api/focus/${state.sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed" }),
-        });
-      } catch {
-        // ignore
+      if (!(await updateSession(state.sessionId, { status: "completed" }))) {
+        const pausedState = { ...state, pausedAt: 0 };
+        storeState(pausedState);
+        setTimerState(pausedState);
+        setSecondsLeft(0);
+        setIsRunning(false);
+        // Keep automatic completion latched after a failed request. The user
+        // can explicitly retry once connectivity returns; clearing this here
+        // would create a tight PATCH retry loop.
+        completionHandledRef.current = true;
+        return;
       }
     }
     storeState(null);
     setTimerState(null);
     setSecondsLeft(0);
     setIsRunning(false);
-  }, []);
+  }, [updateSession]);
 
   // Load from localStorage on mount. Runs once (empty deps) — handleExpired is
   // a stable useCallback with no component-state capture, so omitting it is safe.
@@ -156,20 +176,17 @@ export function useFocusTimer() {
 
   const completeWork = useCallback(async () => {
     if (!timerState) return;
-    playNotification();
-    notifyCompletion("Focus session complete", "Nice work — time for a break.");
-
     if (timerState.sessionId) {
-      try {
-        await fetch(`/api/focus/${timerState.sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed" }),
-        });
-      } catch {
-        // ignore
+      if (!(await updateSession(timerState.sessionId, { status: "completed" }))) {
+        // Leave the zero-time session available for an explicit user retry,
+        // but do not let the completion effect immediately call the API again.
+        completionHandledRef.current = true;
+        return false;
       }
     }
+
+    playNotification();
+    notifyCompletion("Focus session complete", "Nice work — time for a break.");
 
     setWorkSessionCompletedCount((n) => n + 1);
 
@@ -189,7 +206,8 @@ export function useFocusTimer() {
     setSecondsLeft(timerState.breakDuration);
     completionHandledRef.current = false;
     setIsRunning(true);
-  }, [timerState, playNotification, notifyCompletion]);
+    return true;
+  }, [timerState, playNotification, notifyCompletion, updateSession]);
 
   const completeBreak = useCallback(() => {
     playNotification();
@@ -266,23 +284,27 @@ export function useFocusTimer() {
     return true;
   };
 
-  const pause = () => {
-    if (!timerState) return;
-    setIsRunning(false);
-    const updated = { ...timerState, pausedAt: secondsLeft };
+  const pause = async () => {
+    if (!timerState) return false;
+    if (timerState.sessionId && !timerState.isBreak) {
+      if (!(await updateSession(timerState.sessionId, { status: "paused" }))) return false;
+    }
+    const elapsed = Math.floor((Date.now() - timerState.startTime) / 1000);
+    const pausedAt = timerState.isBreak
+      ? Math.max(0, timerState.duration - elapsed)
+      : Math.min(secondsLeft, Math.max(0, timerState.duration - elapsed));
+    const updated = { ...timerState, pausedAt };
     storeState(updated);
     setTimerState(updated);
-    if (timerState.sessionId && !timerState.isBreak) {
-      fetch(`/api/focus/${timerState.sessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "paused" }),
-      }).catch(() => {});
-    }
+    setIsRunning(false);
+    return true;
   };
 
-  const resume = () => {
-    if (!timerState || timerState.pausedAt === null) return;
+  const resume = async () => {
+    if (!timerState || timerState.pausedAt === null) return false;
+    if (timerState.sessionId && !timerState.isBreak) {
+      if (!(await updateSession(timerState.sessionId, { status: "active" }))) return false;
+    }
     const updated: TimerState = {
       ...timerState,
       startTime: Date.now(),
@@ -293,50 +315,29 @@ export function useFocusTimer() {
     setTimerState(updated);
     completionHandledRef.current = false;
     setIsRunning(true);
-    if (timerState.sessionId && !timerState.isBreak) {
-      fetch(`/api/focus/${timerState.sessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "active" }),
-      }).catch(() => {});
-    }
+    return true;
   };
 
   const reset = async () => {
     if (timerState?.sessionId) {
-      try {
-        await fetch(`/api/focus/${timerState.sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "cancelled" }),
-        });
-      } catch {
-        // ignore
-      }
+      if (!(await updateSession(timerState.sessionId, { status: "cancelled" }))) return false;
     }
     storeState(null);
     setTimerState(null);
     setSecondsLeft(0);
     setIsRunning(false);
     completionHandledRef.current = false;
+    return true;
   };
 
   /** Mark the current work session complete early (not cancel). */
   const completeEarly = async (notes?: string) => {
-    if (!timerState || timerState.isBreak) return;
+    if (!timerState || timerState.isBreak) return false;
     if (timerState.sessionId) {
-      try {
-        await fetch(`/api/focus/${timerState.sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: "completed",
-            ...(notes ? { notes } : {}),
-          }),
-        });
-      } catch {
-        // ignore
-      }
+      if (!(await updateSession(timerState.sessionId, {
+        status: "completed",
+        ...(notes ? { notes } : {}),
+      }))) return false;
     }
     setWorkSessionCompletedCount((n) => n + 1);
     const breakState: TimerState = {
@@ -354,6 +355,7 @@ export function useFocusTimer() {
     setSecondsLeft(timerState.breakDuration);
     completionHandledRef.current = false;
     setIsRunning(true);
+    return true;
   };
 
   const isActive = timerState !== null;
@@ -369,6 +371,8 @@ export function useFocusTimer() {
     isBreak,
     isPaused,
     workSessionCompletedCount,
+    mutationError,
+    clearMutationError: () => setMutationError(null),
     taskName: timerState?.taskName ?? null,
     sessionId: timerState?.sessionId ?? null,
     start,

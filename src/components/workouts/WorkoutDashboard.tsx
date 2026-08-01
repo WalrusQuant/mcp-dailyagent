@@ -10,14 +10,17 @@ import { WorkoutLogCard } from "./WorkoutLogCard";
 import { WorkoutLogger, loadWorkoutDraft } from "./WorkoutLogger";
 import { TemplateFormModal } from "./TemplateFormModal";
 import { WorkoutStats } from "./WorkoutStats";
-import { addDays, getToday } from "@/lib/dates";
+import { addDays, getHistoricalDateOrToday, getToday } from "@/lib/dates";
+import { LoadError } from "@/components/shared/LoadError";
 
 type TemplateWithExercises = WorkoutTemplate & { workout_exercises?: WorkoutExercise[] };
 type LogWithExercises = WorkoutLog & { workout_log_exercises?: WorkoutLogExercise[] };
 
 type LogFilter = "all" | "7d" | "30d" | "custom";
 
-export function WorkoutDashboard() {
+export function WorkoutDashboard({ initialDate }: { initialDate?: string }) {
+  const selectedDate = getHistoricalDateOrToday(initialDate);
+  const hasValidInitialDate = initialDate !== undefined && selectedDate === initialDate;
   const [templates, setTemplates] = useState<TemplateWithExercises[]>([]);
   const [logs, setLogs] = useState<LogWithExercises[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,9 +28,11 @@ export function WorkoutDashboard() {
   const [editingTemplate, setEditingTemplate] = useState<TemplateWithExercises | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<TemplateWithExercises | null | "quick">(null);
   const [editingLog, setEditingLog] = useState<LogWithExercises | null>(null);
-  const [logFilter, setLogFilter] = useState<LogFilter>("30d");
-  const [customFrom, setCustomFrom] = useState(addDays(getToday(), -30));
-  const [customTo, setCustomTo] = useState(getToday());
+  const [logFilter, setLogFilter] = useState<LogFilter>(() => hasValidInitialDate ? "custom" : "30d");
+  const [customFrom, setCustomFrom] = useState(() => hasValidInitialDate ? selectedDate : addDays(getToday(), -30));
+  const [customTo, setCustomTo] = useState(() => hasValidInitialDate ? selectedDate : getToday());
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { addToast } = useToast();
 
   const logsQuery = useCallback(() => {
@@ -41,26 +46,33 @@ export function WorkoutDashboard() {
     return `/api/workouts/logs?from=${customFrom}&to=${customTo}`;
   }, [logFilter, customFrom, customTo]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [templatesRes, logsRes] = await Promise.all([
-        fetch("/api/workouts/templates"),
-        fetch(logsQuery()),
+        fetch("/api/workouts/templates", { signal }),
+        fetch(logsQuery(), { signal }),
       ]);
-
-      if (templatesRes.ok) setTemplates(await templatesRes.json());
-      if (logsRes.ok) setLogs(await logsRes.json());
+      if (!templatesRes.ok || !logsRes.ok) throw new Error("Failed to load workouts");
+      const [nextTemplates, nextLogs] = await Promise.all([templatesRes.json(), logsRes.json()]);
+      if (signal?.aborted) return;
+      setTemplates(nextTemplates);
+      setLogs(nextLogs);
     } catch (error) {
+      if (signal?.aborted) return;
       console.error("Failed to load workouts:", error);
+      setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, [logsQuery]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
+  }, [loadData, reloadKey]);
 
   // Re-open an in-progress workout that survived a refresh / PWA kill.
   const restoredDraftRef = useRef(false);
@@ -86,9 +98,12 @@ export function WorkoutDashboard() {
       if (response.ok) {
         setLogs((prev) => prev.filter((l) => l.id !== log.id));
         addToast("Workout deleted");
+      } else {
+        addToast("Failed to delete workout", "error");
       }
     } catch (error) {
       console.error("Failed to delete log:", error);
+      addToast("Failed to delete workout", "error");
     }
   };
 
@@ -170,6 +185,10 @@ export function WorkoutDashboard() {
         </div>
       </div>
     );
+  }
+
+  if (loadError) {
+    return <div className="flex-1 overflow-y-auto"><div className="max-w-2xl mx-auto p-4 md:p-6"><LoadError message="Couldn’t load workouts." onRetry={() => setReloadKey((key) => key + 1)} /></div></div>;
   }
 
   return (

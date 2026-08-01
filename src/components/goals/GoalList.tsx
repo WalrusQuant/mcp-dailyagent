@@ -7,6 +7,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { GoalItem } from "./GoalItem";
 import { GoalFormModal } from "./GoalFormModal";
 import { GoalDetail } from "./GoalDetail";
+import { LoadError } from "@/components/shared/LoadError";
+import { useToast } from "@/lib/toast-context";
 
 type StatusTab = "active" | "completed" | "abandoned";
 
@@ -19,25 +21,31 @@ export function GoalList() {
   const [showForm, setShowForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { addToast } = useToast();
 
   useEffect(() => {
     // Abort on tab change/unmount so a slow response can't render a stale tab.
     const controller = new AbortController();
     const loadGoals = async () => {
       setIsLoading(true);
+      setLoadError(false);
       try {
         const res = await fetch(`/api/goals?status=${statusTab}`, { signal: controller.signal });
-        if (res.ok) setGoals(await res.json());
+        if (!res.ok) throw new Error("Failed to load goals");
+        setGoals(await res.json());
       } catch (err) {
         if (controller.signal.aborted) return;
         console.error("Failed to load goals:", err);
+        setLoadError(true);
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
       }
     };
     loadGoals();
     return () => controller.abort();
-  }, [statusTab]);
+  }, [statusTab, reloadKey]);
 
   const handleSave = (goal: Goal) => {
     setGoals((prev) => {
@@ -56,9 +64,12 @@ export function GoalList() {
     if (!confirm(`Delete "${goal.title}"? This also removes its progress history and cannot be undone. To keep the record, set it to Abandoned instead.`)) return;
     try {
       const res = await fetch(`/api/goals/${goal.id}`, { method: "DELETE" });
-      if (res.ok) setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+      if (!res.ok) throw new Error("Failed to delete goal");
+      setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+      addToast("Goal deleted");
     } catch (err) {
       console.error("Failed to delete goal:", err);
+      addToast("Failed to delete goal", "error");
     }
   };
 
@@ -120,6 +131,8 @@ export function GoalList() {
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: "var(--border-default)", borderTopColor: "var(--accent-primary)" }} />
           </div>
+        ) : loadError ? (
+          <LoadError message="Couldn’t load goals." onRetry={() => setReloadKey((key) => key + 1)} />
         ) : goals.length === 0 ? (
           <EmptyState
             icon={Crosshair}

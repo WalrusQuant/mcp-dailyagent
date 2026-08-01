@@ -13,7 +13,31 @@ import {
   addMonths,
   formatMonth,
   getCalendarGridDates,
+  getHistoricalDateOrToday,
 } from "@/lib/dates";
+
+describe("getHistoricalDateOrToday", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 1, 12));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("accepts valid dates through today", () => {
+    expect(getHistoricalDateOrToday("2026-07-15")).toBe("2026-07-15");
+    expect(getHistoricalDateOrToday("2026-08-01")).toBe("2026-08-01");
+  });
+
+  it.each([undefined, "", "2026-02-30", "2026-8-1", "not-a-date", "2026-08-02"])(
+    "falls back to today for %s",
+    (value) => {
+      expect(getHistoricalDateOrToday(value)).toBe("2026-08-01");
+    },
+  );
+});
 
 describe("addDays", () => {
   it("adds positive days", () => {

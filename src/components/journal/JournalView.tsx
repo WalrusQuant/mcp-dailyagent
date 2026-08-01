@@ -8,39 +8,40 @@ import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { JournalEditor } from "./JournalEditor";
 import { JournalEntryCard } from "./JournalEntryCard";
-import { getToday } from "@/lib/dates";
+import { getHistoricalDateOrToday, getToday } from "@/lib/dates";
 import { useToast } from "@/lib/toast-context";
+import { LoadError } from "@/components/shared/LoadError";
 
-export function JournalView() {
-  const [date, setDate] = useState(getToday());
+export function JournalView({ initialDate }: { initialDate?: string }) {
+  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
   const [todayEntry, setTodayEntry] = useState<JournalEntry | null>(null);
   const [recentEntries, setRecentEntries] = useState<JournalEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<JournalEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { addToast } = useToast();
 
   const loadData = useCallback(async (d: string, signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [entryRes, recentRes] = await Promise.all([
         fetch(`/api/journal?date=${d}`, { signal }),
         fetch("/api/journal", { signal }),
       ]);
 
-      if (entryRes.ok) {
-        const entries: JournalEntry[] = await entryRes.json();
-        setTodayEntry(entries.length > 0 ? entries[0] : null);
-      }
-
-      if (recentRes.ok) {
-        const entries: JournalEntry[] = await recentRes.json();
-        setRecentEntries(entries.filter((e) => e.entry_date !== d));
-      }
+      if (!entryRes.ok || !recentRes.ok) throw new Error("Failed to load journal");
+      const entries: JournalEntry[] = await entryRes.json();
+      setTodayEntry(entries.length > 0 ? entries[0] : null);
+      const recent: JournalEntry[] = await recentRes.json();
+      setRecentEntries(recent.filter((e) => e.entry_date !== d));
     } catch (error) {
       if (signal?.aborted) return;
       console.error("Failed to load journal:", error);
+      setLoadError(true);
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -51,7 +52,7 @@ export function JournalView() {
     const controller = new AbortController();
     loadData(date, controller.signal);
     return () => controller.abort();
-  }, [date, loadData]);
+  }, [date, loadData, reloadKey]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -100,6 +101,10 @@ export function JournalView() {
         <CardSkeleton />
       </div>
     );
+  }
+
+  if (loadError) {
+    return <div className="max-w-2xl mx-auto p-4 md:p-6"><LoadError message="Couldn’t load journal entries." onRetry={() => setReloadKey((key) => key + 1)} /></div>;
   }
 
   return (

@@ -16,6 +16,7 @@ import { SpaceFormModal } from "./SpaceFormModal";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { useToast } from "@/lib/toast-context";
 import { CompletionButton } from "@/components/shared/CompletionButton";
+import { LoadError } from "@/components/shared/LoadError";
 
 const PRIORITY_COLORS: Record<string, string> = {
   A1: "var(--accent-negative)",
@@ -51,6 +52,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [spacesList, setSpacesList] = useState<Space[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const router = useRouter();
   const { addToast } = useToast();
 
@@ -60,6 +62,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [spaceRes, tasksRes, spacesRes] = await Promise.all([
         fetch(`/api/spaces/${spaceId}`),
@@ -67,20 +70,19 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
         fetch("/api/spaces"),
       ]);
 
-      if (spaceRes.ok) {
-        const s = await spaceRes.json();
-        setSpace(s);
-        setProgress(s.progress ?? 0);
-      }
-      if (tasksRes.ok) setTasks(await tasksRes.json());
-      if (spacesRes.ok) setSpacesList(await spacesRes.json());
+      if (!spaceRes.ok || !tasksRes.ok || !spacesRes.ok) throw new Error("Failed to load space");
+      const s = await spaceRes.json();
+      setSpace(s);
+      setProgress(s.progress ?? 0);
+      setTasks(await tasksRes.json());
+      setSpacesList(await spacesRes.json());
     } catch (error) {
       console.error("Failed to load space:", error);
-      addToast("Failed to load space");
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
-  }, [spaceId, addToast]);
+  }, [spaceId]);
 
   useEffect(() => {
     loadAll();
@@ -279,6 +281,14 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bg-base)" }}>
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex-1 p-4 md:p-8" style={{ background: "var(--bg-base)" }}>
+        <LoadError message="Couldn’t load this space." onRetry={loadAll} />
       </div>
     );
   }

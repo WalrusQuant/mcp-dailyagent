@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, Pencil, Save, X } from "lucide-react";
 import { Tag } from "@/types/database";
 import { useToast } from "@/lib/toast-context";
 
@@ -22,6 +22,10 @@ export function TagsTab() {
   const [name, setName] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState(PRESET_COLORS[0]);
+  const [busyTagId, setBusyTagId] = useState<string | null>(null);
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
@@ -68,6 +72,7 @@ export function TagsTab() {
 
   const handleDelete = async (tag: Tag) => {
     if (!confirm(`Delete tag "${tag.name}"? It will be removed from all tasks.`)) return;
+    setBusyTagId(tag.id);
     try {
       const res = await fetch(`/api/tags/${tag.id}`, { method: "DELETE" });
       if (res.ok) {
@@ -78,6 +83,38 @@ export function TagsTab() {
       }
     } catch {
       addToast("Failed to delete tag");
+    } finally {
+      setBusyTagId(null);
+    }
+  };
+
+  const startEditing = (tag: Tag) => {
+    setEditingId(tag.id);
+    setEditName(tag.name);
+    setEditColor(tag.color);
+  };
+
+  const handleUpdate = async (tag: Tag) => {
+    if (!editName.trim()) return;
+    setBusyTagId(tag.id);
+    try {
+      const res = await fetch(`/api/tags/${tag.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), color: editColor }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update tag");
+      }
+      const updated = await res.json();
+      setTags((prev) => prev.map((item) => item.id === tag.id ? updated : item).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditingId(null);
+      addToast("Tag updated");
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : "Failed to update tag", "error");
+    } finally {
+      setBusyTagId(null);
     }
   };
 
@@ -151,18 +188,31 @@ export function TagsTab() {
               className="flex items-center justify-between px-3 py-2 rounded-lg"
               style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
             >
-              <span className="flex items-center gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
-                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: tag.color }} />
-                {tag.name}
-              </span>
+              {editingId === tag.id ? (
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <input aria-label={`Name for ${tag.name}`} value={editName} onChange={(event) => setEditName(event.target.value)} className="rounded px-2 py-1 text-sm" style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }} />
+                  <div className="flex gap-1">{PRESET_COLORS.map((preset) => <button key={preset} type="button" aria-label={`Set ${tag.name} color to ${preset}`} onClick={() => setEditColor(preset)} className="h-5 w-5 rounded-full border-2" style={{ background: preset, borderColor: editColor === preset ? "var(--text-primary)" : "transparent" }} />)}</div>
+                </div>
+              ) : (
+                <span className="flex items-center gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ background: tag.color }} />{tag.name}
+                </span>
+              )}
+              <div className="flex shrink-0">
+              {editingId === tag.id ? <>
+                <button type="button" onClick={() => handleUpdate(tag)} disabled={!editName.trim() || busyTagId === tag.id} className="p-1.5 rounded disabled:opacity-50" style={{ color: "var(--accent-primary)" }} aria-label={`Save ${tag.name}`}><Save className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={() => setEditingId(null)} disabled={busyTagId === tag.id} className="p-1.5 rounded disabled:opacity-50" style={{ color: "var(--text-muted)" }} aria-label={`Cancel editing ${tag.name}`}><X className="w-3.5 h-3.5" /></button>
+              </> : <button type="button" onClick={() => startEditing(tag)} disabled={busyTagId !== null} className="p-1.5 rounded disabled:opacity-50" style={{ color: "var(--text-muted)" }} aria-label={`Edit ${tag.name}`}><Pencil className="w-3.5 h-3.5" /></button>}
               <button
                 onClick={() => handleDelete(tag)}
-                className="p-1.5 rounded"
+                disabled={busyTagId !== null}
+                className="p-1.5 rounded disabled:opacity-50"
                 style={{ color: "var(--text-muted)" }}
                 aria-label={`Delete ${tag.name}`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+              </div>
             </li>
           ))}
         </ul>

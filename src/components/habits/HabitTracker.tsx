@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { HabitRow } from "./HabitRow";
 import { HabitFormModal } from "./HabitFormModal";
 import { HabitStats } from "./HabitStats";
-import { getToday, startOfWeek, getDateRange, endOfWeek, addDays } from "@/lib/dates";
+import { getHistoricalDateOrToday, getToday, startOfWeek, getDateRange, endOfWeek, addDays } from "@/lib/dates";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
 import { useToast } from "@/lib/toast-context";
 
@@ -21,10 +21,11 @@ interface HabitWithStats {
   recentData: number[];
 }
 
-export function HabitTracker() {
-  const [date, setDate] = useState(getToday());
+export function HabitTracker({ initialDate }: { initialDate?: string }) {
+  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
   const [habitsWithStats, setHabitsWithStats] = useState<HabitWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [prefillName, setPrefillName] = useState("");
@@ -36,24 +37,27 @@ export function HabitTracker() {
   const weekEnd = endOfWeek(date);
   const weekDates = getDateRange(weekStart, weekEnd);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const habitsUrl = showArchived ? "/api/habits?archived=true" : "/api/habits";
+      const statsUrl = `/api/habits/stats?days=30&from=${weekStart}${showArchived ? "&archived=true" : ""}`;
       const [habitsRes, statsRes] = await Promise.all([
-        fetch(habitsUrl),
-        fetch("/api/habits/stats?days=30"),
+        fetch(habitsUrl, { signal }),
+        fetch(statsUrl, { signal }),
       ]);
 
-      if (!habitsRes.ok) return;
+      if (!habitsRes.ok || !statsRes.ok) {
+        throw new Error(`Failed to load habits (${habitsRes.status}/${statsRes.status})`);
+      }
       const habits: Habit[] = await habitsRes.json();
 
       const statsMap: Record<string, { streak: number; completionRate: number; recentLogs: string[] }> = {};
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        for (const s of statsData.habits) {
-          statsMap[s.id] = { streak: s.streak, completionRate: s.completionRate, recentLogs: s.recentLogs };
-        }
+      const statsData = await statsRes.json();
+      if (signal?.aborted) return;
+      for (const s of statsData.habits) {
+        statsMap[s.id] = { streak: s.streak, completionRate: s.completionRate, recentLogs: s.recentLogs };
       }
 
       const result: HabitWithStats[] = habits.map((habit) => {
@@ -86,14 +90,18 @@ export function HabitTracker() {
 
       setHabitsWithStats(sorted);
     } catch (error) {
+      if (signal?.aborted) return;
       console.error("Failed to load habits:", error);
+      setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
-  }, [showArchived]);
+  }, [showArchived, weekStart]);
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
   }, [loadData]);
 
   const handleToggle = async (habitId: string, toggleDate: string) => {
@@ -322,6 +330,13 @@ export function HabitTracker() {
             </div>
           ))}
         </div>
+      ) : loadError ? (
+        <EmptyState
+          icon={Target}
+          message="Habits could not be loaded"
+          actionLabel="Retry"
+          onAction={() => loadData()}
+        />
       ) : habitsWithStats.length === 0 ? (
         <EmptyState
           icon={Target}

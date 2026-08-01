@@ -8,6 +8,7 @@ import { formatDate, getToday } from "@/lib/dates";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { useToast } from "@/lib/toast-context";
 import { CompletionButton } from "@/components/shared/CompletionButton";
+import { LoadError } from "@/components/shared/LoadError";
 
 interface GoalWithLinked extends Goal {
   tasks: Task[];
@@ -36,18 +37,23 @@ export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) 
   const [isLoading, setIsLoading] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(false);
     try {
       const [goalRes, progressRes] = await Promise.all([
         fetch(`/api/goals/${goalId}`),
         fetch(`/api/goals/${goalId}/progress`),
       ]);
-      if (goalRes.ok) setGoal(await goalRes.json());
-      if (progressRes.ok) setProgressLogs(await progressRes.json());
+      if (!goalRes.ok || !progressRes.ok) throw new Error("Failed to load goal detail");
+      setGoal(await goalRes.json());
+      setProgressLogs(await progressRes.json());
     } catch (err) {
       console.error("Failed to load goal detail:", err);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -99,6 +105,10 @@ export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) 
         <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: "var(--border-default)", borderTopColor: "var(--accent-primary)" }} />
       </div>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message="Couldn’t load this goal." onRetry={load} />;
   }
 
   if (!goal) {

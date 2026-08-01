@@ -49,10 +49,10 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderDashboard() {
+function renderDashboard(initialDate?: string) {
   return render(
     <ToastProvider>
-      <WorkoutDashboard />
+      <WorkoutDashboard initialDate={initialDate} />
     </ToastProvider>
   );
 }
@@ -78,6 +78,20 @@ describe("WorkoutDashboard templates", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("loads only the calendar-linked day", async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDashboard("2026-07-15");
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/workouts/logs?from=2026-07-15&to=2026-07-15",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
   });
 
   // The card used to be one big "start workout" button, so opening a template

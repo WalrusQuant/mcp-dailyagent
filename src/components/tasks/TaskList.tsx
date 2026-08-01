@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { TaskItem } from "./TaskItem";
 import { TaskFormModal } from "./TaskFormModal";
 import { TaskRolloverBanner } from "./TaskRolloverBanner";
-import { getToday } from "@/lib/dates";
+import { getHistoricalDateOrToday, getToday } from "@/lib/dates";
 import { useToast } from "@/lib/toast-context";
 
 function useDragReorder(
@@ -128,13 +128,18 @@ function groupByPriority(tasks: Task[]): PriorityGroup[] {
   return groups.filter((g) => g.tasks.length > 0);
 }
 
-export function TaskList() {
-  const [date, setDate] = useState(getToday());
+export function taskMatchesView(task: Task, date: string, spaceFilter: string) {
+  return task.task_date === date && (!spaceFilter || task.space_id === spaceFilter);
+}
+
+export function TaskList({ initialDate }: { initialDate?: string }) {
+  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
   const [tasks, setTasks] = useState<Task[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [spaceFilter, setSpaceFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [prefillTitle, setPrefillTitle] = useState("");
@@ -145,14 +150,17 @@ export function TaskList() {
 
   const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams({ date });
       if (spaceFilter) params.set("space_id", spaceFilter);
       const response = await fetch(`/api/tasks?${params}`, signal ? { signal } : undefined);
-      if (response.ok) setTasks(await response.json());
+      if (!response.ok) throw new Error(`Failed to load tasks (${response.status})`);
+      setTasks(await response.json());
     } catch (error) {
       if (signal?.aborted) return;
       console.error("Failed to load tasks:", error);
+      setLoadError(true);
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -202,7 +210,7 @@ export function TaskList() {
       const response = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ done: newDone }),
+        body: JSON.stringify({ done: newDone, expected_updated_at: task.updated_at }),
       });
       if (response.ok) {
         const updated = await response.json();
@@ -241,11 +249,11 @@ export function TaskList() {
   };
 
   const handleSave = (task: Task) => {
-    if (editingTask) {
-      setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
-    } else {
-      setTasks((prev) => [...prev, task]);
-    }
+    const belongsInView = taskMatchesView(task, date, spaceFilter);
+    setTasks((prev) => {
+      const withoutSavedTask = prev.filter((item) => item.id !== task.id);
+      return belongsInView ? [...withoutSavedTask, task] : withoutSavedTask;
+    });
     addToast(editingTask ? "Task updated" : "Task added");
     setShowForm(false);
     setEditingTask(null);
@@ -329,6 +337,13 @@ export function TaskList() {
 
       {isLoading ? (
         <TaskListSkeleton />
+      ) : loadError ? (
+        <EmptyState
+          icon={CheckSquare}
+          message="Tasks could not be loaded"
+          actionLabel="Retry"
+          onAction={() => loadTasks()}
+        />
       ) : tasks.length === 0 ? (
         <EmptyState
           icon={CheckSquare}
