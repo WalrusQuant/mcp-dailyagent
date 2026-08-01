@@ -5,8 +5,10 @@ import { tasks, taskTags } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
-import { getTagsByTaskIds, setTaskTags } from "@/lib/mcp/queries/tags";
+import { getTagsByTaskIds } from "@/lib/mcp/queries/tags";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema, recurrenceSchema, uuidSchema } from "@/lib/validation";
+import { createTaskAggregate, TaskMutationError } from "@/lib/tasks/mutations";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -15,6 +17,14 @@ export async function GET(request: NextRequest) {
   const dateParam = searchParams.get("date");
   const spaceId = searchParams.get("space_id");
   const tagId = searchParams.get("tag_id");
+
+  if (
+    (dateParam !== null && !calendarDateSchema.safeParse(dateParam).success) ||
+    (spaceId !== null && !uuidSchema.safeParse(spaceId).success) ||
+    (tagId !== null && !uuidSchema.safeParse(tagId).success)
+  ) {
+    return NextResponse.json({ error: "Invalid task filters" }, { status: 400 });
+  }
 
   const today = getToday();
   const taskDate = dateParam || today;
@@ -68,8 +78,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-const VALID_RECURRENCE_TYPES = new Set(["daily", "weekdays", "weekly", "monthly"]);
-
 export async function POST(request: NextRequest) {
   const userId = getUserId();
 
@@ -88,55 +96,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid priority: must match A1-C9" }, { status: 400 });
   }
 
-  if (task_date !== undefined && (typeof task_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(task_date as string))) {
+  if (task_date !== undefined && !calendarDateSchema.safeParse(task_date).success) {
     return NextResponse.json({ error: "task_date must be in YYYY-MM-DD format" }, { status: 400 });
   }
 
   if (recurrence !== undefined && recurrence !== null) {
-    const rec = recurrence as Record<string, unknown>;
-    if (typeof rec !== "object" || Array.isArray(rec) || !VALID_RECURRENCE_TYPES.has(rec.type as string)) {
+    if (!recurrenceSchema.safeParse(recurrence).success) {
       return NextResponse.json(
-        { error: "recurrence.type must be one of: daily, weekdays, weekly, monthly" },
+        { error: "Invalid recurrence rule" },
         { status: 400 }
       );
     }
   }
 
+  for (const [field, value] of [["space_id", space_id], ["goal_id", goal_id]] as const) {
+    if (value !== undefined && value !== null && !uuidSchema.safeParse(value).success) {
+      return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
+    }
+  }
+  if (tag_ids !== undefined && (!Array.isArray(tag_ids) || tag_ids.some((id) => !uuidSchema.safeParse(id).success))) {
+    return NextResponse.json({ error: "tag_ids must be an array of UUIDs" }, { status: 400 });
+  }
+
   const today = getToday();
 
   try {
-    const [row] = await db
-      .insert(tasks)
-      .values({
-        userId,
-        title: title as string,
-        notes: (notes as string) || null,
-        priority: typeof priority === "string" ? priority : "B1",
-        taskDate: (task_date as string) || today,
-        spaceId: (space_id as string) || null,
-        goalId: (goal_id as string) || null,
-        recurrence: recurrence !== undefined ? (recurrence as object | null) : null,
-        sortOrder: typeof sort_order === "number" ? sort_order : 0,
-      })
-      .returning();
-
-    if (Array.isArray(tag_ids)) {
-      try {
-        await setTaskTags(userId, row.id, tag_ids as string[]);
-      } catch (e) {
-        return NextResponse.json(
-          { error: e instanceof Error ? e.message : "Invalid tag_ids" },
-          { status: 400 }
-        );
-      }
-    }
-
-    const tags = await getTagsByTaskIds([row.id]);
+    const result = await createTaskAggregate(userId, {
+      title: title as string,
+      notes: (notes as string) || null,
+      priority: typeof priority === "string" ? priority : "B1",
+      taskDate: (task_date as string) || today,
+      spaceId: (space_id as string) || null,
+      goalId: (goal_id as string) || null,
+      recurrence: recurrence !== undefined ? (recurrence as object | null) : null,
+      sortOrder: typeof sort_order === "number" ? sort_order : 0,
+      tagIds: Array.isArray(tag_ids) ? (tag_ids as string[]) : undefined,
+    });
     return NextResponse.json(
-      { ...serializeTask(row), tags: tags.get(row.id) ?? [] },
+      { ...serializeTask(result.task), tags: result.tags },
       { status: 201 }
     );
   } catch (err) {
+    if (err instanceof TaskMutationError && err.code === "relationship_not_found") {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

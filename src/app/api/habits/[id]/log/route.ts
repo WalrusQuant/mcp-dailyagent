@@ -4,6 +4,7 @@ import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function POST(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function POST(
   }
   const { date } = body;
 
-  if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date as string)) {
+  if (!calendarDateSchema.safeParse(date).success) {
     return NextResponse.json(
       { error: "date is required and must be in YYYY-MM-DD format" },
       { status: 400 }

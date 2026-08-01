@@ -3,11 +3,12 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeTask, maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
-import { getTagsForTask, setTaskTags } from "@/lib/mcp/queries/tags";
+import { getTagsForTask } from "@/lib/mcp/queries/tags";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema, recurrenceSchema, uuidSchema } from "@/lib/validation";
+import { TaskMutationError, updateTaskAggregate } from "@/lib/tasks/mutations";
 
 export async function GET(
   _request: NextRequest,
@@ -50,19 +51,30 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid priority: must match A1-C9" }, { status: 400 });
   }
 
-  if (body.task_date !== undefined && (typeof body.task_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.task_date as string))) {
+  if (body.task_date !== undefined && !calendarDateSchema.safeParse(body.task_date).success) {
     return NextResponse.json({ error: "task_date must be in YYYY-MM-DD format" }, { status: 400 });
   }
 
   if (body.recurrence !== undefined && body.recurrence !== null) {
-    const rec = body.recurrence as Record<string, unknown>;
-    const validTypes = new Set(["daily", "weekdays", "weekly", "monthly"]);
-    if (typeof rec !== "object" || Array.isArray(rec) || !validTypes.has(rec.type as string)) {
+    if (!recurrenceSchema.safeParse(body.recurrence).success) {
       return NextResponse.json(
-        { error: "recurrence.type must be one of: daily, weekdays, weekly, monthly" },
+        { error: "Invalid recurrence rule" },
         { status: 400 }
       );
     }
+  }
+
+  for (const field of ["space_id", "goal_id"] as const) {
+    const value = body[field];
+    if (value !== undefined && value !== null && !uuidSchema.safeParse(value).success) {
+      return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
+    }
+  }
+  if (
+    body.tag_ids !== undefined &&
+    (!Array.isArray(body.tag_ids) || body.tag_ids.some((id) => !uuidSchema.safeParse(id).success))
+  ) {
+    return NextResponse.json({ error: "tag_ids must be an array of UUIDs" }, { status: 400 });
   }
 
   const allowedFields: Partial<typeof tasks.$inferInsert> = {};
@@ -101,63 +113,27 @@ export async function PATCH(
       wasAlreadyDone = prior?.done ?? false;
     }
 
-    let row: typeof tasks.$inferSelect | null = null;
+    const result = await updateTaskAggregate(userId, id, {
+      patch: allowedFields,
+      tagIds: hasTagUpdate ? (body.tag_ids as string[]) : undefined,
+      expectedUpdatedAt: typeof body.expected_updated_at === "string" ? body.expected_updated_at : undefined,
+    });
 
-    if (Object.keys(allowedFields).length > 0) {
-      if (typeof body.expected_updated_at === "string") {
-        const result = await updateWithVersion<typeof tasks.$inferSelect>({
-          table: tasks,
-          id,
-          userId,
-          expectedUpdatedAt: body.expected_updated_at,
-          patch: allowedFields,
-        });
-        if (!result.ok) {
-          if (result.reason === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
-          if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
-          return conflictResponse(serializeTask(result.current));
-        }
-        row = result.row;
-      } else {
-        allowedFields.updatedAt = new Date();
-        [row] = await db
-          .update(tasks)
-          .set(allowedFields)
-          .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
-          .returning();
-      }
-
-      if (!row) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
-      }
-
-      if (body.done === true) {
-        await maybeSpawnNextOccurrence(userId, row, wasAlreadyDone);
-      }
-    } else {
-      // tag-only update — ensure task exists
-      const [existing] = await db
-        .select()
-        .from(tasks)
-        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-      if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-      row = existing;
+    if (body.done === true) {
+      await maybeSpawnNextOccurrence(userId, result.task, wasAlreadyDone);
     }
-
-    if (hasTagUpdate) {
-      try {
-        await setTaskTags(userId, id, body.tag_ids as string[]);
-      } catch (e) {
-        return NextResponse.json(
-          { error: e instanceof Error ? e.message : "Invalid tag_ids" },
-          { status: 400 }
-        );
-      }
-    }
-
-    const taskTagsList = await getTagsForTask(id);
-    return NextResponse.json({ ...serializeTask(row!), tags: taskTagsList });
+    return NextResponse.json({ ...serializeTask(result.task), tags: result.tags });
   } catch (err) {
+    if (err instanceof TaskMutationError) {
+      if (err.code === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (err.code === "invalid_expected_updated_at") {
+        return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
+      }
+      if (err.code === "conflict" && err.current) return conflictResponse(serializeTask(err.current));
+      if (err.code === "relationship_not_found") {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+    }
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

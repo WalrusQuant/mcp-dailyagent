@@ -7,6 +7,7 @@ import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
+import { isOrderedDateRange } from "@/lib/validation";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -154,6 +155,8 @@ export function registerJournalTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "journal:read");
       if (scopeError) return errorResult(scopeError);
+
+      if (!isOrderedDateRange(args.from, args.to)) return errorResult("to must be on or after from");
 
       if (args.date) {
         const result = await getJournalEntry(auth.userId, args.date);

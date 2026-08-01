@@ -5,16 +5,18 @@ import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { getCalendarGridDates, toLocalDate } from "@/lib/dates";
 import type { DaySummary } from "@/components/calendar/types";
 import { getUserId } from "@/lib/auth";
+import { yearMonthSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const month = request.nextUrl.searchParams.get("month");
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+  const parsedMonth = yearMonthSchema.safeParse(month);
+  if (!parsedMonth.success) {
     return NextResponse.json({ error: "Invalid month parameter (YYYY-MM)" }, { status: 400 });
   }
 
-  const gridDates = getCalendarGridDates(month);
+  const gridDates = getCalendarGridDates(parsedMonth.data);
   const startDate = gridDates[0];
   const endDate = gridDates[gridDates.length - 1];
 

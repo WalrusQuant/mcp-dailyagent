@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/auth";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
 import { getToday } from "@/lib/dates";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -35,11 +36,17 @@ export async function GET(request: NextRequest) {
         db
           .select({ goalId: tasks.goalId, done: tasks.done })
           .from(tasks)
-          .where(inArray(tasks.goalId, goalIds)),
+          .where(and(eq(tasks.userId, userId), inArray(tasks.goalId, goalIds))),
         db
           .select({ id: habits.id, goalId: habits.goalId })
           .from(habits)
-          .where(and(inArray(habits.goalId, goalIds), eq(habits.archived, false))),
+          .where(
+            and(
+              eq(habits.userId, userId),
+              inArray(habits.goalId, goalIds),
+              eq(habits.archived, false)
+            )
+          ),
         db
           .select({ habitId: habitLogs.habitId })
           .from(habitLogs)
@@ -205,7 +212,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (target_date !== undefined && (typeof target_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(target_date as string))) {
+  if (target_date !== undefined && !calendarDateSchema.safeParse(target_date).success) {
     return NextResponse.json({ error: "target_date must be in YYYY-MM-DD format" }, { status: 400 });
   }
 

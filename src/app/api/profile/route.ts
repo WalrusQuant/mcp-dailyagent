@@ -4,6 +4,7 @@ import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { readJsonBody } from "@/lib/api-body";
+import { ianaTimezoneSchema } from "@/lib/validation";
 
 export async function GET() {
   try {
@@ -58,8 +59,12 @@ export async function PATCH(request: NextRequest) {
       allowed.avatarUrl = (avatarUrl as string) || null;
     }
 
-    if (typeof body.timezone === "string") {
-      allowed.timezone = body.timezone;
+    if (body.timezone !== undefined) {
+      const timezone = ianaTimezoneSchema.safeParse(body.timezone);
+      if (!timezone.success) {
+        return NextResponse.json({ error: "timezone must be a valid IANA timezone" }, { status: 400 });
+      }
+      allowed.timezone = timezone.data;
     }
 
     const toolCallingEnabled =

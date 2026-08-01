@@ -4,6 +4,7 @@ import { tasks, habitLogs, focusSessions, workoutLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { endOfWeek } from "@/lib/dates";
+import { calendarDateSchema } from "@/lib/validation";
 
 /**
  * Week-scoped aggregates for the Weekly Review page.
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
   const userId = getUserId();
   const weekParam = new URL(request.url).searchParams.get("week");
 
-  if (!weekParam || !/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+  const parsedWeek = calendarDateSchema.safeParse(weekParam);
+  if (!parsedWeek.success) {
     return NextResponse.json(
       { error: "week query parameter is required (YYYY-MM-DD)" },
       { status: 400 }
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   // Treat provided day as within the week; use startOfWeek semantics from client
   // (client already sends Monday). Bound is inclusive Mon–Sun.
-  const weekStart = weekParam;
+  const weekStart = parsedWeek.data;
   const weekEnd = endOfWeek(weekStart);
 
   try {

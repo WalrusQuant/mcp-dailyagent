@@ -7,6 +7,8 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, uuidSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
+import { isOwned } from "@/lib/db/ownership";
+import { isOrderedDateRange } from "@/lib/validation";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -157,6 +159,8 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:read");
       if (scopeError) return errorResult(scopeError);
 
+      if (!isOrderedDateRange(args.from, args.to)) return errorResult("to must be on or after from");
+
       const result = await getFocusSessions(auth.userId, args.from, args.to);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -198,6 +202,10 @@ export function registerFocusTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
+
+      if (args.task_id && !(await isOwned("task", args.task_id, auth.userId))) {
+        return errorResult("Error: task_id must reference one of your tasks");
+      }
 
       const result = await startFocusSession(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);

@@ -4,6 +4,7 @@ import { eq, and, gte, lte, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday, addDays } from "@/lib/dates";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
+import { isOwned } from "@/lib/db/ownership";
 
 export function serializeHabit(h: typeof habits.$inferSelect) {
   return {
@@ -130,6 +131,10 @@ export async function createHabit(
   input: CreateHabitInput
 ): Promise<QueryResult<Habit>> {
   try {
+    if (input.goal_id && !(await isOwned("goal", input.goal_id, userId))) {
+      return { data: null, error: "goal_id must reference one of your goals" };
+    }
+
     const [row] = await db
       .insert(habits)
       .values({
@@ -167,10 +172,18 @@ export async function toggleHabitLog(
     const existingLogs = await db
       .select({ id: habitLogs.id })
       .from(habitLogs)
-      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.logDate, date)));
+      .where(
+        and(
+          eq(habitLogs.habitId, habitId),
+          eq(habitLogs.userId, userId),
+          eq(habitLogs.logDate, date)
+        )
+      );
 
     if (existingLogs.length > 0) {
-      await db.delete(habitLogs).where(eq(habitLogs.id, existingLogs[0].id));
+      await db
+        .delete(habitLogs)
+        .where(and(eq(habitLogs.id, existingLogs[0].id), eq(habitLogs.userId, userId)));
       return { data: { logged: false }, error: null };
     } else {
       await db.insert(habitLogs).values({ habitId, logDate: date, userId });
@@ -205,6 +218,7 @@ export async function getHabitStats(
       .where(
         and(
           eq(habitLogs.habitId, habitId),
+          eq(habitLogs.userId, userId),
           gte(habitLogs.logDate, startDateStr),
           lte(habitLogs.logDate, endDateStr)
         )

@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { spaceStatusSchema } from "./validators";
+import { dateSchema, spaceStatusSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
 
 // ---------------------------------------------------------------------------
@@ -168,12 +168,7 @@ export function registerSpaceTools(server: McpServer) {
         .max(100)
         .optional()
         .describe("Progress percent 0–100"),
-      deadline: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional()
-        .describe("Deadline date YYYY-MM-DD, or null to clear"),
+      deadline: dateSchema.nullable().optional().describe("Deadline date YYYY-MM-DD, or null to clear"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);

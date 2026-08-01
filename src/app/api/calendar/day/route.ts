@@ -4,14 +4,17 @@ import { tasks, habitLogs, habits, journalEntries, workoutLogs, focusSessions } 
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import type { DayDetail } from "@/components/calendar/types";
 import { getUserId } from "@/lib/auth";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const date = request.nextUrl.searchParams.get("date");
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  const parsedDate = calendarDateSchema.safeParse(date);
+  if (!parsedDate.success) {
     return NextResponse.json({ error: "Invalid date parameter (YYYY-MM-DD)" }, { status: 400 });
   }
+  const validDate = parsedDate.data;
 
   try {
     const [taskRows, habitLogRows, journalRow, workoutRows, focusRows, allHabitRows] =
@@ -19,21 +22,21 @@ export async function GET(request: NextRequest) {
         db
           .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done })
           .from(tasks)
-          .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, date)))
+          .where(and(eq(tasks.userId, userId), eq(tasks.taskDate, validDate)))
           .orderBy(tasks.sortOrder),
         db
           .select({ habitId: habitLogs.habitId })
           .from(habitLogs)
-          .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, date))),
+          .where(and(eq(habitLogs.userId, userId), eq(habitLogs.logDate, validDate))),
         db
           .select({ id: journalEntries.id, mood: journalEntries.mood, content: journalEntries.content })
           .from(journalEntries)
-          .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date)))
+          .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, validDate)))
           .limit(1),
         db
           .select({ id: workoutLogs.id, name: workoutLogs.name, durationMinutes: workoutLogs.durationMinutes })
           .from(workoutLogs)
-          .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, date)))
+          .where(and(eq(workoutLogs.userId, userId), eq(workoutLogs.logDate, validDate)))
           .orderBy(workoutLogs.createdAt),
         db
           .select({
@@ -46,8 +49,8 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(focusSessions.userId, userId),
-              gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
-              lte(focusSessions.startedAt, new Date(`${date}T23:59:59`)),
+              gte(focusSessions.startedAt, new Date(`${validDate}T00:00:00`)),
+              lte(focusSessions.startedAt, new Date(`${validDate}T23:59:59`)),
               inArray(focusSessions.status, ["completed", "active"])
             )
           )
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
           .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
       ]);
 
-    const d = new Date(date + "T00:00:00");
+    const d = new Date(validDate + "T00:00:00");
     const dow = d.getDay() === 0 ? 7 : d.getDay();
 
     const completedHabitIds = new Set(habitLogRows.map((hl) => hl.habitId));
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
     }
 
     const detail: DayDetail = {
-      date,
+      date: validDate,
       tasks: taskRows.map((t) => ({
         id: t.id,
         title: t.title,

@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { weeklyReviews } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { calendarDateSchema } from "@/lib/validation";
 
 function serializeReview(r: typeof weeklyReviews.$inferSelect) {
   return {
@@ -21,18 +22,20 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const week = searchParams.get("week");
 
-  if (!week) {
+  const parsedWeek = calendarDateSchema.safeParse(week);
+  if (!parsedWeek.success) {
     return NextResponse.json(
       { error: "week query parameter is required (YYYY-MM-DD)" },
       { status: 400 }
     );
   }
+  const weekStart = parsedWeek.data;
 
   try {
     const rows = await db
       .select()
       .from(weeklyReviews)
-      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, week)))
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.weekStart, weekStart)))
       .limit(1);
 
     if (rows.length === 0) {

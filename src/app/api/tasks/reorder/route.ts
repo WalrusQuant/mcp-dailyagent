@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db/client";
-import { tasks } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { readJsonBody } from "@/lib/api-body";
+import { reorderTasksAggregate, TaskMutationError } from "@/lib/tasks/mutations";
 
 export async function PATCH(request: NextRequest) {
   const userId = getUserId();
@@ -28,17 +26,19 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await db.transaction(async (tx) => {
-      for (const item of taskItems as { id: string; sort_order: number }[]) {
-        await tx
-          .update(tasks)
-          .set({ sortOrder: item.sort_order, updatedAt: new Date() })
-          .where(and(eq(tasks.id, item.id), eq(tasks.userId, userId)));
-      }
-    });
+    await reorderTasksAggregate(
+      userId,
+      (taskItems as { id: string; sort_order: number }[]).map((item) => ({
+        id: item.id,
+        sortOrder: item.sort_order,
+      }))
+    );
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof TaskMutationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     console.error("Task reorder error:", err);
     return NextResponse.json({ error: "Failed to reorder tasks" }, { status: 500 });
   }

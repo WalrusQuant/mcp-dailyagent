@@ -9,7 +9,8 @@ vi.mock("@/lib/db/client", async () => {
 
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
-import { resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { getTestDb, resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { workoutTemplates } from "@/lib/db/schema";
 
 const SCOPES = ["workouts:read", "workouts:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
@@ -86,6 +87,22 @@ describe("create_workout_template", () => {
 });
 
 describe("log_workout + list_workout_logs", () => {
+  it("rejects a template owned by another user without creating a log", async () => {
+    const { db } = await getTestDb();
+    const [template] = await db
+      .insert(workoutTemplates)
+      .values({ userId: OTHER_USER_ID, name: "Private" })
+      .returning();
+
+    const result = await h.call(
+      "log_workout",
+      { name: "Nope", log_date: "2026-06-09", template_id: template.id },
+      ctx
+    );
+    expect(expectError(result)).toContain("one of your workout templates");
+    expect(expectOk<unknown[]>(await h.call("list_workout_logs", { date: "2026-06-09" }, ctx))).toHaveLength(0);
+  });
+
   it("logs a workout with exercises and returns it in the list", async () => {
     expectOk(
       await h.call(

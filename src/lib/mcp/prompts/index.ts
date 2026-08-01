@@ -1,6 +1,7 @@
 import { getToday, addDays, startOfWeek } from "@/lib/dates";
 import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
+import { calendarDateSchema, isOrderedDateRange } from "@/lib/validation";
 import { McpServer, PromptCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScopes } from "@/lib/mcp/tools/helpers";
 import { db } from "@/lib/db/client";
@@ -555,13 +556,21 @@ Please provide:
     "productivity_report",
     "Generate a detailed productivity report for a date range",
     {
-      from: z.string().describe("Start date in YYYY-MM-DD format"),
-      to: z.string().describe("End date in YYYY-MM-DD format"),
+      from: calendarDateSchema.describe("Start date in YYYY-MM-DD format"),
+      to: calendarDateSchema.describe("End date in YYYY-MM-DD format"),
     },
     async (args, extra: Extra) => {
       const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "focus:read"]);
       if (!userId) return NOT_AUTHENTICATED_MSG;
       if (scopeError) return insufficientScopeMsg(scopeError);
+      if (!isOrderedDateRange(args.from, args.to)) {
+        return {
+          messages: [{
+            role: "user" as const,
+            content: { type: "text" as const, text: "Invalid date range: to must be on or after from." },
+          }],
+        };
+      }
 
       const [focusRows, tasks, habitData] = await Promise.all([
         fetchFocusSessionsForRange(userId, args.from, args.to),
@@ -746,7 +755,7 @@ Please:
     "weekly_review",
     "Generate a structured weekly review covering wins, losses, and next week's plan",
     {
-      week_start: z.string().optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
+      week_start: calendarDateSchema.optional().describe("Week start date in YYYY-MM-DD format (defaults to this Monday)"),
     },
     async (args, extra: Extra) => {
       const { userId, scopeError } = getPromptAuth(extra, ["tasks:read", "habits:read", "journal:read", "focus:read"]);

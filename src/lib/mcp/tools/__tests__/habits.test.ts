@@ -10,7 +10,8 @@ vi.mock("@/lib/db/client", async () => {
 
 import { registerHabitTools } from "@/lib/mcp/tools/habits";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
-import { resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { getTestDb, resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { goals } from "@/lib/db/schema";
 
 const SCOPES = ["habits:read", "habits:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
@@ -69,6 +70,15 @@ describe("habit tools — auth & scope", () => {
 });
 
 describe("create_habit + list_habits", () => {
+  it("rejects a goal owned by another user", async () => {
+    const { db } = await getTestDb();
+    const [goal] = await db.insert(goals).values({ userId: OTHER_USER_ID, title: "Private" }).returning();
+
+    const result = await h.call("create_habit", { name: "Nope", goal_id: goal.id }, ctx);
+    expect(expectError(result)).toContain("one of your goals");
+    expect(expectOk<HabitRow[]>(await h.call("list_habits", {}, ctx))).toHaveLength(0);
+  });
+
   it("creates a habit with defaults and returns camelCase raw row", async () => {
     const created = await seedHabit({ name: "Read" });
     expect(created.name).toBe("Read");
@@ -133,6 +143,15 @@ describe("list_habits — include_archived filter", () => {
 });
 
 describe("update_habit — legacy (last-write-wins)", () => {
+  it("rejects linking to another user's goal", async () => {
+    const habit = await seedHabit();
+    const { db } = await getTestDb();
+    const [goal] = await db.insert(goals).values({ userId: OTHER_USER_ID, title: "Private" }).returning();
+
+    const result = await h.call("update_habit", { habit_id: habit.id, goal_id: goal.id }, ctx);
+    expect(expectError(result)).toContain("one of your goals");
+  });
+
   it("updates name/description/frequency/target_days/color", async () => {
     const habit = await seedHabit();
     const updated = expectOk<HabitRow>(

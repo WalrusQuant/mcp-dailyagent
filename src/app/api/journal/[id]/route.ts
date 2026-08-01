@@ -7,6 +7,7 @@ import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse, isUniqueViolation } from "@/lib/api-conflict";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function GET(
   _request: NextRequest,
@@ -54,13 +55,14 @@ export async function PATCH(
   }
 
   if (body.entry_date !== undefined) {
-    if (typeof body.entry_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.entry_date)) {
+    const entryDate = calendarDateSchema.safeParse(body.entry_date);
+    if (!entryDate.success) {
       return NextResponse.json(
         { error: "entry_date must be a string in YYYY-MM-DD format" },
         { status: 400 }
       );
     }
-    allowedFields.entryDate = body.entry_date;
+    allowedFields.entryDate = entryDate.data;
   }
 
   if (body.mood !== undefined) {

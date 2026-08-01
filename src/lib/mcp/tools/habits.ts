@@ -8,6 +8,7 @@ import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHE
 import { dateSchema, habitFrequencySchema, uuidSchema } from "./validators";
 import { getHabitStats } from "@/lib/mcp/queries/habits";
 import { updateWithVersion } from "@/lib/db/optimistic";
+import { isOwned } from "@/lib/db/ownership";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -134,10 +135,18 @@ async function toggleHabitLog(userId: string, habitId: string, date?: string) {
     const existingLogs = await db
       .select({ id: habitLogs.id })
       .from(habitLogs)
-      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.logDate, logDate)));
+      .where(
+        and(
+          eq(habitLogs.habitId, habitId),
+          eq(habitLogs.userId, userId),
+          eq(habitLogs.logDate, logDate)
+        )
+      );
 
     if (existingLogs.length > 0) {
-      await db.delete(habitLogs).where(eq(habitLogs.id, existingLogs[0].id));
+      await db
+        .delete(habitLogs)
+        .where(and(eq(habitLogs.id, existingLogs[0].id), eq(habitLogs.userId, userId)));
       return { data: { toggled: false, date: logDate }, error: null };
     } else {
       const [log] = await db
@@ -221,6 +230,10 @@ export function registerHabitTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
 
+      if (args.goal_id && !(await isOwned("goal", args.goal_id, auth.userId))) {
+        return errorResult("Error: goal_id must reference one of your goals");
+      }
+
       const result = await createHabit(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -278,6 +291,10 @@ export function registerHabitTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
+
+      if (args.goal_id && !(await isOwned("goal", args.goal_id, auth.userId))) {
+        return errorResult("Error: goal_id must reference one of your goals");
+      }
 
       if (args.expected_updated_at) {
         const patch = buildHabitPatch(args);

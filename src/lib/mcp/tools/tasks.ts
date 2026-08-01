@@ -5,9 +5,11 @@ import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema, prioritySchema, priorityDescription, uuidSchema } from "./validators";
+import { dateSchema, prioritySchema, priorityDescription, recurrenceSchema, uuidSchema } from "./validators";
 import { updateWithVersion } from "@/lib/db/optimistic";
 import { maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
+import { getTagsByTaskIds } from "@/lib/mcp/queries/tags";
+import { createTaskAggregate, TaskMutationError, updateTaskAggregate } from "@/lib/tasks/mutations";
 
 async function getPriorDone(userId: string, taskId: string): Promise<boolean> {
   const [prior] = await db
@@ -54,55 +56,13 @@ async function getTasksForDate(userId: string, date?: string, spaceId?: string) 
   }
 }
 
-const RECURRENCE_TYPES = new Set(["daily", "weekdays", "weekly", "monthly"]);
-
 function normalizeRecurrence(
   rec: unknown
 ): { type: string; days?: number[] } | null | undefined {
   if (rec === undefined) return undefined;
   if (rec === null) return null;
-  if (typeof rec !== "object" || Array.isArray(rec)) return undefined;
-  const r = rec as { type?: string; days?: number[] };
-  if (!r.type || !RECURRENCE_TYPES.has(r.type)) return undefined;
-  const out: { type: string; days?: number[] } = { type: r.type };
-  if (Array.isArray(r.days) && r.days.length > 0) {
-    out.days = r.days.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
-  }
-  return out;
-}
-
-async function createTask(
-  userId: string,
-  args: {
-    title: string;
-    notes?: string;
-    priority?: string;
-    task_date?: string;
-    space_id?: string;
-    goal_id?: string;
-    recurrence?: { type: string; days?: number[] } | null;
-  }
-) {
-  const today = getToday();
-  try {
-    const [row] = await db
-      .insert(tasks)
-      .values({
-        userId,
-        title: args.title,
-        notes: args.notes ?? null,
-        priority: args.priority ?? "B1",
-        taskDate: args.task_date ?? today,
-        spaceId: args.space_id ?? null,
-        goalId: args.goal_id ?? null,
-        recurrence: args.recurrence ?? null,
-        done: false,
-      })
-      .returning();
-    return { data: row, error: null };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
+  const parsed = recurrenceSchema.safeParse(rec);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function buildTaskPatch(args: {
@@ -128,35 +88,6 @@ function buildTaskPatch(args: {
     patch.doneAt = args.done ? new Date() : null;
   }
   return patch;
-}
-
-async function updateTaskLegacy(
-  userId: string,
-  args: {
-    task_id: string;
-    title?: string;
-    notes?: string;
-    priority?: string;
-    task_date?: string;
-    done?: boolean;
-    space_id?: string | null;
-    goal_id?: string | null;
-    recurrence?: { type: string; days?: number[] } | null;
-  }
-) {
-  const updates = buildTaskPatch(args);
-  updates.updatedAt = new Date();
-
-  try {
-    const [row] = await db
-      .update(tasks)
-      .set(updates)
-      .where(and(eq(tasks.id, args.task_id), eq(tasks.userId, userId)))
-      .returning();
-    return { data: row ?? null, error: row ? null : "Task not found" };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
 }
 
 async function completeTaskLegacy(userId: string, taskId: string) {
@@ -207,20 +138,13 @@ export function registerTaskTools(server: McpServer) {
       const result = await getTasksForDate(auth.userId, args.date, args.space_id);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
-      return textResult(result.data);
+      const rows = result.data ?? [];
+      const taskTags = await getTagsByTaskIds(rows.map((task) => task.id));
+      return textResult(rows.map((task) => ({ ...task, tags: taskTags.get(task.id) ?? [] })));
     }
   );
 
-  const recurrenceSchema = z
-    .object({
-      type: z.enum(["daily", "weekdays", "weekly", "monthly"]),
-      days: z
-        .array(z.number().int().min(1).max(7))
-        .optional()
-        .describe("ISO weekdays 1=Mon…7=Sun (used when type is weekly)"),
-    })
-    .nullable()
-    .optional();
+  const taskRecurrenceSchema = recurrenceSchema.nullable().optional();
 
   // --- create_task (WRITE) ---
   server.tool(
@@ -233,9 +157,10 @@ export function registerTaskTools(server: McpServer) {
       task_date: dateSchema.optional().describe("Date in YYYY-MM-DD format (defaults to today)"),
       space_id: uuidSchema.optional().describe("Space/project ID to assign to (from list_spaces)"),
       goal_id: uuidSchema.optional().describe("Goal ID to link to (from list_goals)"),
-      recurrence: recurrenceSchema.describe(
+      recurrence: taskRecurrenceSchema.describe(
         "Recurrence rule, or null/omit for one-off. Weekly may include days (1=Mon…7=Sun)."
       ),
+      tag_ids: z.array(uuidSchema).optional().describe("Tag IDs to assign (from list_tags)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -249,13 +174,21 @@ export function registerTaskTools(server: McpServer) {
         return errorResult("Invalid recurrence");
       }
 
-      const result = await createTask(auth.userId, {
-        ...args,
-        recurrence: recurrence === undefined ? null : recurrence,
-      });
-      if (result.error) return errorResult(`Error: ${result.error}`);
-
-      return textResult(result.data);
+      try {
+        const result = await createTaskAggregate(auth.userId, {
+          title: args.title,
+          notes: args.notes,
+          priority: args.priority,
+          taskDate: args.task_date,
+          spaceId: args.space_id,
+          goalId: args.goal_id,
+          recurrence: recurrence === undefined ? null : recurrence,
+          tagIds: args.tag_ids,
+        });
+        return textResult({ ...result.task, tags: result.tags });
+      } catch (err) {
+        return errorResult(err instanceof Error ? err.message : "Unable to create task");
+      }
     }
   );
 
@@ -277,7 +210,8 @@ export function registerTaskTools(server: McpServer) {
       done: z.boolean().optional().describe("Mark as done or not done"),
       space_id: uuidSchema.nullable().optional().describe("Space ID, or null to unlink"),
       goal_id: uuidSchema.nullable().optional().describe("Goal ID, or null to unlink"),
-      recurrence: recurrenceSchema.describe("Recurrence rule, or null to clear"),
+      recurrence: taskRecurrenceSchema.describe("Recurrence rule, or null to clear"),
+      tag_ids: z.array(uuidSchema).optional().describe("Replacement tag IDs (from list_tags)"),
     },
     async (args, extra: Extra) => {
       const auth = getAuth(extra);
@@ -309,37 +243,23 @@ export function registerTaskTools(server: McpServer) {
         recurrence: recurrencePatch,
       };
 
-      if (args.expected_updated_at) {
-        const patch = buildTaskPatch(patchArgs);
-        const result = await updateWithVersion<typeof tasks.$inferSelect>({
-          table: tasks,
-          id: args.task_id,
-          userId: auth.userId,
+      try {
+        const result = await updateTaskAggregate(auth.userId, args.task_id, {
+          patch: buildTaskPatch(patchArgs),
+          tagIds: args.tag_ids,
           expectedUpdatedAt: args.expected_updated_at,
-          patch,
         });
-        if (!result.ok) {
-          if (result.reason === "not_found") return errorResult("Task not found");
-          if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-          return conflictResult(result.current);
-        }
         if (args.done === true) {
-          await maybeSpawnNextOccurrence(auth.userId, result.row, wasAlreadyDone);
+          await maybeSpawnNextOccurrence(auth.userId, result.task, wasAlreadyDone);
         }
-        return textResult(result.row);
+        return textResult({ ...result.task, tags: result.tags });
+      } catch (err) {
+        if (err instanceof TaskMutationError) {
+          if (err.code === "conflict" && err.current) return conflictResult(err.current);
+          return errorResult(err.message);
+        }
+        return errorResult(err instanceof Error ? err.message : "Unable to update task");
       }
-
-      const result = await updateTaskLegacy(auth.userId, {
-        task_id: args.task_id,
-        ...patchArgs,
-      });
-      if (result.error) return errorResult(`Error: ${result.error}`);
-
-      if (args.done === true && result.data) {
-        await maybeSpawnNextOccurrence(auth.userId, result.data, wasAlreadyDone);
-      }
-
-      return textResult(result.data);
     }
   );
 

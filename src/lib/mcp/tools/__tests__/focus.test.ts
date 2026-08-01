@@ -9,7 +9,8 @@ vi.mock("@/lib/db/client", async () => {
 
 import { registerFocusTools } from "@/lib/mcp/tools/focus";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
-import { resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { getTestDb, resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { tasks } from "@/lib/db/schema";
 
 const SCOPES = ["focus:read", "focus:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
@@ -69,6 +70,22 @@ describe("focus tools — auth & scope", () => {
 });
 
 describe("start_focus_session + get_focus_sessions", () => {
+  it("rejects a task owned by another user", async () => {
+    const { db } = await getTestDb();
+    const [task] = await db
+      .insert(tasks)
+      .values({ userId: OTHER_USER_ID, title: "Private", taskDate: "2026-08-01" })
+      .returning();
+
+    const result = await h.call(
+      "start_focus_session",
+      { duration_minutes: 25, task_id: task.id },
+      ctx
+    );
+    expect(expectError(result)).toContain("one of your tasks");
+    expect(expectOk<SessionRow[]>(await h.call("get_focus_sessions", {}, ctx))).toHaveLength(0);
+  });
+
   it("starts a session with status active", async () => {
     const session = await startSession(25);
     expect(session.status).toBe("active");

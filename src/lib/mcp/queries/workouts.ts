@@ -2,6 +2,7 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
+import { isOwned } from "@/lib/db/ownership";
 
 export function serializeLogExercise(e: typeof workoutLogExercises.$inferSelect) {
   return {
@@ -247,6 +248,10 @@ export async function logWorkout(
   input: LogWorkoutInput
 ): Promise<QueryResult<WorkoutLog>> {
   try {
+    if (input.template_id && !(await isOwned("workout_template", input.template_id, userId))) {
+      return { data: null, error: "template_id must reference one of your workout templates" };
+    }
+
     const [log] = await db
       .insert(workoutLogs)
       .values({

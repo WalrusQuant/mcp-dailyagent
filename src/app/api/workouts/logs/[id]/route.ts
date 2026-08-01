@@ -7,6 +7,7 @@ import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeLog } from "@/lib/mcp/queries/workouts";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema } from "@/lib/validation";
 
 async function getLogWithExercises(id: string, userId: string) {
   const rows = await db
@@ -59,7 +60,7 @@ export async function PATCH(
   const allowedFields: Partial<typeof workoutLogs.$inferInsert> = {};
   if (typeof body.name === "string" || body.name === null) allowedFields.name = (body.name as string) ?? undefined;
   if (typeof body.log_date === "string") {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.log_date)) {
+    if (!calendarDateSchema.safeParse(body.log_date).success) {
       return NextResponse.json({ error: "log_date must be in YYYY-MM-DD format" }, { status: 400 });
     }
     allowedFields.logDate = body.log_date;

@@ -5,6 +5,9 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeSession } from "@/lib/mcp/queries/focus";
 import { readJsonBody } from "@/lib/api-body";
+import { isOwned } from "@/lib/db/ownership";
+import { isoTimestampSchema, isOrderedTimestampRange } from "@/lib/validation";
+import { uuidSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -14,8 +17,18 @@ export async function GET(request: NextRequest) {
   const defaultFrom = new Date();
   defaultFrom.setDate(defaultFrom.getDate() - 7);
 
-  const from = searchParams.get("from") || defaultFrom.toISOString();
-  const to = searchParams.get("to") || new Date().toISOString();
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  if (
+    (fromParam !== null && !isoTimestampSchema.safeParse(fromParam).success) ||
+    (toParam !== null && !isoTimestampSchema.safeParse(toParam).success) ||
+    !isOrderedTimestampRange(fromParam ?? undefined, toParam ?? undefined)
+  ) {
+    return NextResponse.json({ error: "Invalid timestamp or timestamp range" }, { status: 400 });
+  }
+
+  const from = fromParam ?? defaultFrom.toISOString();
+  const to = toParam ?? new Date().toISOString();
 
   try {
     const rows = await db
@@ -53,8 +66,15 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (task_id !== undefined && task_id !== null && !uuidSchema.safeParse(task_id).success) {
+    return NextResponse.json({ error: "task_id must be a valid UUID" }, { status: 400 });
+  }
 
   try {
+    if (typeof task_id === "string" && !(await isOwned("task", task_id, userId))) {
+      return NextResponse.json({ error: "task_id must reference one of your tasks" }, { status: 400 });
+    }
+
     const [row] = await db
       .insert(focusSessions)
       .values({

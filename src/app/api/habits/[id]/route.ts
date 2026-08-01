@@ -7,6 +7,8 @@ import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
+import { isOwned } from "@/lib/db/ownership";
+import { uuidSchema } from "@/lib/validation";
 
 export async function GET(
   _request: NextRequest,
@@ -45,6 +47,10 @@ export async function PATCH(
   }
 
   const allowedFields: Partial<typeof habits.$inferInsert> = {};
+
+  if ("goal_id" in body && body.goal_id !== null && !uuidSchema.safeParse(body.goal_id).success) {
+    return NextResponse.json({ error: "goal_id must be a valid UUID" }, { status: 400 });
+  }
 
   // NOT NULL columns: explicit null must return 400.
   if ("name" in body) {
@@ -94,6 +100,10 @@ export async function PATCH(
   }
 
   try {
+    if (typeof allowedFields.goalId === "string" && !(await isOwned("goal", allowedFields.goalId, userId))) {
+      return NextResponse.json({ error: "goal_id must reference one of your goals" }, { status: 400 });
+    }
+
     if (typeof body.expected_updated_at === "string") {
       const result = await updateWithVersion<typeof habits.$inferSelect>({
         table: habits,

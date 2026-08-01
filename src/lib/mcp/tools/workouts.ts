@@ -4,7 +4,9 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises, workoutTemplates, workoutExercises } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
-import { dateSchema, exerciseTypeSchema } from "./validators";
+import { dateSchema, exerciseTypeSchema, uuidSchema } from "./validators";
+import { isOwnedRelationship } from "@/lib/db/ownership";
+import { isOrderedDateRange } from "@/lib/validation";
 
 const exerciseEntrySchema = z.object({
   name: z.string().min(1, "Exercise name is required"),
@@ -157,6 +159,7 @@ async function logWorkout(
   args: {
     name: string;
     log_date: string;
+    template_id?: string;
     duration_minutes?: number;
     notes?: string;
     exercises?: string;
@@ -172,10 +175,18 @@ async function logWorkout(
   try {
     // Parent + children in one transaction: no orphan log on a failed insert.
     const log = await db.transaction(async (tx) => {
+      if (
+        args.template_id &&
+        !(await isOwnedRelationship(tx, "workout_template", args.template_id, userId))
+      ) {
+        return null;
+      }
+
       const [created] = await tx
         .insert(workoutLogs)
         .values({
           userId,
+          templateId: args.template_id ?? null,
           name: args.name,
           logDate: args.log_date,
           durationMinutes: args.duration_minutes ?? null,
@@ -189,6 +200,10 @@ async function logWorkout(
 
       return created;
     });
+
+    if (!log) {
+      return { data: null, error: "template_id must reference one of your workout templates" };
+    }
 
     return { data: { ...log, exercises }, error: null };
   } catch (err) {
@@ -354,6 +369,8 @@ export function registerWorkoutTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "workouts:read");
       if (scopeError) return errorResult(scopeError);
 
+      if (!isOrderedDateRange(args.from, args.to)) return errorResult("to must be on or after from");
+
       const result = await getWorkoutLogs(auth.userId, args.date, args.from, args.to);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -387,6 +404,7 @@ export function registerWorkoutTools(server: McpServer) {
     {
       name: z.string().describe("Workout name"),
       log_date: dateSchema.describe("Date of the workout in YYYY-MM-DD format"),
+      template_id: uuidSchema.optional().describe("Workout template used for this log"),
       duration_minutes: z.number().int().min(0).optional().describe("Duration in minutes"),
       notes: z.string().optional().describe("Workout notes"),
       exercises: z.string().optional().describe(

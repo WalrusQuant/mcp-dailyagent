@@ -11,7 +11,8 @@ vi.mock("@/lib/db/client", async () => {
 import { registerTaskTools } from "@/lib/mcp/tools/tasks";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
 import { resetDb, getTestDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
-import { tasks, goals } from "@/lib/db/schema";
+import { tasks, goals, spaces, tags, taskTags } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const SCOPES = ["tasks:read", "tasks:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
@@ -110,6 +111,30 @@ describe("create_task + list_tasks", () => {
     );
     expect(list).toHaveLength(0);
   });
+
+  it("creates tags atomically and includes them in create/list results", async () => {
+    const { db } = await getTestDb();
+    const [tag] = await db.insert(tags).values({ userId: TEST_USER_ID, name: "Deep work" }).returning();
+    const created = expectOk<TaskRow & { tags: { id: string }[] }>(
+      await h.call("create_task", { title: "Tagged", tag_ids: [tag.id] }, ctx)
+    );
+    expect(created.tags.map(({ id }) => id)).toEqual([tag.id]);
+
+    const listed = expectOk<(TaskRow & { tags: { id: string }[] })[]>(await h.call("list_tasks", {}, ctx));
+    expect(listed.find(({ id }) => id === created.id)?.tags.map(({ id }) => id)).toEqual([tag.id]);
+  });
+
+  it("rejects foreign relationships without leaving a task behind", async () => {
+    const { db } = await getTestDb();
+    const [foreignSpace] = await db
+      .insert(spaces)
+      .values({ userId: OTHER_USER_ID, name: "Private" })
+      .returning();
+    const result = await h.call("create_task", { title: "Must roll back", space_id: foreignSpace.id }, ctx);
+    expect(expectError(result)).toContain("Space not found");
+    const rows = await db.select().from(tasks).where(eq(tasks.title, "Must roll back"));
+    expect(rows).toHaveLength(0);
+  });
 });
 
 describe("list_tasks — today rollover behavior", () => {
@@ -164,6 +189,26 @@ describe("update_task — legacy (last-write-wins)", () => {
       { userId: OTHER_USER_ID, scopes: SCOPES }
     );
     expect(expectError(res)).toContain("not found");
+  });
+
+  it("rolls back fields and tags when a replacement tag is foreign", async () => {
+    const { db } = await getTestDb();
+    const [mine] = await db.insert(tags).values({ userId: TEST_USER_ID, name: "Mine" }).returning();
+    const [foreign] = await db.insert(tags).values({ userId: OTHER_USER_ID, name: "Foreign" }).returning();
+    const task = expectOk<TaskRow & { tags: { id: string }[] }>(
+      await h.call("create_task", { title: "Original", tag_ids: [mine.id] }, ctx)
+    );
+
+    const result = await h.call(
+      "update_task",
+      { task_id: task.id, title: "Should not persist", tag_ids: [foreign.id] },
+      ctx
+    );
+    expect(expectError(result)).toContain("Tag not found");
+    const [stored] = await db.select().from(tasks).where(eq(tasks.id, task.id));
+    expect(stored.title).toBe("Original");
+    const links = await db.select().from(taskTags).where(eq(taskTags.taskId, task.id));
+    expect(links.map(({ tagId }) => tagId)).toEqual([mine.id]);
   });
 });
 

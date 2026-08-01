@@ -3,6 +3,7 @@ import { focusSessions } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
 import { getToday } from "@/lib/dates";
+import { isOwned } from "@/lib/db/ownership";
 
 export function serializeSession(s: typeof focusSessions.$inferSelect) {
   return {
@@ -124,6 +125,10 @@ export async function startFocusSession(
   input: StartFocusSessionInput
 ): Promise<QueryResult<FocusSession>> {
   try {
+    if (input.task_id && !(await isOwned("task", input.task_id, userId))) {
+      return { data: null, error: "task_id must reference one of your tasks" };
+    }
+
     const [row] = await db
       .insert(focusSessions)
       .values({

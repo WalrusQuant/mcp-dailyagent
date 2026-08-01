@@ -5,6 +5,8 @@ import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
+import { isOwned } from "@/lib/db/ownership";
+import { uuidSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -43,8 +45,15 @@ export async function POST(request: NextRequest) {
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
+  if (goal_id !== undefined && goal_id !== null && !uuidSchema.safeParse(goal_id).success) {
+    return NextResponse.json({ error: "goal_id must be a valid UUID" }, { status: 400 });
+  }
 
   try {
+    if (typeof goal_id === "string" && !(await isOwned("goal", goal_id, userId))) {
+      return NextResponse.json({ error: "goal_id must reference one of your goals" }, { status: 400 });
+    }
+
     const [row] = await db
       .insert(habits)
       .values({

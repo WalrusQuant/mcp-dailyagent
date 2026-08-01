@@ -5,6 +5,8 @@ import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeLog } from "@/lib/mcp/queries/workouts";
 import { readJsonBody } from "@/lib/api-body";
+import { isOwnedRelationship } from "@/lib/db/ownership";
+import { calendarDateSchema, isOrderedDateRange, uuidSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -13,6 +15,15 @@ export async function GET(request: NextRequest) {
   const date = searchParams.get("date");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+
+  if (
+    (date !== null && !calendarDateSchema.safeParse(date).success) ||
+    (from !== null && !calendarDateSchema.safeParse(from).success) ||
+    (to !== null && !calendarDateSchema.safeParse(to).success) ||
+    !isOrderedDateRange(from ?? undefined, to ?? undefined)
+  ) {
+    return NextResponse.json({ error: "Invalid date or date range" }, { status: 400 });
+  }
 
   try {
     const conditions = date
@@ -67,14 +78,24 @@ export async function POST(request: NextRequest) {
 
   const { name, template_id, log_date, duration_minutes, notes, exercises } = body;
 
-  if (!log_date || typeof log_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(log_date as string)) {
+  if (!calendarDateSchema.safeParse(log_date).success) {
     return NextResponse.json({ error: "log_date is required and must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+  if (template_id !== undefined && template_id !== null && !uuidSchema.safeParse(template_id).success) {
+    return NextResponse.json({ error: "template_id must be a valid UUID" }, { status: 400 });
   }
 
   try {
     // Parent + children in one transaction so a failed exercise insert
     // doesn't leave an orphan log behind.
     const log = await db.transaction(async (tx) => {
+      if (
+        typeof template_id === "string" &&
+        !(await isOwnedRelationship(tx, "workout_template", template_id, userId))
+      ) {
+        return null;
+      }
+
       const [created] = await tx
         .insert(workoutLogs)
         .values({
@@ -108,6 +129,13 @@ export async function POST(request: NextRequest) {
 
       return created;
     });
+
+    if (!log) {
+      return NextResponse.json(
+        { error: "template_id must reference one of your workout templates" },
+        { status: 400 }
+      );
+    }
 
     const exRows = await db
       .select()

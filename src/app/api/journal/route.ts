@@ -7,6 +7,7 @@ import { getUserId } from "@/lib/auth";
 import { serializeEntry } from "@/lib/mcp/queries/journal";
 import { isUniqueViolation } from "@/lib/api-conflict";
 import { readJsonBody } from "@/lib/api-body";
+import { calendarDateSchema, isOrderedDateRange } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -17,6 +18,15 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get("to");
   const search = searchParams.get("search");
 
+  if (
+    (date !== null && !calendarDateSchema.safeParse(date).success) ||
+    (from !== null && !calendarDateSchema.safeParse(from).success) ||
+    (to !== null && !calendarDateSchema.safeParse(to).success) ||
+    !isOrderedDateRange(from ?? undefined, to ?? undefined)
+  ) {
+    return NextResponse.json({ error: "Invalid date or date range" }, { status: 400 });
+  }
+
   try {
     let rows;
 
@@ -26,15 +36,15 @@ export async function GET(request: NextRequest) {
         .from(journalEntries)
         .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, date)))
         .orderBy(desc(journalEntries.entryDate));
-    } else if (from && to) {
+    } else if (from || to) {
       rows = await db
         .select()
         .from(journalEntries)
         .where(
           and(
             eq(journalEntries.userId, userId),
-            gte(journalEntries.entryDate, from),
-            lte(journalEntries.entryDate, to)
+            from ? gte(journalEntries.entryDate, from) : undefined,
+            to ? lte(journalEntries.entryDate, to) : undefined
           )
         )
         .orderBy(desc(journalEntries.entryDate));
@@ -79,7 +89,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
-  if (entry_date !== undefined && (typeof entry_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry_date as string))) {
+  if (entry_date !== undefined && !calendarDateSchema.safeParse(entry_date).success) {
     return NextResponse.json({ error: "entry_date must be in YYYY-MM-DD format" }, { status: 400 });
   }
 

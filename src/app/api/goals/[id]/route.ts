@@ -10,6 +10,7 @@ import { serializeTask } from "@/lib/mcp/queries/tasks";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
 import { getToday } from "@/lib/dates";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function GET(
   _request: NextRequest,
@@ -94,7 +95,7 @@ export async function PATCH(
   }
 
   if (body.target_date !== undefined && body.target_date !== null &&
-      (typeof body.target_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.target_date as string))) {
+      !calendarDateSchema.safeParse(body.target_date).success) {
     return NextResponse.json({ error: "target_date must be in YYYY-MM-DD format" }, { status: 400 });
   }
 

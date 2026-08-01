@@ -1,17 +1,17 @@
 import { z } from "zod";
+import {
+  calendarDateSchema,
+  recurrenceSchema,
+  uuidSchema as sharedUuidSchema,
+} from "@/lib/validation";
 
-export const dateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format");
+export const dateSchema = calendarDateSchema;
 
 // Mirrors Postgres's `uuid` type: any hex in 8-4-4-4-12 shape, without RFC
 // version/variant strictness (which would reject ids Postgres accepts).
-export const uuidSchema = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    "Must be a valid UUID — copy the id from a list_*/get_* result rather than inventing one"
-  );
+export const uuidSchema = sharedUuidSchema;
+
+export { recurrenceSchema };
 
 export const prioritySchema = z
   .string()

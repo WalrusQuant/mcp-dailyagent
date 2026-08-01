@@ -5,8 +5,9 @@ import { tags } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { uuidSchema } from "./validators";
-import { serializeTag, setTaskTags, getTagsForTask } from "@/lib/mcp/queries/tags";
+import { serializeTag } from "@/lib/mcp/queries/tags";
 import { isUniqueViolation } from "@/lib/api-conflict";
+import { updateTaskAggregate } from "@/lib/tasks/mutations";
 
 export function registerTagTools(server: McpServer) {
   server.tool(
@@ -138,9 +139,11 @@ export function registerTagTools(server: McpServer) {
       if (!hasWrite) return errorResult("Missing tags:write or tasks:write scope");
 
       try {
-        await setTaskTags(auth.userId, args.task_id, args.tag_ids);
-        const assigned = await getTagsForTask(args.task_id);
-        return textResult({ task_id: args.task_id, tags: assigned });
+        const result = await updateTaskAggregate(auth.userId, args.task_id, {
+          patch: {},
+          tagIds: args.tag_ids,
+        });
+        return textResult({ task_id: args.task_id, tags: result.tags });
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : "Unknown error");
       }
