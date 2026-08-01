@@ -147,7 +147,7 @@ Good morning! Give me a quick briefing for 2026-04-20.
 Keep it brief: 3-4 bullet points on what matters most today, then a one-sentence motivational close.
 ```
 
-So the flow is: `prompt_load("morning_briefing")` → you generate the briefing text → `save_daily_briefing({content: "..."})` → deliver. Prompts that take args (`productivity_report`, `weekly_review`, `goal_planning`, `space_planning`) accept them as the prompt arguments, not as a separate tool call.
+So the standard flow is: fetch `morning_briefing` with the MCP `prompts_get` utility → generate the briefing text → `save_daily_briefing({content: "..."})` → deliver. If your MCP host does not expose prompt utilities, call Cadence's `load_prompt({name: "morning_briefing"})` tool instead. Prompts that take args (`productivity_report`, `weekly_review`, `goal_planning`, `space_planning`) accept them in `load_prompt.arguments`, for example `load_prompt({name: "goal_planning", arguments: {goal_id: "..."}})`.
 
 Prompts with args:
 - `productivity_report(from, to)` — both `YYYY-MM-DD`, required

@@ -75,7 +75,7 @@ Expected — `ok: true`, the transport name, and surface counts:
 {
   "ok": true,
   "transport": "streamable-http",
-  "tools": 45,
+  "tools": 46,
   "prompts": 13,
   "resources": 15
 }
@@ -95,7 +95,7 @@ curl -s -X POST http://localhost:3000/api/mcp \
   | jq '.result.tools | length'
 ```
 
-Expected output: a number matching `tools` from the health endpoint (e.g. `45`). If you get `null` or an error, double-check `MCP_API_KEY` matches what's in `.env`.
+Expected output: a number matching `tools` from the health endpoint (e.g. `46`). If you get `null` or an error, double-check `MCP_API_KEY` matches what's in `.env`.
 
 ## 5. Tailscale
 

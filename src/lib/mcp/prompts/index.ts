@@ -1,7 +1,7 @@
 import { getToday, addDays, startOfWeek } from "@/lib/dates";
 import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, PromptCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScopes } from "@/lib/mcp/tools/helpers";
 import { db } from "@/lib/db/client";
 import {
@@ -18,7 +18,7 @@ import {
 } from "@/lib/db/schema";
 import { and, eq, gte, lte, lt, or, asc, desc, inArray } from "drizzle-orm";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { ServerRequest, ServerNotification } from "@modelcontextprotocol/sdk/types.js";
+import { GetPromptResult, ServerRequest, ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -378,8 +378,33 @@ async function fetchSpaces(userId: string) {
 // ---------------------------------------------------------------------------
 
 export function registerPrompts(server: McpServer) {
+  type PromptHandler = (
+    args: Record<string, unknown>,
+    extra: Extra
+  ) => GetPromptResult | Promise<GetPromptResult>;
+  const prompts = new Map<
+    string,
+    { argsSchema: z.ZodRawShape; handler: PromptHandler }
+  >();
+
+  function addPrompt<Args extends z.ZodRawShape>(
+    name: string,
+    description: string,
+    argsSchema: Args,
+    handler: (
+      args: z.output<z.ZodObject<Args>>,
+      extra: Extra
+    ) => GetPromptResult | Promise<GetPromptResult>
+  ) {
+    server.prompt(name, description, argsSchema, handler as PromptCallback<Args>);
+    prompts.set(name, {
+      argsSchema,
+      handler: handler as PromptHandler,
+    });
+  }
+
   // 1. daily_planning
-  server.prompt(
+  addPrompt(
     "daily_planning",
     "Plan my day based on tasks, habits, and goals",
     {},
@@ -428,7 +453,7 @@ If the data above is empty, do not invent tasks, habits, or goals — say there 
   );
 
   // 2. morning_briefing
-  server.prompt(
+  addPrompt(
     "morning_briefing",
     "Quick morning snapshot of what's ahead today",
     {},
@@ -475,7 +500,7 @@ After composing the briefing, save it so it shows on the dashboard: call the \`s
   );
 
   // 3. end_of_day_review
-  server.prompt(
+  addPrompt(
     "end_of_day_review",
     "Review what got done today and reflect on the day",
     {},
@@ -526,7 +551,7 @@ Please provide:
   );
 
   // 4. productivity_report
-  server.prompt(
+  addPrompt(
     "productivity_report",
     "Generate a detailed productivity report for a date range",
     {
@@ -582,7 +607,7 @@ Please provide:
   );
 
   // 5. habit_analysis
-  server.prompt(
+  addPrompt(
     "habit_analysis",
     "Analyze habit patterns and suggest improvements",
     {},
@@ -624,7 +649,7 @@ If I have no habits yet, do not invent any — say so and suggest a first habit 
   );
 
   // 6. goal_check_in
-  server.prompt(
+  addPrompt(
     "goal_check_in",
     "Check progress on active goals and identify next actions",
     {},
@@ -656,7 +681,7 @@ For each goal, please:
   );
 
   // 7. weekly_trends
-  server.prompt(
+  addPrompt(
     "weekly_trends",
     "Compare this week vs last week across all productivity metrics",
     {},
@@ -717,7 +742,7 @@ Please:
   );
 
   // 8. weekly_review
-  server.prompt(
+  addPrompt(
     "weekly_review",
     "Generate a structured weekly review covering wins, losses, and next week's plan",
     {
@@ -783,7 +808,7 @@ After writing the review, save it so it shows on the dashboard: call the \`save_
   );
 
   // 9. journal_prompt
-  server.prompt(
+  addPrompt(
     "journal_prompt",
     "Get a thoughtful, personalized journal prompt based on recent activity",
     {},
@@ -834,7 +859,7 @@ Follow with 2-3 shorter follow-up questions if they want to go deeper.`;
   );
 
   // 10. workout_suggestion
-  server.prompt(
+  addPrompt(
     "workout_suggestion",
     "Suggest a workout based on recent training history and available templates",
     {},
@@ -878,7 +903,7 @@ If I have no recent workouts or templates, do not invent history — suggest a s
   );
 
   // 11. goal_planning
-  server.prompt(
+  addPrompt(
     "goal_planning",
     "Break down a goal into actionable tasks and a step-by-step plan",
     {
@@ -928,7 +953,7 @@ Format tasks as: [PRIORITY: A/B/C] Task title`;
   );
 
   // 12. space_planning
-  server.prompt(
+  addPrompt(
     "space_planning",
     "Plan and prioritize work within a specific space or project",
     {
@@ -969,7 +994,7 @@ Please:
   );
 
   // 13. week_planning
-  server.prompt(
+  addPrompt(
     "week_planning",
     "Plan the upcoming week with priorities, goals alignment, and a day-by-day schedule",
     {},
@@ -1010,6 +1035,58 @@ Please create:
       return {
         messages: [
           { role: "user" as const, content: { type: "text" as const, text: userText } },
+        ],
+      };
+    }
+  );
+
+  // Some MCP hosts expose server tools but not the protocol's prompts/get
+  // method. Keep the standard prompt surface above as the primary API, while
+  // offering one tool-based compatibility path for those clients.
+  server.tool(
+    "load_prompt",
+    "Load a Cadence prompt template when the MCP client does not expose prompts/get",
+    {
+      name: z.string().describe("Prompt name, such as morning_briefing"),
+      arguments: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe("Prompt arguments; omit for prompts that take no arguments"),
+    },
+    async ({ name, arguments: promptArguments }, extra: Extra) => {
+      const prompt = prompts.get(name);
+      if (!prompt) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Unknown prompt: ${name}. Available prompts: ${[...prompts.keys()].join(", ")}`,
+            },
+          ],
+        };
+      }
+
+      const parsed = z.object(prompt.argsSchema).safeParse(promptArguments ?? {});
+      if (!parsed.success) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Invalid arguments for ${name}: ${z.prettifyError(parsed.error)}`,
+            },
+          ],
+        };
+      }
+
+      const result = await prompt.handler(parsed.data, extra);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result),
+          },
         ],
       };
     }

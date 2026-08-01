@@ -15,7 +15,7 @@ describe("getMcpCounts", () => {
   // a tool doesn't break the test.
   it("returns at least the expected baseline counts", () => {
     const counts = getMcpCounts();
-    expect(counts.tools).toBeGreaterThanOrEqual(40);
+    expect(counts.tools).toBeGreaterThanOrEqual(46);
     expect(counts.prompts).toBeGreaterThanOrEqual(10);
     expect(counts.resources).toBeGreaterThanOrEqual(10);
   });

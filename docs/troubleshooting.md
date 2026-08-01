@@ -18,7 +18,7 @@ Expected:
 {
   "ok": true,
   "transport": "streamable-http",
-  "tools": 45,
+  "tools": 46,
   "prompts": 13,
   "resources": 15,
   "version": "..."
@@ -28,6 +28,8 @@ Expected:
 If this fails, the rest of the agent stack is irrelevant — the app container isn't running or isn't reachable. See the *App container* section below.
 
 If it returns the body but your gateway still sees no tools, the issue is on the client side. The single most common cause: your MCP client config has `"transport": "sse"` instead of `"streamable-http"`. This server only implements Streamable HTTP.
+
+If tools work but the agent cannot load named prompts, update or reload the MCP client so it exposes `prompts_list` and `prompts_get`. As a compatibility fallback, call the normal Cadence tool `load_prompt` with a prompt name and optional `arguments` object.
 
 ### Watching MCP traffic
 

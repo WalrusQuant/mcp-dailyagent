@@ -1,6 +1,6 @@
 # MCP reference
 
-45 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
+46 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
 
 There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns `{ ok, transport, tools, prompts, resources, version }`. Use it to confirm the server is up and speaking the right protocol before troubleshooting auth, and to discover how many tools the running build exposes.
 
@@ -416,6 +416,8 @@ Argument: `week_start?: date` (defaults to current week's Monday).
 ## Prompt templates
 
 Prompts are loaded via MCP's `prompts/get` endpoint and returned as ready-to-fill message templates. OpenClaw's typical pattern: load the prompt → pull fresh data with read tools → generate against it → save the result with the matching write tool.
+
+Clients without MCP prompt support can call `load_prompt(name, arguments?)` as a normal tool. It returns the same `messages` payload as `prompts/get`.
 
 | Name | Purpose |
 |---|---|
