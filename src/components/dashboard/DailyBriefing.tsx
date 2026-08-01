@@ -62,7 +62,7 @@ export function DailyBriefing() {
       </div>
 
       <div
-        className="prose prose-sm max-w-none leading-relaxed"
+        className="briefing-markdown prose prose-sm max-w-none leading-relaxed"
         style={{
           color: "var(--text-secondary)",
           fontFamily: "var(--font-display), var(--font-sans), serif",

@@ -424,6 +424,11 @@ mark {
   content: none;
 }
 
+/* Typography's default heading color is intended for light backgrounds. */
+.briefing-markdown :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--text-primary);
+}
+
 /* Touch device overrides — reveal hidden action buttons */
 @media (hover: none) {
   [data-touch-action="sidebar"] { display: flex !important; }
