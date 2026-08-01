@@ -15,6 +15,7 @@ import { Space, Task } from "@/types/database";
 import { SpaceFormModal } from "./SpaceFormModal";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { useToast } from "@/lib/toast-context";
+import { CompletionButton } from "@/components/shared/CompletionButton";
 
 const PRIORITY_COLORS: Record<string, string> = {
   A1: "var(--accent-negative)",
@@ -47,6 +48,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   const [progress, setProgress] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [spacesList, setSpacesList] = useState<Space[]>([]);
   const router = useRouter();
@@ -133,6 +135,41 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
       router.push("/spaces");
     } catch {
       addToast("Failed to delete space");
+    }
+  };
+
+  const updateStatus = async () => {
+    if (!space) return;
+
+    const nextStatus = space.status === "completed" ? "active" : "completed";
+    setIsUpdatingStatus(true);
+    try {
+      const response = await fetch(`/api/spaces/${spaceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          expected_updated_at: space.updated_at,
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          addToast("Space changed elsewhere — reloading", "error");
+          await loadAll();
+        } else {
+          addToast(`Failed to ${nextStatus === "completed" ? "complete" : "reopen"} space`, "error");
+        }
+        return;
+      }
+
+      const updated: Space = await response.json();
+      setSpace((current) => (current ? { ...current, ...updated } : current));
+      addToast(nextStatus === "completed" ? "Space completed" : "Space reopened");
+    } catch {
+      addToast(`Failed to ${nextStatus === "completed" ? "complete" : "reopen"} space`, "error");
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -259,7 +296,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-8" style={{ background: "var(--bg-base)" }}>
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
           <button
             onClick={() => router.push("/spaces")}
             className="p-2 rounded-lg transition-colors"
@@ -268,7 +305,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-[12rem]">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
                 {space.name}
@@ -286,6 +323,13 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
               </p>
             )}
           </div>
+          <CompletionButton
+            entity="space"
+            isCompleted={space.status === "completed"}
+            isSaving={isUpdatingStatus}
+            onClick={updateStatus}
+            className="px-3 py-2"
+          />
           <button
             onClick={() => setShowEditModal(true)}
             className="p-2 rounded-lg transition-colors"

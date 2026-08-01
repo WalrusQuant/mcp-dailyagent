@@ -40,11 +40,14 @@ export function GoalList() {
   }, [statusTab]);
 
   const handleSave = (goal: Goal) => {
-    if (editingGoal) {
-      setGoals((prev) => prev.map((g) => (g.id === goal.id ? goal : g)));
-    } else {
-      setGoals((prev) => [goal, ...prev]);
-    }
+    setGoals((prev) => {
+      if (goal.status !== statusTab) {
+        return editingGoal ? prev.filter((item) => item.id !== goal.id) : prev;
+      }
+      return editingGoal
+        ? prev.map((item) => (item.id === goal.id ? { ...item, ...goal } : item))
+        : [goal, ...prev];
+    });
     setShowForm(false);
     setEditingGoal(null);
   };
@@ -59,11 +62,23 @@ export function GoalList() {
     }
   };
 
+  const handleStatusChange = (updated: Goal) => {
+    setGoals((prev) =>
+      updated.status === statusTab
+        ? prev.map((goal) => (goal.id === updated.id ? { ...goal, ...updated } : goal))
+        : prev.filter((goal) => goal.id !== updated.id)
+    );
+  };
+
   if (selectedGoalId) {
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-4 md:p-6">
-          <GoalDetail goalId={selectedGoalId} onBack={() => setSelectedGoalId(null)} />
+          <GoalDetail
+            goalId={selectedGoalId}
+            onBack={() => setSelectedGoalId(null)}
+            onStatusChange={handleStatusChange}
+          />
         </div>
       </div>
     );

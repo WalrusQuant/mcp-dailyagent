@@ -6,6 +6,8 @@ import { Goal, Task, Habit, GoalProgressLog } from "@/types/database";
 import { SparklineChart } from "@/components/shared/SparklineChart";
 import { formatDate, getToday } from "@/lib/dates";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
+import { useToast } from "@/lib/toast-context";
+import { CompletionButton } from "@/components/shared/CompletionButton";
 
 interface GoalWithLinked extends Goal {
   tasks: Task[];
@@ -15,6 +17,7 @@ interface GoalWithLinked extends Goal {
 interface GoalDetailProps {
   goalId: string;
   onBack: () => void;
+  onStatusChange?: (goal: Goal) => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -27,11 +30,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: "#94a3b8",
 };
 
-export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
+export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) {
   const [goal, setGoal] = useState<GoalWithLinked | null>(null);
   const [progressLogs, setProgressLogs] = useState<GoalProgressLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +56,42 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const updateStatus = async () => {
+    if (!goal || goal.status === "abandoned") return;
+
+    const nextStatus = goal.status === "completed" ? "active" : "completed";
+    setIsUpdatingStatus(true);
+    try {
+      const response = await fetch(`/api/goals/${goal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          expected_updated_at: goal.updated_at,
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          addToast("Goal changed elsewhere — reloading", "error");
+          await load();
+        } else {
+          addToast(`Failed to ${nextStatus === "completed" ? "complete" : "reopen"} goal`, "error");
+        }
+        return;
+      }
+
+      const updated: Goal = await response.json();
+      setGoal((current) => (current ? { ...current, ...updated } : current));
+      onStatusChange?.(updated);
+      addToast(nextStatus === "completed" ? "Goal completed" : "Goal reopened");
+    } catch {
+      addToast(`Failed to ${nextStatus === "completed" ? "complete" : "reopen"} goal`, "error");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -84,7 +125,7 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
       </button>
 
       <div className="rounded-xl p-5 mb-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-medium uppercase"
             style={{ background: `${categoryColor}20`, color: categoryColor }}
@@ -97,6 +138,15 @@ export function GoalDetail({ goalId, onBack }: GoalDetailProps) {
           >
             {goal.status}
           </span>
+          {goal.status !== "abandoned" && (
+            <CompletionButton
+              entity="goal"
+              isCompleted={goal.status === "completed"}
+              isSaving={isUpdatingStatus}
+              onClick={updateStatus}
+              className="ml-auto px-2.5 py-1.5"
+            />
+          )}
         </div>
 
         <h2 className="text-lg font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{goal.title}</h2>
