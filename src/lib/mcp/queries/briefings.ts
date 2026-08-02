@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { dailyBriefings } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 
 export interface DailyBriefing {
   id: string;
@@ -17,7 +17,7 @@ export async function getTodayBriefing(
   userId: string
 ): Promise<QueryResult<DailyBriefing | null>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
 
     const rows = await db
       .select()
@@ -41,4 +41,3 @@ export async function getTodayBriefing(
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
-

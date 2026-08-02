@@ -1,8 +1,8 @@
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
-import { eq, and, or, lt, asc, isNotNull } from "drizzle-orm";
+import { eq, and, or, lt, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday, addDays, getDayOfWeek } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 
 export interface Task {
   id: string;
@@ -17,6 +17,8 @@ export interface Task {
   done_at: string | null;
   rolled_from: string | null;
   recurrence: unknown;
+  recurrence_series_id: string | null;
+  scheduled_date: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -58,90 +60,12 @@ export function serializeTask(row: typeof tasks.$inferSelect): Task {
     done_at: row.doneAt ? row.doneAt.toISOString() : null,
     rolled_from: row.rolledFrom ?? null,
     recurrence: row.recurrence ?? null,
+    recurrence_series_id: row.recurrenceSeriesId ?? null,
+    scheduled_date: row.scheduledDate ?? null,
     sort_order: row.sortOrder,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
-}
-
-export function getNextOccurrence(taskDate: string, recurrence: { type: string; days?: number[] }): string {
-  switch (recurrence.type) {
-    case "daily":
-      return addDays(taskDate, 1);
-    case "weekdays": {
-      let next = addDays(taskDate, 1);
-      while (getDayOfWeek(next) === 6 || getDayOfWeek(next) === 7) next = addDays(next, 1);
-      return next;
-    }
-    case "weekly": {
-      // Optional ISO weekday list (1=Mon … 7=Sun). Advance to the next matching day.
-      const days = recurrence.days?.filter((d) => d >= 1 && d <= 7);
-      if (days && days.length > 0) {
-        let next = addDays(taskDate, 1);
-        for (let i = 0; i < 14; i++) {
-          if (days.includes(getDayOfWeek(next))) return next;
-          next = addDays(next, 1);
-        }
-      }
-      return addDays(taskDate, 7);
-    }
-    case "monthly": {
-      const [y, m, d] = taskDate.split("-").map(Number);
-      const next = new Date(Date.UTC(y, m, d));
-      return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-    }
-  }
-  return taskDate;
-}
-
-/**
- * After a task is marked done, create the next occurrence if it recurs.
- * Idempotent: skips when the task was already done before this write, when the
- * recurrence type is unknown (getNextOccurrence returns the input date), or
- * when an occurrence of this recurring task already exists on the target date
- * (covers retries and un-done/re-done toggles).
- */
-export async function maybeSpawnNextOccurrence(
-  userId: string,
-  row: typeof tasks.$inferSelect,
-  wasAlreadyDone: boolean
-): Promise<typeof tasks.$inferSelect | null> {
-  if (wasAlreadyDone) return null;
-  if (!row.recurrence || !row.taskDate) return null;
-
-  const recurrence = row.recurrence as { type: string; days?: number[] };
-  const nextDate = getNextOccurrence(row.taskDate, recurrence);
-  if (nextDate <= row.taskDate) return null;
-
-  const existing = await db
-    .select({ id: tasks.id })
-    .from(tasks)
-    .where(
-      and(
-        eq(tasks.userId, userId),
-        eq(tasks.taskDate, nextDate),
-        eq(tasks.title, row.title),
-        isNotNull(tasks.recurrence)
-      )
-    )
-    .limit(1);
-  if (existing.length > 0) return null;
-
-  const [spawned] = await db
-    .insert(tasks)
-    .values({
-      userId,
-      title: row.title,
-      notes: row.notes,
-      priority: row.priority,
-      taskDate: nextDate,
-      spaceId: row.spaceId,
-      goalId: row.goalId,
-      recurrence: row.recurrence,
-      sortOrder: row.sortOrder,
-    })
-    .returning();
-  return spawned ?? null;
 }
 
 export async function getTasksForDate(
@@ -149,7 +73,7 @@ export async function getTasksForDate(
   date?: string
 ): Promise<QueryResult<Task[]>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
     const taskDate = date || today;
 
     if (taskDate === today) {
@@ -186,7 +110,7 @@ export async function getOverdueTasks(
   userId: string
 ): Promise<QueryResult<Task[]>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
 
     const rows = await db
       .select()
@@ -207,7 +131,7 @@ export async function createTask(
   input: CreateTaskInput
 ): Promise<QueryResult<Task>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
 
     const [row] = await db
       .insert(tasks)

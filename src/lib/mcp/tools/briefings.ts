@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -6,6 +6,7 @@ import { dailyBriefings } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
+import { getProfileCapabilities } from "@/lib/profile-capabilities";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -64,8 +65,11 @@ export function registerBriefingTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "briefing:read");
       if (scopeError) return errorResult(scopeError);
+      if (!(await getProfileCapabilities(auth.userId)).briefingEnabled) {
+        return errorResult("Daily briefings are disabled in profile settings");
+      }
 
-      const date = args.date ?? getToday();
+      const date = args.date ?? await getProfileToday(auth.userId);
       const result = await getBriefingForDate(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -91,8 +95,11 @@ export function registerBriefingTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "briefing:write");
       if (scopeError) return errorResult(scopeError);
+      if (!(await getProfileCapabilities(auth.userId)).briefingEnabled) {
+        return errorResult("Daily briefings are disabled in profile settings");
+      }
 
-      const date = args.briefing_date ?? getToday();
+      const date = args.briefing_date ?? await getProfileToday(auth.userId);
       const result = await saveBriefing(auth.userId, date, args.content);
       if (result.error) return errorResult(`Error: ${result.error}`);
 

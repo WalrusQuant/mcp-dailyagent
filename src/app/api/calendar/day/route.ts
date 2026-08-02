@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habitLogs, habits, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, gte, lt, inArray } from "drizzle-orm";
 import type { DayDetail } from "@/components/calendar/types";
 import { getUserId } from "@/lib/auth";
 import { calendarDateSchema } from "@/lib/validation";
+import { resolveDateContext, zonedDayRange } from "@/lib/date-context";
+import { getDayOfWeek } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -15,6 +17,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid date parameter (YYYY-MM-DD)" }, { status: 400 });
   }
   const validDate = parsedDate.data;
+  const dateContext = await resolveDateContext(userId);
+  const focusRange = zonedDayRange(validDate, dateContext.timezone);
 
   try {
     const [taskRows, habitLogRows, journalRow, workoutRows, focusRows, allHabitRows] =
@@ -49,8 +53,8 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(focusSessions.userId, userId),
-              gte(focusSessions.startedAt, new Date(`${validDate}T00:00:00`)),
-              lte(focusSessions.startedAt, new Date(`${validDate}T23:59:59`)),
+              gte(focusSessions.startedAt, focusRange.start),
+              lt(focusSessions.startedAt, focusRange.end),
               inArray(focusSessions.status, ["completed", "active"])
             )
           )
@@ -61,8 +65,7 @@ export async function GET(request: NextRequest) {
           .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
       ]);
 
-    const d = new Date(validDate + "T00:00:00");
-    const dow = d.getDay() === 0 ? 7 : d.getDay();
+    const dow = getDayOfWeek(validDate);
 
     const completedHabitIds = new Set(habitLogRows.map((hl) => hl.habitId));
 

@@ -4,7 +4,7 @@ import { goals, tasks, habits, habitLogs, goalProgressLogs } from "@/lib/db/sche
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeGoal } from "@/lib/mcp/queries/goals";
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { readJsonBody } from "@/lib/api-body";
 import { calendarDateSchema } from "@/lib/validation";
 
@@ -27,10 +27,12 @@ export async function GET(request: NextRequest) {
       .orderBy(asc(goals.sortOrder), desc(goals.createdAt));
 
     // For auto-progress goals, compute progress from linked tasks/habits
-    const autoGoals = goalRows.filter((g) => g.progressMode === "auto");
+    // Terminal goals are historical snapshots. Completion freezes at 100 and
+    // abandonment preserves its last value until explicitly reopened.
+    const autoGoals = goalRows.filter((g) => g.progressMode === "auto" && g.status === "active");
     if (autoGoals.length > 0) {
       const goalIds = autoGoals.map((g) => g.id);
-      const today = getToday();
+      const { today } = await resolveDateContext(userId);
 
       const [taskRows, habitRows, habitLogRows] = await Promise.all([
         db

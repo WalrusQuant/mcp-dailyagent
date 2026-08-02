@@ -2,6 +2,8 @@
 
 import { Pencil, Trash2, CalendarDays, CheckSquare, Target } from "lucide-react";
 import { Goal } from "@/types/database";
+import { calendarDayDifference } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 
 interface GoalItemProps {
   goal: Goal;
@@ -23,10 +25,11 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function GoalItem({ goal, taskCount = 0, habitCount = 0, onEdit, onDelete, onClick }: GoalItemProps) {
+  const { today } = useClientDateContext();
   const categoryColor = CATEGORY_COLORS[goal.category] || CATEGORY_COLORS.other;
 
   const daysLeft = goal.target_date
-    ? Math.ceil((new Date(goal.target_date + "T00:00:00").getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    ? calendarDayDifference(goal.target_date, today)
     : null;
 
   return (
@@ -61,6 +64,7 @@ export function GoalItem({ goal, taskCount = 0, habitCount = 0, onEdit, onDelete
         </div>
         <div className="hidden group-hover:flex items-center gap-0 shrink-0 ml-2">
           <button
+            aria-label={`Edit ${goal.title}`}
             onClick={(e) => { e.stopPropagation(); onEdit(goal); }}
             className="p-1 transition-all"
             style={{ color: "var(--text-muted)" }}
@@ -68,6 +72,7 @@ export function GoalItem({ goal, taskCount = 0, habitCount = 0, onEdit, onDelete
             <Pencil className="w-3.5 h-3.5" />
           </button>
           <button
+            aria-label={`Delete ${goal.title}`}
             onClick={(e) => { e.stopPropagation(); onDelete(goal); }}
             className="p-1 transition-all"
             style={{ color: "var(--text-muted)" }}

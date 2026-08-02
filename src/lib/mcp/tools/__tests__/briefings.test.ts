@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { zonedDate } from "@/lib/zoned-dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -11,13 +11,16 @@ vi.mock("@/lib/db/client", async () => {
 import { registerBriefingTools } from "@/lib/mcp/tools/briefings";
 import { createToolHarness, expectOk, expectError } from "@/test/mcp-harness";
 import { resetDb, TEST_USER_ID, OTHER_USER_ID } from "@/test/db-harness";
+import { getTestDb } from "@/test/db-harness";
+import { profiles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const READ = ["briefing:read"];
 const WRITE = ["briefing:write"];
 const ALL = [...READ, ...WRITE];
 const ctx = { userId: TEST_USER_ID, scopes: ALL };
 
-const TODAY = getToday();
+const TODAY = zonedDate(new Date(), "UTC");
 
 interface Briefing {
   id: string;
@@ -63,6 +66,14 @@ describe("briefing tools — auth & scope", () => {
 });
 
 describe("save_daily_briefing + get_daily_briefing", () => {
+  it("rejects reads and writes when profile briefings are disabled", async () => {
+    const { db } = await getTestDb();
+    await db.update(profiles).set({ briefingEnabled: false }).where(eq(profiles.id, TEST_USER_ID));
+
+    expect(expectError(await h.call("get_daily_briefing", {}, ctx))).toContain("disabled");
+    expect(expectError(await h.call("save_daily_briefing", { content: "hidden" }, ctx))).toContain("disabled");
+  });
+
   it("saves for an explicit date and reflects it in the row", async () => {
     const saved = expectOk<Briefing>(
       await h.call(

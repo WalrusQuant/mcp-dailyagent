@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { getToday, addMonths, formatMonth } from "@/lib/dates";
+import { addMonths, formatMonth } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { CalendarGrid } from "./CalendarGrid";
 import { DayDetailPanel } from "./DayDetailPanel";
 import type { DaySummary, DayDetail } from "./types";
 
 export function CalendarView() {
-  const today = getToday();
+  const { today } = useClientDateContext();
   const [currentMonth, setCurrentMonth] = useState(today.slice(0, 7));
   const [gridDates, setGridDates] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<Record<string, DaySummary>>({});

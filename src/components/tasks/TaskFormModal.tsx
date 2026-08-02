@@ -1,7 +1,7 @@
 "use client";
 
-import { getToday } from "@/lib/dates";
-import { useState, useEffect } from "react";
+import { useClientDateContext } from "@/lib/client-date-context";
+import { useState, useEffect, useId } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
 import { useToast } from "@/lib/toast-context";
@@ -22,22 +22,25 @@ interface TaskFormModalProps {
 const PRIORITY_LABELS: Record<string, string> = { A: "Must Do", B: "Should Do", C: "Nice to Do" };
 
 export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defaultGoalId, defaultTitle, onClose, onSave }: TaskFormModalProps) {
+  const { today } = useClientDateContext();
   const [title, setTitle] = useState(task?.title || defaultTitle || "");
   const [notes, setNotes] = useState(task?.notes || "");
   const [priority, setPriority] = useState(task?.priority || "B1");
-  const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || getToday());
+  const [taskDate, setTaskDate] = useState(task?.task_date || defaultDate || today);
   const [spaceId, setSpaceId] = useState(task?.space_id || defaultSpaceId || "");
   const [goalId, setGoalId] = useState(task?.goal_id || defaultGoalId || "");
   const [recurrenceType, setRecurrenceType] = useState(task?.recurrence?.type || "");
   const [recurrenceDays, setRecurrenceDays] = useState<number[]>(
     () => task?.recurrence?.days ?? []
   );
+  const [recurrenceScope, setRecurrenceScope] = useState<"occurrence" | "future">("occurrence");
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
     () => task?.tags?.map((t) => t.id) ?? []
   );
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+  const id = useId();
 
   const DAY_LABELS = [
     { n: 1, label: "Mon" },
@@ -92,9 +95,17 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
         task_date: taskDate,
         space_id: spaceId || null,
         goal_id: goalId || null,
-        recurrence,
         tag_ids: selectedTagIds,
       };
+
+      const originalRecurrence = task?.recurrence ?? null;
+      const recurrenceChanged = JSON.stringify(recurrence) !== JSON.stringify(originalRecurrence);
+      if (!task || recurrenceChanged) {
+        body.recurrence = recurrence;
+      }
+      if (task && recurrenceChanged) {
+        body.recurrence_scope = recurrenceScope;
+      }
 
       if (task?.updated_at) {
         body.expected_updated_at = task.updated_at;
@@ -134,25 +145,27 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
     <FormModal title={task ? "Edit Task" : "New Task"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-title`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Title *
           </label>
           <input
+            id={`${id}-title`}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
             style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             placeholder="What needs to be done?"
-            autoFocus
+            data-autofocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-notes`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Notes
           </label>
           <textarea
+            id={`${id}-notes`}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
@@ -163,9 +176,9 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <div className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Priority
-          </label>
+          </div>
           <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
             A/B/C is importance; the number is sub-rank within it (1 = highest).
           </p>
@@ -190,6 +203,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
                           color: isSelected ? "var(--bg-base)" : "var(--text-secondary)",
                           border: `1px solid ${isSelected ? "var(--accent-primary)" : "var(--border-default)"}`,
                         }}
+                        aria-pressed={isSelected}
                       >
                         {p}
                       </button>
@@ -203,10 +217,11 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-date`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Date
             </label>
             <input
+              id={`${id}-date`}
               type="date"
               value={taskDate}
               onChange={(e) => setTaskDate(e.target.value)}
@@ -215,10 +230,11 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-recurrence`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Recurrence
             </label>
             <select
+              id={`${id}-recurrence`}
               value={recurrenceType}
               onChange={(e) => {
                 setRecurrenceType(e.target.value);
@@ -238,9 +254,9 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
 
         {recurrenceType === "weekly" && (
           <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            <div className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
               Weekly on
-            </label>
+            </div>
             <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
               Optional. Leave empty to repeat every 7 days from the task date.
             </p>
@@ -262,6 +278,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
                       color: on ? "var(--bg-base)" : "var(--text-secondary)",
                       border: `1px solid ${on ? "var(--accent-primary)" : "var(--border-default)"}`,
                     }}
+                    aria-pressed={on}
                   >
                     {label}
                   </button>
@@ -271,22 +288,65 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
           </div>
         )}
 
+        {task &&
+          JSON.stringify(
+            recurrenceType
+              ? {
+                  type: recurrenceType,
+                  ...(recurrenceType === "weekly" && recurrenceDays.length > 0
+                    ? { days: [...recurrenceDays].sort() }
+                    : {}),
+                }
+              : null
+          ) !== JSON.stringify(task.recurrence ?? null) && (
+            <fieldset>
+              <legend className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Apply recurrence change to
+              </legend>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  <input
+                    type="radio"
+                    name={`${id}-recurrence-scope`}
+                    value="occurrence"
+                    checked={recurrenceScope === "occurrence"}
+                    onChange={() => setRecurrenceScope("occurrence")}
+                  />
+                  This occurrence only
+                </label>
+                <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  <input
+                    type="radio"
+                    name={`${id}-recurrence-scope`}
+                    value="future"
+                    checked={recurrenceScope === "future"}
+                    onChange={() => setRecurrenceScope("future")}
+                  />
+                  This and future occurrences
+                </label>
+              </div>
+            </fieldset>
+          )}
+
         <GoalPicker value={goalId} onChange={setGoalId} />
 
         {spaces && spaces.length > 0 && (
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-space`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Space
             </label>
             <select
+              id={`${id}-space`}
               value={spaceId}
               onChange={(e) => setSpaceId(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
               style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             >
               <option value="">No space</option>
-              {spaces.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              {spaces.filter((s) => s.status !== "completed" || s.id === spaceId).map((s) => (
+                <option key={s.id} value={s.id} disabled={s.status === "completed"}>
+                  {s.name}{s.status === "completed" ? " (completed)" : ""}
+                </option>
               ))}
             </select>
           </div>
@@ -294,9 +354,9 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
 
         {allTags.length > 0 && (
           <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            <div className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
               Tags
-            </label>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {allTags.map((tag) => {
                 const selected = selectedTagIds.includes(tag.id);
@@ -311,6 +371,7 @@ export function TaskFormModal({ task, spaces, defaultDate, defaultSpaceId, defau
                       color: selected ? "var(--bg-base)" : "var(--text-secondary)",
                       border: `1px solid ${selected ? tag.color : "var(--border-default)"}`,
                     }}
+                    aria-pressed={selected}
                   >
                     {tag.name}
                   </button>

@@ -4,7 +4,8 @@ import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } 
 import { eq, and, gte, lte, or, lt } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema } from "./validators";
-import { getToday, startOfWeek, addDays } from "@/lib/dates";
+import { startOfWeek, addDays } from "@/lib/dates";
+import { getProfileToday, resolveDateContext, zonedDateRange, zonedDayRange } from "@/lib/date-context";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -12,6 +13,8 @@ import { getToday, startOfWeek, addDays } from "@/lib/dates";
 
 async function getDaySummary(userId: string, date: string) {
   try {
+    const context = await resolveDateContext(userId);
+    const range = zonedDayRange(date, context.timezone);
     const [tasksRows, habitsRows, journalRows, workoutsRows, focusRows] = await Promise.all([
       db
         .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done, taskDate: tasks.taskDate })
@@ -43,8 +46,8 @@ async function getDaySummary(userId: string, date: string) {
         .where(
           and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
-            lte(focusSessions.startedAt, new Date(`${date}T23:59:59.999`))
+            gte(focusSessions.startedAt, range.start),
+            lt(focusSessions.startedAt, range.end)
           )
         ),
     ]);
@@ -91,6 +94,8 @@ async function getWeekSummary(userId: string, weekStart: string) {
   const weekEnd = addDays(weekStart, 6);
 
   try {
+    const context = await resolveDateContext(userId);
+    const range = zonedDateRange(weekStart, weekEnd, context.timezone);
     const [tasksRows, habitLogsRows, workoutsRows, focusRows, journalRows] = await Promise.all([
       db
         .select({ id: tasks.id, title: tasks.title, priority: tasks.priority, done: tasks.done, taskDate: tasks.taskDate })
@@ -110,8 +115,8 @@ async function getWeekSummary(userId: string, weekStart: string) {
         .where(
           and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00`)),
-            lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59.999`))
+            gte(focusSessions.startedAt, range.start),
+            lt(focusSessions.startedAt, range.end)
           )
         ),
       db
@@ -178,7 +183,7 @@ export function registerCalendarTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "calendar:read");
       if (scopeError) return errorResult(scopeError);
 
-      const date = args.date ?? getToday();
+      const date = args.date ?? await getProfileToday(auth.userId);
       const result = await getDaySummary(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -200,7 +205,7 @@ export function registerCalendarTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "calendar:read");
       if (scopeError) return errorResult(scopeError);
 
-      const weekStart = args.week_start ?? startOfWeek(getToday());
+      const weekStart = args.week_start ?? startOfWeek(await getProfileToday(auth.userId));
       const result = await getWeekSummary(auth.userId, weekStart);
       if (result.error) return errorResult(`Error: ${result.error}`);
 

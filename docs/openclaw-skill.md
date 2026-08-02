@@ -61,8 +61,9 @@ The MCP server is already registered in the user's OpenClaw config as `cadence`.
 ### Workouts
 - `list_workout_logs(date?|from?,to?)` — most recent 20 if no filter
 - `list_workout_templates()`
-- `log_workout(name, log_date, duration_minutes?, notes?, exercises?)` — `exercises` is a JSON string array; each entry: `{name, type?: "strength"|"timed"|"cardio", sets?, reps?, weight?, duration_seconds?, notes?}`
+- `log_workout(name, log_date, template_id?, duration_minutes?, notes?, exercises?)` — `exercises` is a JSON string array; when only `template_id` is supplied, its exercises are copied into a stable log snapshot
 - `create_workout_template(name, description?, exercises?)` — save a reusable routine; `exercises` is a JSON string array, each entry `{name, type?, default_sets?, default_reps?, default_weight?, default_duration_seconds?, notes?}`
+- `update_workout_template(template_id, name?, description?, exercises?)` — `exercises` replaces the complete template list; omit it to preserve exercises
 - `update_workout_log(log_id, name?, log_date?, duration_minutes?, notes?, exercises?)` — only fields passed change; `exercises` replaces the list (`[]` clears), omit to leave it untouched
 - `delete_workout_log(log_id)` — permanent; also removes its logged exercises
 - `delete_workout_template(template_id)` — permanent; past logs created from it are kept
@@ -74,6 +75,9 @@ The MCP server is already registered in the user's OpenClaw config as `cadence`.
 - `complete_focus_session(session_id)`
 - `pause_focus_session(session_id)` — sets status to paused
 - `resume_focus_session(session_id)` — sets a paused session back to active
+- `update_focus_session(session_id, task_id?, duration_minutes?, break_minutes?, started_at?, completed_at?, status?, notes?, expected_updated_at?)` — correct history; null task unlinks it
+- `cancel_focus_session(session_id, expected_updated_at?)` — preserve the session as cancelled
+- `delete_focus_session(session_id, expected_updated_at?)` — permanently remove a session
 
 ### Goals
 - `list_goals(status?)` — status `active|completed|abandoned`

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, type Database } from "@/lib/db/client";
 import { goals, spaces, tags, tasks, workoutTemplates } from "@/lib/db/schema";
 
@@ -54,4 +54,37 @@ export function isOwned(
   userId: string
 ): Promise<boolean> {
   return isOwnedRelationship(db, relationship, id, userId);
+}
+
+/**
+ * Assignment is stricter than ownership: terminal parents remain readable so
+ * historical relationships render, but cannot receive new children.
+ */
+export async function isAssignableRelationship(
+  client: OwnershipClient,
+  relationship: "space" | "goal",
+  id: string,
+  userId: string
+): Promise<boolean> {
+  if (relationship === "space") {
+    return hasRow(
+      client
+        .select({ id: spaces.id })
+        .from(spaces)
+        .where(
+          and(
+            eq(spaces.id, id),
+            eq(spaces.userId, userId),
+            // Paused spaces intentionally remain assignable.
+            inArray(spaces.status, ["active", "paused"])
+          )
+        )
+    );
+  }
+  return hasRow(
+    client
+      .select({ id: goals.id })
+      .from(goals)
+      .where(and(eq(goals.id, id), eq(goals.userId, userId), eq(goals.status, "active")))
+  );
 }

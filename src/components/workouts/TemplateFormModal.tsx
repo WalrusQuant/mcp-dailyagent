@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { FormModal } from "@/components/shared/FormModal";
 import { useToast } from "@/lib/toast-context";
@@ -50,6 +50,7 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
   );
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+  const id = useId();
 
   const addExercise = () => {
     setExercises((prev) => [...prev, emptyExercise()]);
@@ -119,25 +120,27 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
     <FormModal title={template ? "Edit Template" : "New Template"} onClose={onClose} width="560px">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-name`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Name *
           </label>
           <input
+            id={`${id}-name`}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
             style={inputStyle}
             placeholder="e.g., Upper Body Push"
-            autoFocus
+            data-autofocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-description`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Description
           </label>
           <input
+            id={`${id}-description`}
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -147,9 +150,9 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+          <div className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
             Exercises
-          </label>
+          </div>
           <div className="space-y-3">
             {exercises.map((ex, i) => (
               <div
@@ -159,6 +162,7 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
               >
                 <div className="flex items-center gap-2">
                   <input
+                    aria-label={`Exercise ${i + 1} name`}
                     type="text"
                     value={ex.name}
                     onChange={(e) => updateExercise(i, "name", e.target.value)}
@@ -171,6 +175,7 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
                     placeholder="Exercise name"
                   />
                   <select
+                    aria-label={`Exercise ${i + 1} type`}
                     value={ex.exercise_type}
                     onChange={(e) => updateExercise(i, "exercise_type", e.target.value)}
                     className="rounded px-2 py-1.5 text-xs focus:outline-none"
@@ -289,6 +294,7 @@ export function TemplateFormModal({ template, onClose, onSave }: TemplateFormMod
                 </div>
 
                 <input
+                  aria-label={`Exercise ${i + 1} notes`}
                   type="text"
                   value={ex.notes}
                   onChange={(e) => updateExercise(i, "notes", e.target.value)}

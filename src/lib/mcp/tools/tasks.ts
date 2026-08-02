@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -6,25 +6,21 @@ import { tasks } from "@/lib/db/schema";
 import { eq, and, or, lt, asc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, prioritySchema, priorityDescription, recurrenceSchema, uuidSchema } from "./validators";
-import { updateWithVersion } from "@/lib/db/optimistic";
-import { maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
 import { getTagsByTaskIds } from "@/lib/mcp/queries/tags";
-import { createTaskAggregate, TaskMutationError, updateTaskAggregate } from "@/lib/tasks/mutations";
-
-async function getPriorDone(userId: string, taskId: string): Promise<boolean> {
-  const [prior] = await db
-    .select({ done: tasks.done })
-    .from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
-  return prior?.done ?? false;
-}
+import {
+  completeTaskAggregate,
+  createTaskAggregate,
+  TaskMutationError,
+  updateTaskAggregate,
+} from "@/lib/tasks/mutations";
+import { serializeTask } from "@/lib/mcp/queries/tasks";
 
 // ---------------------------------------------------------------------------
 // Query helpers
 // ---------------------------------------------------------------------------
 
 async function getTasksForDate(userId: string, date?: string, spaceId?: string) {
-  const today = getToday();
+  const today = await getProfileToday(userId);
   const taskDate = date ?? today;
 
   const baseConditions =
@@ -90,19 +86,6 @@ function buildTaskPatch(args: {
   return patch;
 }
 
-async function completeTaskLegacy(userId: string, taskId: string) {
-  try {
-    const [row] = await db
-      .update(tasks)
-      .set({ done: true, doneAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
-      .returning();
-    return { data: row ?? null, error: row ? null : "Task not found" };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
 async function deleteTask(userId: string, taskId: string) {
   try {
     const deleted = await db
@@ -140,7 +123,7 @@ export function registerTaskTools(server: McpServer) {
 
       const rows = result.data ?? [];
       const taskTags = await getTagsByTaskIds(rows.map((task) => task.id));
-      return textResult(rows.map((task) => ({ ...task, tags: taskTags.get(task.id) ?? [] })));
+      return textResult(rows.map((task) => ({ ...serializeTask(task), tags: taskTags.get(task.id) ?? [] })));
     }
   );
 
@@ -179,13 +162,13 @@ export function registerTaskTools(server: McpServer) {
           title: args.title,
           notes: args.notes,
           priority: args.priority,
-          taskDate: args.task_date,
+          taskDate: args.task_date ?? await getProfileToday(auth.userId),
           spaceId: args.space_id,
           goalId: args.goal_id,
           recurrence: recurrence === undefined ? null : recurrence,
           tagIds: args.tag_ids,
         });
-        return textResult({ ...result.task, tags: result.tags });
+        return textResult({ ...serializeTask(result.task), tags: result.tags });
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : "Unable to create task");
       }
@@ -211,6 +194,10 @@ export function registerTaskTools(server: McpServer) {
       space_id: uuidSchema.nullable().optional().describe("Space ID, or null to unlink"),
       goal_id: uuidSchema.nullable().optional().describe("Goal ID, or null to unlink"),
       recurrence: taskRecurrenceSchema.describe("Recurrence rule, or null to clear"),
+      recurrence_scope: z
+        .enum(["occurrence", "future"])
+        .optional()
+        .describe("Apply a recurrence change only to this occurrence or to this and future occurrences"),
       tag_ids: z.array(uuidSchema).optional().describe("Replacement tag IDs (from list_tags)"),
     },
     async (args, extra: Extra) => {
@@ -219,8 +206,6 @@ export function registerTaskTools(server: McpServer) {
 
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
-
-      const wasAlreadyDone = args.done === true ? await getPriorDone(auth.userId, args.task_id) : false;
 
       let recurrencePatch: { type: string; days?: number[] } | null | undefined = undefined;
       if (args.recurrence !== undefined) {
@@ -248,11 +233,9 @@ export function registerTaskTools(server: McpServer) {
           patch: buildTaskPatch(patchArgs),
           tagIds: args.tag_ids,
           expectedUpdatedAt: args.expected_updated_at,
+          recurrenceScope: args.recurrence_scope,
         });
-        if (args.done === true) {
-          await maybeSpawnNextOccurrence(auth.userId, result.task, wasAlreadyDone);
-        }
-        return textResult({ ...result.task, tags: result.tags });
+        return textResult({ ...serializeTask(result.task), tags: result.tags });
       } catch (err) {
         if (err instanceof TaskMutationError) {
           if (err.code === "conflict" && err.current) return conflictResult(err.current);
@@ -282,34 +265,20 @@ export function registerTaskTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "tasks:write");
       if (scopeError) return errorResult(scopeError);
 
-      const wasAlreadyDone = await getPriorDone(auth.userId, args.task_id);
-      let row: typeof tasks.$inferSelect | null = null;
-
-      if (args.expected_updated_at) {
-        const result = await updateWithVersion<typeof tasks.$inferSelect>({
-          table: tasks,
-          id: args.task_id,
-          userId: auth.userId,
-          expectedUpdatedAt: args.expected_updated_at,
-          patch: { done: true, doneAt: new Date() },
-        });
-        if (!result.ok) {
-          if (result.reason === "not_found") return errorResult("Task not found");
-          if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-          return conflictResult(result.current);
+      try {
+        const result = await completeTaskAggregate(
+          auth.userId,
+          args.task_id,
+          args.expected_updated_at
+        );
+        return textResult({ ...serializeTask(result.task), tags: result.tags });
+      } catch (err) {
+        if (err instanceof TaskMutationError) {
+          if (err.code === "conflict" && err.current) return conflictResult(err.current);
+          return errorResult(err.message);
         }
-        row = result.row;
-      } else {
-        const result = await completeTaskLegacy(auth.userId, args.task_id);
-        if (result.error) return errorResult(`Error: ${result.error}`);
-        row = result.data;
+        return errorResult(err instanceof Error ? err.message : "Unable to complete task");
       }
-
-      if (row) {
-        await maybeSpawnNextOccurrence(auth.userId, row, wasAlreadyDone);
-      }
-
-      return textResult(row);
     }
   );
 

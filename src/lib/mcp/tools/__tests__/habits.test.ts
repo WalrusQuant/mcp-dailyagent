@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { zonedDate } from "@/lib/zoned-dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -16,7 +16,7 @@ import { goals } from "@/lib/db/schema";
 const SCOPES = ["habits:read", "habits:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 
-const TODAY = getToday();
+const TODAY = zonedDate(new Date(), "UTC");
 
 interface HabitRow {
   id: string;

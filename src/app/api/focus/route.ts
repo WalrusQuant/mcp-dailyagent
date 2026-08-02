@@ -1,24 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lt, lte, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeSession } from "@/lib/mcp/queries/focus";
 import { readJsonBody } from "@/lib/api-body";
 import { isOwned } from "@/lib/db/ownership";
 import { isoTimestampSchema, isOrderedTimestampRange } from "@/lib/validation";
 import { uuidSchema } from "@/lib/validation";
+import { calendarDateSchema } from "@/lib/validation";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext, zonedDateRange, zonedDayRange } from "@/lib/date-context";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
 
   const { searchParams } = new URL(request.url);
 
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 7);
-
+  const dateParam = searchParams.get("date");
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
+  if (dateParam !== null && !calendarDateSchema.safeParse(dateParam).success) {
+    return NextResponse.json({ error: "Invalid date parameter (YYYY-MM-DD)" }, { status: 400 });
+  }
+  if (dateParam !== null && (fromParam !== null || toParam !== null)) {
+    return NextResponse.json({ error: "Use either date or timestamp bounds" }, { status: 400 });
+  }
   if (
     (fromParam !== null && !isoTimestampSchema.safeParse(fromParam).success) ||
     (toParam !== null && !isoTimestampSchema.safeParse(toParam).success) ||
@@ -27,8 +34,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid timestamp or timestamp range" }, { status: 400 });
   }
 
-  const from = fromParam ?? defaultFrom.toISOString();
-  const to = toParam ?? new Date().toISOString();
+  const dateContext = await resolveDateContext(userId);
+  const calendarRange = dateParam
+    ? zonedDayRange(dateParam, dateContext.timezone)
+    : zonedDateRange(addDays(dateContext.today, -6), dateContext.today, dateContext.timezone);
+  const from = fromParam ? new Date(fromParam) : calendarRange.start;
+  const to = toParam ? new Date(toParam) : calendarRange.end;
 
   try {
     const rows = await db
@@ -37,8 +48,8 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(focusSessions.userId, userId),
-          gte(focusSessions.startedAt, new Date(from)),
-          lte(focusSessions.startedAt, new Date(to))
+          gte(focusSessions.startedAt, from),
+          toParam ? lte(focusSessions.startedAt, to) : lt(focusSessions.startedAt, to)
         )
       )
       .orderBy(desc(focusSessions.startedAt));

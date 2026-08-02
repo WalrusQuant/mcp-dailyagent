@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, CheckSquare, Target, CalendarDays, Plus } from "lucide-react";
 import { Goal, Task, Habit, GoalProgressLog } from "@/types/database";
 import { SparklineChart } from "@/components/shared/SparklineChart";
-import { formatDate, getToday } from "@/lib/dates";
+import { formatDate } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { useToast } from "@/lib/toast-context";
 import { CompletionButton } from "@/components/shared/CompletionButton";
@@ -32,6 +33,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) {
+  const { today } = useClientDateContext();
   const [goal, setGoal] = useState<GoalWithLinked | null>(null);
   const [progressLogs, setProgressLogs] = useState<GoalProgressLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +69,13 @@ export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) 
     if (!goal || goal.status === "abandoned") return;
 
     const nextStatus = goal.status === "completed" ? "active" : "completed";
+    if (nextStatus === "completed") {
+      const activeTasks = goal.tasks.filter((task) => !task.done).length;
+      const activeHabits = goal.habits.filter((habit) => !habit.archived).length;
+      if ((activeTasks > 0 || activeHabits > 0) && !confirm(
+        `Complete this goal with ${activeTasks} active task${activeTasks === 1 ? "" : "s"} and ${activeHabits} active habit${activeHabits === 1 ? "" : "s"}? Existing links will be kept, but new work cannot be assigned.`
+      )) return;
+    }
     setIsUpdatingStatus(true);
     try {
       const response = await fetch(`/api/goals/${goal.id}`, {
@@ -257,7 +266,7 @@ export function GoalDetail({ goalId, onBack, onStatusChange }: GoalDetailProps) 
       {showTaskForm && (
         <TaskFormModal
           defaultGoalId={goal.id}
-          defaultDate={getToday()}
+          defaultDate={today}
           onClose={() => setShowTaskForm(false)}
           onSave={() => {
             setShowTaskForm(false);

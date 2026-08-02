@@ -1,4 +1,5 @@
-import { getToday, addDays, startOfWeek } from "@/lib/dates";
+import { addDays, startOfWeek } from "@/lib/dates";
+import { getProfileToday, resolveDateContext, zonedDateRange, zonedDayRange } from "@/lib/date-context";
 import { getApplicableDays } from "@/lib/habit-stats";
 import { z } from "zod";
 import { calendarDateSchema, isOrderedDateRange } from "@/lib/validation";
@@ -49,7 +50,7 @@ function insufficientScopeMsg(err: string) {
 // ---------------------------------------------------------------------------
 
 async function fetchTodayTasks(userId: string) {
-  const today = getToday();
+  const today = await getProfileToday(userId);
   const rows = await db
     .select({
       id: tasksTable.id,
@@ -90,7 +91,7 @@ async function fetchActiveGoals(userId: string) {
 }
 
 async function fetchTodayHabits(userId: string) {
-  const today = getToday();
+  const today = await getProfileToday(userId);
   const habits = await db
     .select({ id: habitsTable.id, name: habitsTable.name, description: habitsTable.description })
     .from(habitsTable)
@@ -130,7 +131,7 @@ async function fetchAllHabitsWithStats(userId: string) {
   if (habits.length === 0) return [];
 
   // 30-day window inclusive of today.
-  const today = getToday();
+  const today = await getProfileToday(userId);
   const fromDate = addDays(today, -29);
 
   const logs = await db
@@ -168,7 +169,9 @@ async function fetchAllHabitsWithStats(userId: string) {
 }
 
 async function fetchTodayFocusStats(userId: string) {
-  const today = getToday();
+  const context = await resolveDateContext(userId);
+  const today = context.today;
+  const range = zonedDayRange(today, context.timezone);
   const rows = await db
     .select({
       id: focusSessions.id,
@@ -179,8 +182,8 @@ async function fetchTodayFocusStats(userId: string) {
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${today}T00:00:00`)),
-        lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999`))
+        gte(focusSessions.startedAt, range.start),
+        lt(focusSessions.startedAt, range.end)
       )
     );
 
@@ -299,6 +302,8 @@ async function fetchSpaceTasks(userId: string, spaceId?: string) {
 }
 
 async function fetchFocusSessionsForRange(userId: string, from: string, to: string) {
+  const context = await resolveDateContext(userId);
+  const range = zonedDateRange(from, to, context.timezone);
   const rows = await db
     .select({
       id: focusSessions.id,
@@ -310,8 +315,8 @@ async function fetchFocusSessionsForRange(userId: string, from: string, to: stri
     .where(
       and(
         eq(focusSessions.userId, userId),
-        gte(focusSessions.startedAt, new Date(`${from}T00:00:00`)),
-        lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
+        gte(focusSessions.startedAt, range.start),
+        lt(focusSessions.startedAt, range.end)
       )
     );
   return rows;
@@ -420,7 +425,7 @@ export function registerPrompts(server: McpServer) {
         fetchActiveGoals(userId),
       ]);
 
-      const today = getToday();
+      const today = await getProfileToday(userId);
 
       const systemText = `You are a productivity coach helping plan a focused, intentional day. Use the Franklin Covey A/B/C priority system to guide task ordering. A = must do today, B = should do, C = nice to have.`;
 
@@ -469,7 +474,7 @@ If the data above is empty, do not invent tasks, habits, or goals — say there 
         fetchActiveGoals(userId),
       ]);
 
-      const today = getToday();
+      const today = await getProfileToday(userId);
       const pendingTasks = tasks.filter((t) => !t.done);
       const aCount = pendingTasks.filter((t) => t.priority.startsWith("A")).length;
 
@@ -516,7 +521,7 @@ After composing the briefing, save it so it shows on the dashboard: call the \`s
         fetchTodayFocusStats(userId),
       ]);
 
-      const today = getToday();
+      const today = await getProfileToday(userId);
       const completed = tasks.filter((t) => t.done);
       const incomplete = tasks.filter((t) => !t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
@@ -699,7 +704,7 @@ For each goal, please:
       if (!userId) return NOT_AUTHENTICATED_MSG;
       if (scopeError) return insufficientScopeMsg(scopeError);
 
-      const thisWeekStart = startOfWeek(getToday());
+      const thisWeekStart = startOfWeek(await getProfileToday(userId));
       const thisWeekEnd = addDays(thisWeekStart, 6);
       const lastWeekStart = addDays(thisWeekStart, -7);
       const lastWeekEnd = addDays(lastWeekStart, 6);
@@ -762,7 +767,7 @@ Please:
       if (!userId) return NOT_AUTHENTICATED_MSG;
       if (scopeError) return insufficientScopeMsg(scopeError);
 
-      const weekStart = args.week_start || startOfWeek(getToday());
+      const weekStart = args.week_start || startOfWeek(await getProfileToday(userId));
       const weekEnd = addDays(weekStart, 6);
 
       const [tasks, habitData, focusRows, journal] = await Promise.all([
@@ -832,7 +837,7 @@ After writing the review, save it so it shows on the dashboard: call the \`save_
         fetchTodayHabits(userId),
       ]);
 
-      const today = getToday();
+      const today = await getProfileToday(userId);
       const completedToday = tasks.filter((t) => t.done);
       const habitsCompleted = habits.filter((h) => h.completed_today);
 
@@ -882,7 +887,7 @@ Follow with 2-3 shorter follow-up questions if they want to go deeper.`;
         fetchWorkoutTemplates(userId),
       ]);
 
-      const today = getToday();
+      const today = await getProfileToday(userId);
 
       const userText = `Suggest the best workout for me today (${today}).
 
@@ -1018,7 +1023,7 @@ Please:
         fetchAllHabitsWithStats(userId),
       ]);
 
-      const nextWeekStart = addDays(startOfWeek(getToday()), 7);
+      const nextWeekStart = addDays(startOfWeek(await getProfileToday(userId)), 7);
       const nextWeekEnd = addDays(nextWeekStart, 6);
 
       const pendingTasks = tasks.filter((t) => !t.done);

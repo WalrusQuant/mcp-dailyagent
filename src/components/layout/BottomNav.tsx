@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import {
   Search,
 } from "lucide-react";
 import { useCommandPalette } from "@/lib/command-palette-context";
+import { useAccessibleDialog } from "@/hooks/useAccessibleDialog";
 
 const TABS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Home", match: "/dashboard" },
@@ -43,6 +44,8 @@ export function BottomNav() {
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const [showMore, setShowMore] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const closeMore = useCallback(() => setShowMore(false), []);
+  const { dialogRef, titleId } = useAccessibleDialog(closeMore, showMore);
 
   // Detect keyboard open via visualViewport API
   useEffect(() => {
@@ -68,6 +71,11 @@ export function BottomNav() {
         <div className="absolute inset-0 z-[70] md:hidden" onClick={() => setShowMore(false)}>
           <div className="absolute inset-0" style={{ background: "rgba(15, 17, 21, 0.55)", backdropFilter: "blur(2px)" }} />
           <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
             className="absolute left-0 right-0 rounded-t-[var(--radius-2xl)] p-4 pb-2"
             style={{
               bottom: "calc(60px + env(safe-area-inset-bottom, 0px))",
@@ -84,13 +92,14 @@ export function BottomNav() {
               aria-hidden
             />
             <div className="flex items-center justify-between mb-3 px-1">
-              <span className="heading-sm">More</span>
+              <span id={titleId} className="heading-sm">More</span>
               <button onClick={() => setShowMore(false)} className="btn-ghost p-1.5" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
+                data-autofocus
                 onClick={() => { setShowMore(false); toggleCommandPalette(); }}
                 className="flex flex-col items-center gap-1.5 py-3.5 rounded-[var(--radius-lg)] transition-colors"
                 style={{ color: "var(--text-secondary)" }}
@@ -154,6 +163,8 @@ export function BottomNav() {
           })}
           <button
             onClick={() => setShowMore(!showMore)}
+            aria-expanded={showMore}
+            aria-haspopup="dialog"
             className="flex flex-col items-center gap-0.5 py-1.5 px-5 min-w-[72px] rounded-[var(--radius-lg)] transition-colors"
             style={{
               color: isMoreActive || showMore ? "var(--accent-primary)" : "var(--text-muted)",

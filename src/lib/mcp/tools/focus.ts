@@ -1,14 +1,15 @@
-import { getToday } from "@/lib/dates";
+import { resolveDateContext, zonedDateRange, zonedDayRange, zonedDateTimeToInstant } from "@/lib/date-context";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lt, desc } from "drizzle-orm";
 import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHENTICATED, Extra } from "./helpers";
 import { dateSchema, uuidSchema } from "./validators";
-import { updateWithVersion } from "@/lib/db/optimistic";
 import { isOwned } from "@/lib/db/ownership";
 import { isOrderedDateRange } from "@/lib/validation";
+import { deleteFocusSession, mutateFocusSession, FocusPatch } from "@/lib/focus/mutations";
+import { serializeSession } from "@/lib/mcp/queries/focus";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -16,22 +17,25 @@ import { isOrderedDateRange } from "@/lib/validation";
 
 async function getFocusSessions(userId: string, from?: string, to?: string) {
   try {
+    const context = await resolveDateContext(userId);
+    const start = from ? zonedDateTimeToInstant(from, context.timezone) : null;
+    const exclusiveEnd = to ? zonedDateRange(to, to, context.timezone).end : null;
     const conditions =
       from && to
         ? and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${from}T00:00:00`)),
-            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
+            gte(focusSessions.startedAt, start!),
+            lt(focusSessions.startedAt, exclusiveEnd!)
           )
         : from
         ? and(
             eq(focusSessions.userId, userId),
-            gte(focusSessions.startedAt, new Date(`${from}T00:00:00`))
+            gte(focusSessions.startedAt, start!)
           )
         : to
         ? and(
             eq(focusSessions.userId, userId),
-            lte(focusSessions.startedAt, new Date(`${to}T23:59:59.999`))
+            lt(focusSessions.startedAt, exclusiveEnd!)
           )
         : eq(focusSessions.userId, userId);
 
@@ -50,7 +54,9 @@ async function getFocusSessions(userId: string, from?: string, to?: string) {
 }
 
 async function getTodayFocusStats(userId: string) {
-  const today = getToday();
+  const context = await resolveDateContext(userId);
+  const today = context.today;
+  const range = zonedDayRange(today, context.timezone);
 
   try {
     const sessions = await db
@@ -59,8 +65,8 @@ async function getTodayFocusStats(userId: string) {
       .where(
         and(
           eq(focusSessions.userId, userId),
-          gte(focusSessions.startedAt, new Date(`${today}T00:00:00`)),
-          lte(focusSessions.startedAt, new Date(`${today}T23:59:59.999`))
+          gte(focusSessions.startedAt, range.start),
+          lt(focusSessions.startedAt, range.end)
         )
       );
 
@@ -109,41 +115,19 @@ async function startFocusSession(
   }
 }
 
-async function completeFocusSessionLegacy(userId: string, sessionId: string) {
-  try {
-    const [row] = await db
-      .update(focusSessions)
-      .set({ completedAt: new Date(), status: "completed", updatedAt: new Date() })
-      .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
-      .returning();
-    return { data: row ?? null, error: row ? null : "Session not found" };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
-async function setFocusSessionStatusLegacy(
-  userId: string,
-  sessionId: string,
-  status: "active" | "paused"
-) {
-  try {
-    const [row] = await db
-      .update(focusSessions)
-      .set({ status, updatedAt: new Date() })
-      .where(and(eq(focusSessions.id, sessionId), eq(focusSessions.userId, userId)))
-      .returning();
-    return { data: row ?? null, error: row ? null : "Session not found" };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
 export function registerFocusTools(server: McpServer) {
+  async function applyMutation(userId: string, sessionId: string, patch: FocusPatch, token?: string) {
+    const result = await mutateFocusSession(userId, sessionId, patch, token);
+    if (result.ok) return textResult(serializeSession(result.row));
+    if (result.error.reason === "not_found") return errorResult("Session not found");
+    if (result.error.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+    if (result.error.reason === "invalid_task") return errorResult("task_id must reference one of your tasks");
+    return conflictResult(serializeSession(result.error.current));
+  }
   // --- get_focus_sessions (READ) ---
   server.tool(
     "get_focus_sessions",
@@ -164,7 +148,7 @@ export function registerFocusTools(server: McpServer) {
       const result = await getFocusSessions(auth.userId, args.from, args.to);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
-      return textResult(result.data);
+      return textResult(result.data?.map(serializeSession));
     }
   );
 
@@ -183,7 +167,10 @@ export function registerFocusTools(server: McpServer) {
       const result = await getTodayFocusStats(auth.userId);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
-      return textResult(result.data);
+      return textResult(result.data ? {
+        ...result.data,
+        sessions: result.data.sessions.map(serializeSession),
+      } : result.data);
     }
   );
 
@@ -210,7 +197,7 @@ export function registerFocusTools(server: McpServer) {
       const result = await startFocusSession(auth.userId, args);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
-      return textResult(result.data);
+      return textResult(result.data ? serializeSession(result.data) : result.data);
     }
   );
 
@@ -233,24 +220,9 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (args.expected_updated_at) {
-        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
-          table: focusSessions,
-          id: args.session_id,
-          userId: auth.userId,
-          expectedUpdatedAt: args.expected_updated_at,
-          patch: { status: "completed", completedAt: new Date() },
-        });
-        if (result.ok) return textResult(result.row);
-        if (result.reason === "not_found") return errorResult("Session not found");
-        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-        return conflictResult(result.current);
-      }
-
-      const result = await completeFocusSessionLegacy(auth.userId, args.session_id);
-      if (result.error) return errorResult(`Error: ${result.error}`);
-
-      return textResult(result.data);
+      return applyMutation(auth.userId, args.session_id, {
+        status: "completed", completedAt: new Date(),
+      }, args.expected_updated_at);
     }
   );
 
@@ -273,24 +245,7 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (args.expected_updated_at) {
-        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
-          table: focusSessions,
-          id: args.session_id,
-          userId: auth.userId,
-          expectedUpdatedAt: args.expected_updated_at,
-          patch: { status: "paused" },
-        });
-        if (result.ok) return textResult(result.row);
-        if (result.reason === "not_found") return errorResult("Session not found");
-        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-        return conflictResult(result.current);
-      }
-
-      const result = await setFocusSessionStatusLegacy(auth.userId, args.session_id, "paused");
-      if (result.error) return errorResult(`Error: ${result.error}`);
-
-      return textResult(result.data);
+      return applyMutation(auth.userId, args.session_id, { status: "paused" }, args.expected_updated_at);
     }
   );
 
@@ -313,24 +268,78 @@ export function registerFocusTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "focus:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (args.expected_updated_at) {
-        const result = await updateWithVersion<typeof focusSessions.$inferSelect>({
-          table: focusSessions,
-          id: args.session_id,
-          userId: auth.userId,
-          expectedUpdatedAt: args.expected_updated_at,
-          patch: { status: "active" },
-        });
-        if (result.ok) return textResult(result.row);
-        if (result.reason === "not_found") return errorResult("Session not found");
-        if (result.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
-        return conflictResult(result.current);
-      }
+      return applyMutation(auth.userId, args.session_id, { status: "active" }, args.expected_updated_at);
+    }
+  );
 
-      const result = await setFocusSessionStatusLegacy(auth.userId, args.session_id, "active");
-      if (result.error) return errorResult(`Error: ${result.error}`);
+  server.tool(
+    "update_focus_session",
+    "Correct a focus session's task, timing, duration, break, notes, or status. Only supplied fields change.",
+    {
+      session_id: uuidSchema.describe("Focus session ID from get_focus_sessions"),
+      task_id: uuidSchema.nullable().optional().describe("Owned task ID, or null to unlink"),
+      duration_minutes: z.number().int().min(1).max(480).optional(),
+      break_minutes: z.number().int().min(0).max(120).optional(),
+      started_at: z.string().datetime().optional(),
+      completed_at: z.string().datetime().nullable().optional(),
+      status: z.enum(["active", "paused", "completed", "cancelled"]).optional(),
+      notes: z.string().nullable().optional(),
+      expected_updated_at: z.string().datetime().optional(),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+      const scopeError = checkScope(auth.scopes, "focus:write");
+      if (scopeError) return errorResult(scopeError);
+      const patch: FocusPatch = {};
+      if (args.task_id !== undefined) patch.taskId = args.task_id;
+      if (args.duration_minutes !== undefined) patch.durationMinutes = args.duration_minutes;
+      if (args.break_minutes !== undefined) patch.breakMinutes = args.break_minutes;
+      if (args.started_at !== undefined) patch.startedAt = new Date(args.started_at);
+      if (args.completed_at !== undefined) patch.completedAt = args.completed_at ? new Date(args.completed_at) : null;
+      if (args.status !== undefined) patch.status = args.status;
+      if (args.notes !== undefined) patch.notes = args.notes;
+      if (!Object.keys(patch).length) return errorResult("No valid fields to update");
+      if (patch.status === "completed" && args.completed_at === undefined) patch.completedAt = new Date();
+      if (patch.status === "active" && args.completed_at === undefined) patch.completedAt = null;
+      return applyMutation(auth.userId, args.session_id, patch, args.expected_updated_at);
+    }
+  );
 
-      return textResult(result.data);
+  server.tool(
+    "cancel_focus_session",
+    "Cancel a focus session while preserving it in history.",
+    {
+      session_id: uuidSchema.describe("Focus session ID from get_focus_sessions"),
+      expected_updated_at: z.string().datetime().optional(),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+      const scopeError = checkScope(auth.scopes, "focus:write");
+      if (scopeError) return errorResult(scopeError);
+      return applyMutation(auth.userId, args.session_id, { status: "cancelled", completedAt: null }, args.expected_updated_at);
+    }
+  );
+
+  server.tool(
+    "delete_focus_session",
+    "Permanently delete a focus session.",
+    {
+      session_id: uuidSchema.describe("Focus session ID from get_focus_sessions"),
+      expected_updated_at: z.string().datetime().optional(),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+      const scopeError = checkScope(auth.scopes, "focus:write");
+      if (scopeError) return errorResult(scopeError);
+      const result = await deleteFocusSession(auth.userId, args.session_id, args.expected_updated_at);
+      if (result.ok) return textResult({ success: true });
+      if (result.error.reason === "not_found") return errorResult("Session not found");
+      if (result.error.reason === "invalid_token") return errorResult("Invalid expected_updated_at");
+      if (result.error.reason === "conflict") return conflictResult(serializeSession(result.error.current));
+      return errorResult("Unable to delete session");
     }
   );
 }

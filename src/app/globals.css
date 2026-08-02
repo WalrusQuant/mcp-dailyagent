@@ -24,6 +24,11 @@ body {
   background: var(--bg-base);
 }
 
+/* User and agent-authored content may contain URLs or identifiers without spaces. */
+.prose, .break-long-content {
+  overflow-wrap: anywhere;
+}
+
 /* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -694,7 +699,10 @@ mark {
   .btn-ghost,
   .nav-item,
   .nav-item-icon,
-  .progress-fill {
+  .progress-fill,
+  .transition-all,
+  .transition-colors,
+  .transition-opacity {
     transition: none !important;
   }
   .card-interactive:hover {
@@ -702,5 +710,9 @@ mark {
   }
   .skeleton {
     animation: none;
+  }
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
   }
 }

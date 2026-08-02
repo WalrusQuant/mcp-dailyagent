@@ -1,8 +1,9 @@
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions, goals } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
+import { eq, and, gte, lt, lte, desc, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getProfileToday, resolveDateContext, zonedDayRange } from "@/lib/date-context";
+import { addDays } from "@/lib/dates";
 
 export interface DashboardTask {
   id: string;
@@ -53,8 +54,10 @@ export async function getDashboardSnapshot(
   userId: string
 ): Promise<QueryResult<DashboardSnapshot>> {
   try {
-    const today = getToday();
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const today = await getProfileToday(userId);
+    const context = await resolveDateContext(userId);
+    const todayRange = zonedDayRange(today, context.timezone);
+    const weekAgo = addDays(today, -7);
 
     const [
       tasksAllRows,
@@ -119,7 +122,8 @@ export async function getDashboardSnapshot(
           and(
             eq(focusSessions.userId, userId),
             eq(focusSessions.status, "completed"),
-            gte(focusSessions.startedAt, new Date(`${today}T00:00:00`))
+            gte(focusSessions.startedAt, todayRange.start),
+            lt(focusSessions.startedAt, todayRange.end)
           )
         ),
       db

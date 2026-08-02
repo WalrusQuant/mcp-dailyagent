@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habitLogs, focusSessions, workoutLogs } from "@/lib/db/schema";
-import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, lt, sql, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { endOfWeek } from "@/lib/dates";
 import { calendarDateSchema } from "@/lib/validation";
+import { resolveDateContext, zonedDateRange } from "@/lib/date-context";
 
 /**
  * Week-scoped aggregates for the Weekly Review page.
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
   // (client already sends Monday). Bound is inclusive Mon–Sun.
   const weekStart = parsedWeek.data;
   const weekEnd = endOfWeek(weekStart);
+  const dateContext = await resolveDateContext(userId);
+  const focusRange = zonedDateRange(weekStart, weekEnd, dateContext.timezone);
 
   try {
     const [taskRows, habitCountRows, focusRows, workoutRows] = await Promise.all([
@@ -64,8 +67,8 @@ export async function GET(request: NextRequest) {
           and(
             eq(focusSessions.userId, userId),
             inArray(focusSessions.status, ["completed", "active", "paused"]),
-            gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00.000Z`)),
-            lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59.999Z`))
+            gte(focusSessions.startedAt, focusRange.start),
+            lt(focusSessions.startedAt, focusRange.end)
           )
         ),
       db

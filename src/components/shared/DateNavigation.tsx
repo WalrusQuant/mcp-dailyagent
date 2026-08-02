@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { formatRelativeDate, addDays, isToday, startOfWeek, endOfWeek, formatDate, getToday } from "@/lib/dates";
+import { formatRelativeDate, addDays, isToday, startOfWeek, endOfWeek, formatDate } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 
 interface DateNavigationProps {
   date: string;
@@ -12,6 +13,7 @@ interface DateNavigationProps {
 }
 
 export function DateNavigation({ date, onDateChange, mode = "day", maxDate }: DateNavigationProps) {
+  const { today } = useClientDateContext();
   const nextDisabled = maxDate
     ? mode === "week"
       ? startOfWeek(date) >= startOfWeek(maxDate)
@@ -58,7 +60,7 @@ export function DateNavigation({ date, onDateChange, mode = "day", maxDate }: Da
       </button>
       {!isToday(date) && mode === "day" && (
         <button
-          onClick={() => onDateChange(getToday())}
+          onClick={() => onDateChange(today)}
           className="text-xs px-2 py-1 rounded-lg transition-colors"
           style={{ color: "var(--accent-primary)", background: "var(--bg-elevated)" }}
         >

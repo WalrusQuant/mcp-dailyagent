@@ -1,6 +1,6 @@
 # MCP reference
 
-46 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
+55 tools across 11 domains, plus 13 prompt templates and a handful of read-only resources. All served from `POST /api/mcp` over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports), stateless, authenticated by `Authorization: Bearer <MCP_API_KEY>`.
 
 There's also a companion `GET /api/mcp/health` — **unauthenticated**, returns `{ ok, transport, tools, prompts, resources, version }`. Use it to confirm the server is up and speaking the right protocol before troubleshooting auth, and to discover how many tools the running build exposes.
 
@@ -182,6 +182,7 @@ Log a completed workout. The `exercises` argument is a **JSON string** containin
 |---|---|---|
 | `name` | string | yes |
 | `log_date` | date | yes |
+| `template_id` | UUID | no |
 | `duration_minutes` | int | no |
 | `notes` | string | no |
 | `exercises` | JSON string | no |
@@ -201,6 +202,8 @@ Each exercise entry:
 ```
 
 `type` must be one of `strength`, `timed`, `cardio`. `name` is required on each entry.
+
+When `template_id` is supplied and `exercises` is omitted, Cadence copies the template exercises into the log. The copy is a historical snapshot and is not changed by later template edits.
 
 ### `create_workout_template`
 
@@ -239,6 +242,10 @@ Update a logged workout. Only the fields you pass change. Passing `exercises` **
 | `exercises` | JSON string | no |
 
 The `exercises` entry shape matches `log_workout` (with `sets`/`reps`/`weight`/`duration_seconds`).
+
+### `update_workout_template`
+
+Update an owned template. Arguments: `template_id` (required), plus optional `name`, nullable `description`, and `exercises`. Supplying `exercises` replaces the full list; omit it to preserve the existing exercises.
 
 ### `delete_workout_log`
 
@@ -281,6 +288,18 @@ Pause an in-progress session (sets status to `paused`). Resume later with `resum
 ### `resume_focus_session`
 
 Resume a paused session (sets status back to `active`). Argument: `session_id` (UUID).
+
+### `update_focus_session`
+
+Correct an owned session's task, duration, break, timestamps, status, or notes. Pass `expected_updated_at` from a prior read to reject stale changes.
+
+### `cancel_focus_session`
+
+Set a session to `cancelled` while preserving it in history. Accepts `session_id` and optional `expected_updated_at`.
+
+### `delete_focus_session`
+
+Permanently delete a session. Accepts `session_id` and optional `expected_updated_at`.
 
 ---
 

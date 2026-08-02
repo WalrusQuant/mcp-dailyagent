@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getDaySummary, getWeekSummary } from "@/lib/mcp/queries/calendar";
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
 export function registerCalendarResources(server: McpServer) {
@@ -21,7 +21,7 @@ export function registerCalendarResources(server: McpServer) {
         };
       }
 
-      const result = await getDaySummary(auth.userId, getToday());
+      const result = await getDaySummary(auth.userId, await getProfileToday(auth.userId));
       if (result.error) throw new Error(result.error);
 
       return {

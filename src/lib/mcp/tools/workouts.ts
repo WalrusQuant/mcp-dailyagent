@@ -7,6 +7,8 @@ import { getAuth, checkScope, textResult, errorResult, NOT_AUTHENTICATED, Extra 
 import { dateSchema, exerciseTypeSchema, uuidSchema } from "./validators";
 import { isOwnedRelationship } from "@/lib/db/ownership";
 import { isOrderedDateRange } from "@/lib/validation";
+import { updateWorkoutTemplate } from "@/lib/workouts/templates";
+import { serializeLog, serializeTemplate } from "@/lib/mcp/queries/workouts";
 
 const exerciseEntrySchema = z.object({
   name: z.string().min(1, "Exercise name is required"),
@@ -89,10 +91,7 @@ async function getWorkoutLogs(userId: string, date?: string, from?: string, to?:
       exercisesByLog.get(ex.logId)!.push(ex);
     }
 
-    const data = logs.map((log) => ({
-      ...log,
-      workout_log_exercises: exercisesByLog.get(log.id) ?? [],
-    }));
+    const data = logs.map((log) => serializeLog(log, exercisesByLog.get(log.id) ?? []));
 
     return { data, error: null };
   } catch (err) {
@@ -122,10 +121,7 @@ async function getWorkoutTemplates(userId: string) {
       exercisesByTemplate.get(ex.templateId)!.push(ex);
     }
 
-    const data = templates.map((t) => ({
-      ...t,
-      workout_exercises: exercisesByTemplate.get(t.id) ?? [],
-    }));
+    const data = templates.map((t) => serializeTemplate(t, exercisesByTemplate.get(t.id) ?? []));
 
     return { data, error: null };
   } catch (err) {
@@ -196,6 +192,25 @@ async function logWorkout(
 
       if (exercises.length > 0) {
         await tx.insert(workoutLogExercises).values(buildLogExerciseRows(created.id, exercises));
+      } else if (args.template_id && args.exercises === undefined) {
+        // A log is a historical snapshot: copy template defaults now so later
+        // template edits cannot rewrite the completed workout.
+        const defaults = await tx.select().from(workoutExercises)
+          .where(eq(workoutExercises.templateId, args.template_id))
+          .orderBy(workoutExercises.sortOrder);
+        if (defaults.length) {
+          await tx.insert(workoutLogExercises).values(defaults.map((exercise) => ({
+            logId: created.id,
+            exerciseName: exercise.name,
+            exerciseType: exercise.exerciseType,
+            sortOrder: exercise.sortOrder,
+            sets: exercise.defaultSets == null ? [] : Array.from({ length: exercise.defaultSets }, () => ({
+              reps: exercise.defaultReps ?? undefined,
+              weight: exercise.defaultWeight == null ? undefined : Number(exercise.defaultWeight),
+              duration: exercise.defaultDuration ?? undefined,
+            })),
+          })));
+        }
       }
 
       return created;
@@ -205,7 +220,8 @@ async function logWorkout(
       return { data: null, error: "template_id must reference one of your workout templates" };
     }
 
-    return { data: { ...log, exercises }, error: null };
+    const copied = await db.select().from(workoutLogExercises).where(eq(workoutLogExercises.logId, log.id));
+    return { data: serializeLog(log, copied), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -256,7 +272,9 @@ async function createWorkoutTemplate(
       return created;
     });
 
-    return { data: { ...template, workout_exercises: exercises }, error: null };
+    const createdExercises = await db.select().from(workoutExercises)
+      .where(eq(workoutExercises.templateId, template.id));
+    return { data: serializeTemplate(template, createdExercises), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -318,7 +336,7 @@ async function updateWorkoutLog(
       .from(workoutLogExercises)
       .where(eq(workoutLogExercises.logId, args.log_id));
 
-    return { data: { ...row, workout_log_exercises: logExercises }, error: null };
+    return { data: serializeLog(row, logExercises), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
@@ -447,6 +465,49 @@ export function registerWorkoutTools(server: McpServer) {
       if (result.error) return errorResult(`Error: ${result.error}`);
 
       return textResult(result.data);
+    }
+  );
+
+  server.tool(
+    "update_workout_template",
+    "Update an owned workout template. Supplying exercises replaces the complete exercise list; omit it to preserve exercises.",
+    {
+      template_id: uuidSchema.describe("Workout template ID from list_workout_templates"),
+      name: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      exercises: z.string().optional().describe(
+        "JSON array replacing all template exercises; pass [] to clear them"
+      ),
+    },
+    async (args, extra: Extra) => {
+      const auth = getAuth(extra);
+      if (!auth) return NOT_AUTHENTICATED;
+      const scopeError = checkScope(auth.scopes, "workouts:write");
+      if (scopeError) return errorResult(scopeError);
+      if (args.name === undefined && args.description === undefined && args.exercises === undefined) {
+        return errorResult("No valid fields to update");
+      }
+      let exercises;
+      if (args.exercises !== undefined) {
+        const parsed = parseExercisesJson(args.exercises, templateExercisesArraySchema);
+        if (parsed.error) return errorResult(`Error: ${parsed.error}`);
+        exercises = parsed.data!.map((exercise, index) => ({
+          name: exercise.name,
+          exercise_type: exercise.type,
+          sort_order: index,
+          default_sets: exercise.default_sets,
+          default_reps: exercise.default_reps,
+          default_weight: exercise.default_weight,
+          default_duration: exercise.default_duration_seconds,
+          notes: exercise.notes,
+        }));
+      }
+      const result = await updateWorkoutTemplate(auth.userId, args.template_id, {
+        name: args.name,
+        description: args.description,
+        exercises,
+      });
+      return result ? textResult(result) : errorResult("Workout template not found");
     }
   );
 

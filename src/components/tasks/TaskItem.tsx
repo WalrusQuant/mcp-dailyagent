@@ -165,10 +165,10 @@ export function TaskItem({
       </div>
 
       <div className="flex md:hidden md:group-hover:flex items-center gap-0 shrink-0">
-        <button onClick={() => onEdit(task)} className="p-2 md:p-1" style={{ color: "var(--text-muted)" }}>
+        <button aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="p-2 md:p-1" style={{ color: "var(--text-muted)" }}>
           <Pencil className="w-3.5 h-3.5" />
         </button>
-        <button onClick={() => onDelete(task)} className="p-2 md:p-1" style={{ color: "var(--text-muted)" }}>
+        <button aria-label={`Delete ${task.title}`} onClick={() => onDelete(task)} className="p-2 md:p-1" style={{ color: "var(--text-muted)" }}>
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>

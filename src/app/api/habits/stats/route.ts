@@ -4,7 +4,9 @@ import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
-import { getHistoricalDateOrToday, getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
+import { calendarDateSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -20,10 +22,10 @@ export async function GET(request: NextRequest) {
   const days = Math.max(1, parseInt(daysParam ?? "30", 10));
   const includeArchived = searchParams.get("archived") === "true";
 
-  const endDateStr = getToday();
+  const { today: endDateStr } = await resolveDateContext(userId);
   const startDateStr = addDays(endDateStr, -(days - 1));
   const fromParam = searchParams.get("from");
-  if (fromParam !== null && getHistoricalDateOrToday(fromParam) !== fromParam) {
+  if (fromParam !== null && (!calendarDateSchema.safeParse(fromParam).success || fromParam > endDateStr)) {
     return NextResponse.json({ error: "Invalid from parameter" }, { status: 400 });
   }
   const queryStartDateStr = fromParam && fromParam < startDateStr ? fromParam : startDateStr;
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest) {
           ? habit.targetDays
           : [1, 2, 3, 4, 5, 6, 7];
 
-      const streak = calculateStreak(statsLogDates, targetDays);
+      const streak = calculateStreak(statsLogDates, targetDays, endDateStr);
       const applicableDays = getApplicableDays(startDateStr, endDateStr, targetDays);
       const completionRate = applicableDays > 0 ? statsLogDates.length / applicableDays : 0;
       const recentLogs = [...new Set(habitLogDates)].sort().reverse();

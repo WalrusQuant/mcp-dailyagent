@@ -1,8 +1,9 @@
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, lt } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday, startOfWeek, endOfWeek, toLocalDate, getDateRange, getDayOfWeek } from "@/lib/dates";
+import { startOfWeek, endOfWeek, getDateRange, getDayOfWeek } from "@/lib/dates";
+import { getProfileToday, resolveDateContext, zonedDate, zonedDateRange, zonedDayRange } from "@/lib/date-context";
 
 export interface DayTask {
   id: string;
@@ -65,6 +66,8 @@ export async function getDaySummary(
   date: string
 ): Promise<QueryResult<DayDetail>> {
   try {
+    const context = await resolveDateContext(userId);
+    const focusRange = zonedDayRange(date, context.timezone);
     const [tasksRows, habitLogsRows, journalRows, workoutsRows, focusRows, habitsRows] =
       await Promise.all([
         db
@@ -89,8 +92,8 @@ export async function getDaySummary(
           .where(
             and(
               eq(focusSessions.userId, userId),
-              gte(focusSessions.startedAt, new Date(`${date}T00:00:00`)),
-              lte(focusSessions.startedAt, new Date(`${date}T23:59:59`))
+              gte(focusSessions.startedAt, focusRange.start),
+              lt(focusSessions.startedAt, focusRange.end)
             )
           ),
         db
@@ -99,8 +102,7 @@ export async function getDaySummary(
           .where(and(eq(habits.userId, userId), eq(habits.archived, false))),
       ]);
 
-    const d = new Date(date + "T00:00:00");
-    const dow = d.getDay() === 0 ? 7 : d.getDay();
+    const dow = getDayOfWeek(date);
     const completedHabitIds = new Set(habitLogsRows.map((hl) => hl.habitId));
 
     const habitsDetail: DayHabit[] = habitsRows
@@ -153,9 +155,11 @@ export async function getWeekSummary(
   weekStartParam?: string
 ): Promise<QueryResult<WeekSummary>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
     const weekStart = weekStartParam || startOfWeek(today);
     const weekEnd = endOfWeek(weekStart);
+    const context = await resolveDateContext(userId);
+    const focusRange = zonedDateRange(weekStart, weekEnd, context.timezone);
 
     const [tasksRows, habitLogsRows, habitsRows, journalRows, workoutsRows, focusRows] =
       await Promise.all([
@@ -205,8 +209,8 @@ export async function getWeekSummary(
           .where(
             and(
               eq(focusSessions.userId, userId),
-              gte(focusSessions.startedAt, new Date(`${weekStart}T00:00:00`)),
-              lte(focusSessions.startedAt, new Date(`${weekEnd}T23:59:59`))
+              gte(focusSessions.startedAt, focusRange.start),
+              lt(focusSessions.startedAt, focusRange.end)
             )
           ),
       ]);
@@ -272,7 +276,7 @@ export async function getWeekSummary(
     }
 
     for (const f of focusRows) {
-      const date = toLocalDate(f.startedAt);
+      const date = zonedDate(f.startedAt, context.timezone);
       const day = ensureDay(date);
       day.focus.sessions++;
       day.focus.minutes += f.durationMinutes ?? 0;

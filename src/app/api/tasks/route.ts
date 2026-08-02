@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, taskTags } from "@/lib/db/schema";
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid task filters" }, { status: 400 });
   }
 
-  const today = getToday();
+  const { today } = await resolveDateContext(userId);
   const taskDate = dateParam || today;
 
   try {
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "tag_ids must be an array of UUIDs" }, { status: 400 });
   }
 
-  const today = getToday();
+  const { today } = await resolveDateContext(userId);
 
   try {
     const result = await createTaskAggregate(userId, {

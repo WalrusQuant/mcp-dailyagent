@@ -107,7 +107,7 @@ curl -s -X POST \
   http://localhost:3000/api/mcp
 ```
 
-You should see a JSON-RPC response listing the server's capabilities and 46 tools.
+You should see a JSON-RPC response listing the server's capabilities and 55 tools.
 
 List tasks:
 

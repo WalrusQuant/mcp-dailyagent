@@ -12,11 +12,9 @@ export async function GET() {
     const [profile] = await db
       .select({
         displayName: profiles.displayName,
-        avatarUrl: profiles.avatarUrl,
         timezone: profiles.timezone,
         toolCallingEnabled: profiles.toolCallingEnabled,
         briefingEnabled: profiles.briefingEnabled,
-        aiModelConfig: profiles.aiModelConfig,
       })
       .from(profiles)
       .where(eq(profiles.id, userId));
@@ -27,11 +25,9 @@ export async function GET() {
 
     return NextResponse.json({
       display_name: profile.displayName ?? null,
-      avatar_url: profile.avatarUrl ?? null,
       timezone: profile.timezone ?? "UTC",
       tool_calling_enabled: profile.toolCallingEnabled ?? true,
       briefing_enabled: profile.briefingEnabled ?? true,
-      ai_model_config: profile.aiModelConfig ?? null,
     });
   } catch (err) {
     console.error(err);
@@ -54,11 +50,6 @@ export async function PATCH(request: NextRequest) {
       allowed.displayName = (displayName as string) || null;
     }
 
-    const avatarUrl = "avatar_url" in body ? body.avatar_url : undefined;
-    if (typeof avatarUrl === "string" || avatarUrl === null) {
-      allowed.avatarUrl = (avatarUrl as string) || null;
-    }
-
     if (body.timezone !== undefined) {
       const timezone = ianaTimezoneSchema.safeParse(body.timezone);
       if (!timezone.success) {
@@ -77,14 +68,6 @@ export async function PATCH(request: NextRequest) {
       "briefing_enabled" in body ? body.briefing_enabled : undefined;
     if (typeof briefingEnabled === "boolean") {
       allowed.briefingEnabled = briefingEnabled;
-    }
-
-    const aiModelConfig =
-      "ai_model_config" in body ? body.ai_model_config : undefined;
-    if (aiModelConfig !== undefined) {
-      if (aiModelConfig === null || typeof aiModelConfig === "object") {
-        allowed.aiModelConfig = aiModelConfig as object | null;
-      }
     }
 
     if (Object.keys(allowed).length === 0) {
@@ -107,7 +90,7 @@ export async function DELETE() {
     const userId = getUserId();
     await db
       .update(profiles)
-      .set({ displayName: null, avatarUrl: null, updatedAt: new Date() })
+      .set({ displayName: null, updatedAt: new Date() })
       .where(eq(profiles.id, userId));
     return NextResponse.json({ success: true });
   } catch (err) {

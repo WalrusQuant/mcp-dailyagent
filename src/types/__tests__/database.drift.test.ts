@@ -58,7 +58,11 @@ const COMPUTED_FIELDS: Record<string, string[]> = {
 // wire-format interface (e.g. internal sort orders never sent to clients).
 // Add an entry to silence the reverse-drift check when the omission is
 // deliberate.
-const OMITTED_COLUMNS: Record<string, string[]> = {};
+const OMITTED_COLUMNS: Record<string, string[]> = {
+  // Deprecated compatibility columns are intentionally absent from the
+  // public profile contract until a later migration can safely drop them.
+  Profile: ["avatar_url", "ai_model_config"],
+};
 
 const databaseTsPath = path.resolve(
   __dirname,

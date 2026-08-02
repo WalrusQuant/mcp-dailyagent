@@ -12,7 +12,7 @@ Not a chatbot. Not an AI product. Just a durable store for tasks, habits, journa
 
 Two front doors, one database:
 
-1. **MCP server** (`/api/mcp`) — the primary interface. Your OpenClaw agent reads and writes every piece of productivity data through it: 46 typed tools, a dozen prompt templates, a handful of read-only resources. Authenticated by a single bearer token.
+1. **MCP server** (`/api/mcp`) — the primary interface. Your OpenClaw agent reads and writes every piece of productivity data through it: 55 typed tools, 13 prompt templates, and read-only resources. Authenticated by a single bearer token.
 2. **Dashboard** (`/dashboard`, `/tasks`, `/habits`, `/journal`, `/workouts`, `/focus`, `/goals`, `/calendar`, `/review`, `/spaces`, `/settings`) — a Next.js UI for browsing and manually editing the same data. No AI features. No generate buttons. If you want AI, you talk to OpenClaw.
 
 OpenClaw owns everything about the agent: model choice, scheduling, message delivery (Telegram / WhatsApp / etc.), briefings, insights, reviews. This repo owns storage and the contract.
@@ -104,8 +104,8 @@ Full tool reference lives in **[docs/openclaw-skill.md](docs/openclaw-skill.md)*
 | **Tasks** | `list_tasks`, `create_task`, `update_task`, `complete_task`, `delete_task` |
 | **Habits** | `list_habits`, `get_habit_stats`, `create_habit`, `toggle_habit` |
 | **Journal** | `get_journal_entries`, `search_journal`, `create_journal_entry` |
-| **Workouts** | `list_workout_logs`, `list_workout_templates`, `log_workout` |
-| **Focus** | `get_focus_sessions`, `get_focus_stats`, `start_focus_session`, `complete_focus_session` |
+| **Workouts** | `list_workout_logs`, `list_workout_templates`, `log_workout`, `update_workout_template` |
+| **Focus** | `get_focus_sessions`, `get_focus_stats`, `start_focus_session`, `update_focus_session`, `cancel_focus_session`, `delete_focus_session` |
 | **Goals** | `list_goals`, `create_goal`, `update_goal`, `log_goal_progress` |
 | **Spaces** | `list_spaces`, `create_space`, `update_space` |
 | **Weekly reviews** | `get_weekly_review`, `save_weekly_review` |

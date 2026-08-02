@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { TaskItem } from "./TaskItem";
 import { TaskFormModal } from "./TaskFormModal";
 import { TaskRolloverBanner } from "./TaskRolloverBanner";
-import { getHistoricalDateOrToday, getToday } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { useToast } from "@/lib/toast-context";
 
 function useDragReorder(
@@ -133,7 +133,8 @@ export function taskMatchesView(task: Task, date: string, spaceFilter: string) {
 }
 
 export function TaskList({ initialDate }: { initialDate?: string }) {
-  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
+  const { today } = useClientDateContext();
+  const [date, setDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -146,7 +147,7 @@ export function TaskList({ initialDate }: { initialDate?: string }) {
   const [rolloverCount, setRolloverCount] = useState(0);
   const [rolloverDismissed, setRolloverDismissed] = useState(false);
 
-  const isToday = date === getToday();
+  const isToday = date === today;
 
   const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -314,6 +315,7 @@ export function TaskList({ initialDate }: { initialDate?: string }) {
           )}
           <DateNavigation date={date} onDateChange={setDate} />
           <button
+            aria-label="Add task"
             onClick={() => {
               setEditingTask(null);
               setPrefillTitle("");

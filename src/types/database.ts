@@ -11,10 +11,8 @@ export interface Profile {
   id: string;
   email: string;
   display_name: string | null;
-  avatar_url: string | null;
   timezone: string;
   is_admin: boolean;
-  ai_model_config: Record<string, string> | null;
   tool_calling_enabled: boolean;
   briefing_enabled: boolean;
   onboarded_at: string | null;
@@ -61,6 +59,8 @@ export interface Task {
   space_id: string | null;
   goal_id: string | null;
   recurrence: TaskRecurrence | null;
+  recurrence_series_id: string | null;
+  scheduled_date: string | null;
   created_at: string;
   updated_at: string;
   /** Joined tags when the API includes them (not a SQL column). */

@@ -12,7 +12,8 @@ import { GoalWidget } from "./GoalWidget";
 import { DailyBriefing } from "./DailyBriefing";
 import { InsightCards } from "./InsightCards";
 import { DailyStartCard } from "./DailyStartCard";
-import { formatDate, getToday } from "@/lib/dates";
+import { formatDate } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { Task } from "@/types/database";
 
 interface DashboardData {
@@ -32,6 +33,7 @@ function greetingForHour(hour: number): string {
 }
 
 export function Dashboard() {
+  const { today, hour } = useClientDateContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +70,8 @@ export function Dashboard() {
     reload();
   }, [reload]);
 
-  const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
-  const longDate = useMemo(() => formatDate(getToday(), "long"), []);
+  const greeting = useMemo(() => greetingForHour(hour), [hour]);
+  const longDate = useMemo(() => formatDate(today, "long"), [today]);
 
   if (isLoading) {
     return <DashboardSkeleton />;

@@ -38,7 +38,7 @@ export function TaskRolloverBanner({ count, onRollover, onDismiss }: TaskRollove
       >
         {isRolling ? <Loader2 className="w-3 h-3 animate-spin" /> : "Roll Over"}
       </button>
-      <button onClick={onDismiss} className="p-1" style={{ color: "var(--text-muted)" }}>
+      <button aria-label="Dismiss rollover reminder" onClick={onDismiss} className="p-1" style={{ color: "var(--text-muted)" }}>
         <X className="w-4 h-4" />
       </button>
     </div>

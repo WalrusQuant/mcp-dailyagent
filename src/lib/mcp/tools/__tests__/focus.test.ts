@@ -18,10 +18,10 @@ const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 interface SessionRow {
   id: string;
   status: string;
-  durationMinutes: number;
-  completedAt: string | null;
-  startedAt: string;
-  updatedAt: string;
+  duration_minutes: number;
+  completed_at: string | null;
+  started_at: string;
+  updated_at: string;
 }
 
 interface FocusStats {
@@ -89,8 +89,8 @@ describe("start_focus_session + get_focus_sessions", () => {
   it("starts a session with status active", async () => {
     const session = await startSession(25);
     expect(session.status).toBe("active");
-    expect(session.durationMinutes).toBe(25);
-    expect(session.completedAt).toBeNull();
+    expect(session.duration_minutes).toBe(25);
+    expect(session.completed_at).toBeNull();
   });
 
   it("lists started sessions", async () => {
@@ -143,7 +143,7 @@ describe("complete_focus_session", () => {
       await h.call("complete_focus_session", { session_id: session.id }, ctx)
     );
     expect(completed.status).toBe("completed");
-    expect(completed.completedAt).not.toBeNull();
+    expect(completed.completed_at).not.toBeNull();
   });
 
   it("completes via optimistic concurrency when the token matches", async () => {
@@ -151,17 +151,17 @@ describe("complete_focus_session", () => {
     const completed = expectOk<SessionRow>(
       await h.call(
         "complete_focus_session",
-        { session_id: session.id, expected_updated_at: session.updatedAt },
+        { session_id: session.id, expected_updated_at: session.updated_at },
         ctx
       )
     );
     expect(completed.status).toBe("completed");
-    expect(completed.completedAt).not.toBeNull();
+    expect(completed.completed_at).not.toBeNull();
   });
 
   it("returns a conflict when expected_updated_at is stale", async () => {
     const session = await startSession();
-    const stale = new Date(new Date(session.updatedAt).getTime() - 60_000).toISOString();
+    const stale = new Date(new Date(session.updated_at).getTime() - 60_000).toISOString();
     const res = await h.call(
       "complete_focus_session",
       { session_id: session.id, expected_updated_at: stale },
@@ -206,7 +206,7 @@ describe("pause_focus_session + resume_focus_session", () => {
     const paused = expectOk<SessionRow>(
       await h.call(
         "pause_focus_session",
-        { session_id: session.id, expected_updated_at: session.updatedAt },
+        { session_id: session.id, expected_updated_at: session.updated_at },
         ctx
       )
     );
@@ -218,7 +218,7 @@ describe("pause_focus_session + resume_focus_session", () => {
     const paused = expectOk<SessionRow>(
       await h.call("pause_focus_session", { session_id: session.id }, ctx)
     );
-    const stale = new Date(new Date(paused.updatedAt).getTime() - 60_000).toISOString();
+    const stale = new Date(new Date(paused.updated_at).getTime() - 60_000).toISOString();
     const res = await h.call(
       "resume_focus_session",
       { session_id: paused.id, expected_updated_at: stale },
@@ -243,5 +243,37 @@ describe("pause_focus_session + resume_focus_session", () => {
       { userId: OTHER_USER_ID, scopes: SCOPES }
     );
     expect(expectError(res)).toContain("not found");
+  });
+});
+
+describe("focus history management", () => {
+  it("corrects, cancels, and deletes an owned session", async () => {
+    const session = await startSession();
+    const corrected = expectOk<SessionRow>(await h.call("update_focus_session", {
+      session_id: session.id,
+      duration_minutes: 50,
+      notes: "Corrected",
+      expected_updated_at: session.updated_at,
+    }, ctx));
+    expect(corrected.duration_minutes).toBe(50);
+
+    const cancelled = expectOk<SessionRow>(await h.call("cancel_focus_session", {
+      session_id: session.id,
+      expected_updated_at: corrected.updated_at,
+    }, ctx));
+    expect(cancelled.status).toBe("cancelled");
+
+    expectOk(await h.call("delete_focus_session", {
+      session_id: session.id,
+      expected_updated_at: cancelled.updated_at,
+    }, ctx));
+    expect(expectOk<SessionRow[]>(await h.call("get_focus_sessions", {}, ctx))).toHaveLength(0);
+  });
+
+  it("does not mutate or delete another user's session", async () => {
+    const session = await startSession();
+    const other = { userId: OTHER_USER_ID, scopes: SCOPES };
+    expect(expectError(await h.call("update_focus_session", { session_id: session.id, notes: "x" }, other))).toContain("not found");
+    expect(expectError(await h.call("delete_focus_session", { session_id: session.id }, other))).toContain("not found");
   });
 });

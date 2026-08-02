@@ -8,7 +8,8 @@ import { TimerDisplay } from "./TimerDisplay";
 import { FocusStats } from "./FocusStats";
 import { FocusSessionHistory } from "./FocusSessionHistory";
 import { DateNavigation } from "@/components/shared/DateNavigation";
-import { formatDate, getHistoricalDateOrToday, getLocalDayIsoRange, getToday } from "@/lib/dates";
+import { formatDate } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { useFocusTimerContext } from "@/lib/focus-timer-context";
 import { useToast } from "@/lib/toast-context";
 import { LoadError } from "@/components/shared/LoadError";
@@ -16,12 +17,13 @@ import { LoadError } from "@/components/shared/LoadError";
 export function FocusTimer({ initialDate }: { initialDate?: string }) {
   const timer = useFocusTimerContext();
   const { addToast } = useToast();
+  const { today } = useClientDateContext();
   const [workMinutes, setWorkMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [todaySessions, setTodaySessions] = useState<FocusSession[]>([]);
-  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
+  const [date, setDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [statsRevision, setStatsRevision] = useState(0);
@@ -30,11 +32,9 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
     setIsLoading(true);
     setLoadError(false);
     try {
-      const today = getToday();
-      const dayRange = getLocalDayIsoRange(date);
       const [tasksRes, sessionsRes] = await Promise.all([
         fetch(`/api/tasks?date=${today}`, { signal }),
-        fetch(`/api/focus?from=${encodeURIComponent(dayRange.from)}&to=${encodeURIComponent(dayRange.to)}`, { signal }),
+        fetch(`/api/focus?date=${encodeURIComponent(date)}`, { signal }),
       ]);
 
       if (!tasksRes.ok || !sessionsRes.ok) throw new Error("Failed to load focus data");
@@ -51,7 +51,7 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [date]);
+  }, [date, today]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,7 +108,7 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
           Focus Timer
         </h1>
-        <DateNavigation date={date} onDateChange={setDate} maxDate={getToday()} />
+        <DateNavigation date={date} onDateChange={setDate} maxDate={today} />
       </div>
 
       <TimerDisplay
@@ -189,8 +189,9 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
       {!timer.isActive && (
         <div className="flex items-center justify-center gap-4 mt-4">
           <div className="flex items-center gap-2">
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>Work:</label>
+            <label htmlFor="focus-work-duration" className="text-xs" style={{ color: "var(--text-muted)" }}>Work:</label>
             <select
+              id="focus-work-duration"
               value={workMinutes}
               onChange={(e) => setWorkMinutes(Number(e.target.value))}
               className="rounded px-2 py-1 text-sm focus:outline-none"
@@ -202,8 +203,9 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>Break:</label>
+            <label htmlFor="focus-break-duration" className="text-xs" style={{ color: "var(--text-muted)" }}>Break:</label>
             <select
+              id="focus-break-duration"
               value={breakMinutes}
               onChange={(e) => setBreakMinutes(Number(e.target.value))}
               className="rounded px-2 py-1 text-sm focus:outline-none"
@@ -230,7 +232,7 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
             {tasks.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.priority} — {t.title}
-                {t.task_date !== getToday() ? ` (${t.task_date})` : ""}
+                {t.task_date !== today ? ` (${t.task_date})` : ""}
               </option>
             ))}
           </select>
@@ -245,7 +247,7 @@ export function FocusTimer({ initialDate }: { initialDate?: string }) {
       {todaySessions.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
-            {date === getToday() ? "Today’s sessions" : `Sessions for ${formatDate(date)}`}
+            {date === today ? "Today’s sessions" : `Sessions for ${formatDate(date)}`}
           </h2>
           <FocusSessionHistory
             sessions={todaySessions}

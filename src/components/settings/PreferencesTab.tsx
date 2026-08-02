@@ -25,9 +25,9 @@ export function PreferencesTab() {
 
       {/* Theme */}
       <div>
-        <label className="block text-xs font-medium mb-3 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+        <div className="block text-xs font-medium mb-3 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
           Theme
-        </label>
+        </div>
         <div className="flex gap-2">
           {themes.map(({ id, label, icon: Icon }) => (
             <button

@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getWorkoutLogs } from "@/lib/mcp/queries/workouts";
-import { getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
 export function registerWorkoutResources(server: McpServer) {
@@ -21,7 +22,7 @@ export function registerWorkoutResources(server: McpServer) {
         };
       }
 
-      const today = getToday();
+      const today = await getProfileToday(auth.userId);
       const from = addDays(today, -7);
       const result = await getWorkoutLogs(auth.userId, { from, to: today });
       if (result.error) throw new Error(result.error);

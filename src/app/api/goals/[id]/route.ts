@@ -9,8 +9,9 @@ import { serializeGoal } from "@/lib/mcp/queries/goals";
 import { serializeTask } from "@/lib/mcp/queries/tasks";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { calendarDateSchema } from "@/lib/validation";
+import { ParentLifecycleError, transitionGoal } from "@/lib/parent-lifecycle";
 
 export async function GET(
   _request: NextRequest,
@@ -124,6 +125,30 @@ export async function PATCH(
   }
 
   try {
+    if (typeof body.progress === "number" && body.status === undefined) {
+      const [current] = await db
+        .select({ status: goals.status })
+        .from(goals)
+        .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+        .limit(1);
+      if (current?.status === "completed") {
+        return NextResponse.json({ error: "Completed goals are frozen at 100%; reopen the goal before changing progress" }, { status: 400 });
+      }
+    }
+    let lifecycleCounts: { tasks: number; habits: number } | undefined;
+    if (typeof body.status === "string") {
+      delete allowedFields.status;
+      delete allowedFields.completedAt;
+      const result = await transitionGoal(
+        userId,
+        id,
+        body.status as "active" | "completed" | "abandoned",
+        typeof body.expected_updated_at === "string" ? body.expected_updated_at : undefined,
+        allowedFields
+      );
+      lifecycleCounts = result.active_linked;
+      return NextResponse.json({ ...serializeGoal(result.row), active_linked: lifecycleCounts });
+    }
     let row: typeof goals.$inferSelect | undefined;
 
     if (typeof body.expected_updated_at === "string") {
@@ -156,8 +181,8 @@ export async function PATCH(
 
     // Manual progress changes should feed the progress history chart
     // (same day upsert as MCP log_goal_progress).
-    if (typeof body.progress === "number" && row) {
-      const today = getToday();
+    if (typeof body.progress === "number" && body.status !== "completed" && row) {
+      const { today } = await resolveDateContext(userId);
       await db
         .insert(goalProgressLogs)
         .values({
@@ -172,8 +197,13 @@ export async function PATCH(
         });
     }
 
-    return NextResponse.json(serializeGoal(row));
+    return NextResponse.json({ ...serializeGoal(row), ...(lifecycleCounts ? { active_linked: lifecycleCounts } : {}) });
   } catch (err) {
+    if (err instanceof ParentLifecycleError) {
+      if (err.code === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (err.code === "invalid_expected_updated_at") return NextResponse.json({ error: err.message }, { status: 400 });
+      return conflictResponse(serializeGoal(err.current as typeof goals.$inferSelect));
+    }
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

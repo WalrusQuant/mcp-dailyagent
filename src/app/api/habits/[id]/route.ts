@@ -7,7 +7,7 @@ import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
-import { isOwned } from "@/lib/db/ownership";
+import { isAssignableRelationship } from "@/lib/db/ownership";
 import { uuidSchema } from "@/lib/validation";
 
 export async function GET(
@@ -100,8 +100,8 @@ export async function PATCH(
   }
 
   try {
-    if (typeof allowedFields.goalId === "string" && !(await isOwned("goal", allowedFields.goalId, userId))) {
-      return NextResponse.json({ error: "goal_id must reference one of your goals" }, { status: 400 });
+    if (typeof allowedFields.goalId === "string" && !(await isAssignableRelationship(db, "goal", allowedFields.goalId, userId))) {
+      return NextResponse.json({ error: "goal_id must reference one of your goals and it must be active" }, { status: 400 });
     }
 
     if (typeof body.expected_updated_at === "string") {

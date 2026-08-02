@@ -24,6 +24,7 @@ import {
   Crosshair,
 } from "lucide-react";
 import { useCommandPalette } from "@/lib/command-palette-context";
+import { useAccessibleDialog } from "@/hooks/useAccessibleDialog";
 
 interface Command {
   id: string;
@@ -64,6 +65,7 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const { dialogRef, titleId } = useAccessibleDialog(close, isOpen);
 
   const navigate = useCallback(
     (path: string) => {
@@ -273,6 +275,11 @@ export function CommandPalette() {
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="w-full max-w-xl mx-4 rounded-xl shadow-2xl overflow-hidden flex flex-col"
         style={{
           background: "var(--bg-surface)",
@@ -281,6 +288,7 @@ export function CommandPalette() {
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
+        <h2 id={titleId} className="sr-only">Command palette</h2>
         {/* Search input */}
         <div
           className="flex items-center gap-3 px-4 py-3"
@@ -289,6 +297,12 @@ export function CommandPalette() {
           <Search className="w-4 h-4 flex-shrink-0" style={{ color: "var(--text-muted)" }} />
           <input
             ref={inputRef}
+            data-autofocus
+            aria-label="Search commands and pages"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-palette-results"
+            aria-activedescendant={grouped.length > 0 ? `command-palette-option-${activeIndex}` : undefined}
             type="text"
             placeholder="Search commands and pages..."
             value={query}
@@ -313,7 +327,7 @@ export function CommandPalette() {
         </div>
 
         {/* Results */}
-        <div ref={listRef} className="overflow-y-auto flex-1">
+        <div id="command-palette-results" role="listbox" ref={listRef} className="overflow-y-auto flex-1">
           {grouped.length === 0 ? (
             <div
               className="px-4 py-8 text-sm text-center"
@@ -339,6 +353,9 @@ export function CommandPalette() {
                   const isActive = itemIndex === activeIndex;
                   return (
                     <button
+                      id={`command-palette-option-${itemIndex}`}
+                      role="option"
+                      aria-selected={isActive}
                       key={cmd.id}
                       data-active={isActive}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors"

@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
@@ -8,7 +8,7 @@ import { getUserId } from "@/lib/auth";
 export async function GET() {
   const userId = getUserId();
 
-  const todayStr = getToday();
+  const { today: todayStr } = await resolveDateContext(userId);
 
   try {
     const result = await db

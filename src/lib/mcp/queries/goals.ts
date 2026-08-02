@@ -2,7 +2,8 @@ import { db } from "@/lib/db/client";
 import { goals, goalProgressLogs } from "@/lib/db/schema";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
+import { transitionGoal } from "@/lib/parent-lifecycle";
 
 export function serializeGoal(g: typeof goals.$inferSelect) {
   return {
@@ -131,21 +132,23 @@ export async function updateGoal(
 ): Promise<QueryResult<Goal>> {
   try {
     const updates: Partial<typeof goals.$inferInsert> = {};
-
     if (typeof fields.title === "string") updates.title = fields.title;
     if (typeof fields.description === "string" || fields.description === null)
       updates.description = fields.description;
-    if (typeof fields.status === "string") {
-      updates.status = fields.status as "active" | "completed" | "abandoned";
-      if (fields.status === "completed") {
-        updates.completedAt = new Date();
-      } else if (fields.status === "active") {
-        updates.completedAt = null;
-      }
-    }
     if (typeof fields.progress === "number") updates.progress = fields.progress;
     if (typeof fields.target_date === "string" || fields.target_date === null)
       updates.targetDate = fields.target_date;
+
+    if (typeof fields.status === "string") {
+      const transitioned = await transitionGoal(
+        userId,
+        goalId,
+        fields.status as "active" | "completed" | "abandoned",
+        undefined,
+        updates
+      );
+      return { data: rowToGoal(transitioned.row), error: null };
+    }
 
     updates.updatedAt = new Date();
 
@@ -168,13 +171,13 @@ export async function logGoalProgress(
   progress: number
 ): Promise<QueryResult<Goal>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
 
     const goal = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(goals)
         .set({ progress, updatedAt: new Date() })
-        .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+        .where(and(eq(goals.id, goalId), eq(goals.userId, userId), eq(goals.status, "active")))
         .returning();
 
       if (!updated) return null;
@@ -190,7 +193,7 @@ export async function logGoalProgress(
       return updated;
     });
 
-    if (!goal) return { data: null, error: "Goal not found" };
+    if (!goal) return { data: null, error: "Goal not found or is not active" };
     return { data: rowToGoal(goal), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Unknown error" };

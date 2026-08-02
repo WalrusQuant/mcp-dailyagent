@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { GoalPicker } from "@/components/goals/GoalPicker";
 import { useToast } from "@/lib/toast-context";
@@ -25,6 +25,7 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
   const [goalId, setGoalId] = useState(habit?.goal_id || "");
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+  const id = useId();
 
   const toggleDay = (day: number) => {
     setTargetDays((prev) =>
@@ -91,25 +92,27 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
     <FormModal title={habit ? "Edit Habit" : "New Habit"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-name`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Name *
           </label>
           <input
+            id={`${id}-name`}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
             style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             placeholder="e.g., Morning meditation"
-            autoFocus
+            data-autofocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-description`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Description
           </label>
           <textarea
+            id={`${id}-description`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
@@ -119,10 +122,11 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-frequency`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Frequency
           </label>
           <select
+            id={`${id}-frequency`}
             value={frequency}
             onChange={(e) => setFrequency(e.target.value as "daily" | "weekly")}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
@@ -134,9 +138,9 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+          <div className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
             Target Days
-          </label>
+          </div>
           <div className="flex gap-1">
             {DAY_NAMES.map((name, i) => {
               const day = i + 1;
@@ -152,6 +156,7 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
                     color: isActive ? "white" : "var(--text-secondary)",
                     border: `1px solid ${isActive ? color : "var(--border-default)"}`,
                   }}
+                  aria-pressed={isActive}
                 >
                   {name}
                 </button>
@@ -161,9 +166,9 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+          <div className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
             Color
-          </label>
+          </div>
           <div className="flex gap-2">
             {COLORS.map((c) => (
               <button
@@ -176,6 +181,8 @@ export function HabitFormModal({ habit, defaultName, onClose, onSave }: HabitFor
                   transform: color === c ? "scale(1.2)" : undefined,
                   boxShadow: color === c ? `0 0 0 2px var(--bg-surface), 0 0 0 4px ${c}` : undefined,
                 }}
+                aria-label={`Use ${c} habit color`}
+                aria-pressed={color === c}
               />
             ))}
           </div>

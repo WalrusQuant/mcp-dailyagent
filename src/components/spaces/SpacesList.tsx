@@ -6,6 +6,7 @@ import { Plus, Loader2, Calendar, FolderKanban } from "lucide-react";
 import { Space } from "@/types/database";
 import { SpaceFormModal } from "./SpaceFormModal";
 import { LoadError } from "@/components/shared/LoadError";
+import { formatDate } from "@/lib/dates";
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   active: { bg: "var(--accent-primary)", text: "var(--bg-base)" },
@@ -162,7 +163,7 @@ export function SpacesList() {
                     {space.deadline && (
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(space.deadline).toLocaleDateString()}
+                        {formatDate(space.deadline)}
                       </span>
                     )}
                   </div>

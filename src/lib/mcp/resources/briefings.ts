@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getTodayBriefing } from "@/lib/mcp/queries/briefings";
 import type { Extra } from "@/lib/mcp/tools/helpers";
+import { getProfileCapabilities } from "@/lib/profile-capabilities";
 
 export function registerBriefingResources(server: McpServer) {
   // --- briefing-today ---
@@ -17,6 +18,11 @@ export function registerBriefingResources(server: McpServer) {
       if (scopeError) {
         return {
           contents: [{ uri: uri.href, mimeType: "text/plain", text: scopeError }],
+        };
+      }
+      if (!(await getProfileCapabilities(auth.userId)).briefingEnabled) {
+        return {
+          contents: [{ uri: uri.href, mimeType: "text/plain", text: "Daily briefings are disabled in profile settings" }],
         };
       }
 

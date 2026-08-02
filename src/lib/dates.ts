@@ -68,6 +68,12 @@ export function addDays(date: string, days: number): string {
   return formatUtcDate(new Date(Date.UTC(y, m - 1, d + days)));
 }
 
+export function calendarDayDifference(later: string, earlier: string): number {
+  const [laterY, laterM, laterD] = parseDateParts(later);
+  const [earlierY, earlierM, earlierD] = parseDateParts(earlier);
+  return Math.round((Date.UTC(laterY, laterM - 1, laterD) - Date.UTC(earlierY, earlierM - 1, earlierD)) / 86_400_000);
+}
+
 export function startOfWeek(date: string): string {
   const [y, m, d] = parseDateParts(date);
   const dt = new Date(Date.UTC(y, m - 1, d));

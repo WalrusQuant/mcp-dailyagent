@@ -37,3 +37,10 @@ export function extractRpcInfo(
   }
   return { rpc_method, tool };
 }
+
+/** Detect tool calls anywhere in a JSON-RPC batch for capability enforcement. */
+export function containsToolCall(body: unknown): boolean {
+  if (Array.isArray(body)) return body.some(containsToolCall);
+  if (!body || typeof body !== "object") return false;
+  return (body as Record<string, unknown>).method === "tools/call";
+}

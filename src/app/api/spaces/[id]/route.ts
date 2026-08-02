@@ -7,6 +7,7 @@ import { updateWithVersion } from "@/lib/db/optimistic";
 import { conflictResponse } from "@/lib/api-conflict";
 import { serializeSpace } from "@/lib/mcp/queries/spaces";
 import { readJsonBody } from "@/lib/api-body";
+import { ParentLifecycleError, transitionSpace } from "@/lib/parent-lifecycle";
 
 export async function GET(
   _request: NextRequest,
@@ -67,6 +68,20 @@ export async function PATCH(
   }
 
   try {
+    let lifecycleCounts: { tasks: number; habits: number } | undefined;
+    if (typeof allowedFields.status === "string") {
+      const status = allowedFields.status as "active" | "paused" | "completed";
+      delete allowedFields.status;
+      const result = await transitionSpace(
+        userId,
+        id,
+        status,
+        typeof body.expected_updated_at === "string" ? body.expected_updated_at : undefined,
+        allowedFields
+      );
+      lifecycleCounts = result.active_linked;
+      return NextResponse.json({ ...serializeSpace(result.row), active_linked: lifecycleCounts });
+    }
     if (typeof body.expected_updated_at === "string") {
       const result = await updateWithVersion<typeof spaces.$inferSelect>({
         table: spaces,
@@ -80,7 +95,7 @@ export async function PATCH(
         if (result.reason === "invalid_token") return NextResponse.json({ error: "Invalid expected_updated_at" }, { status: 400 });
         return conflictResponse(serializeSpace(result.current));
       }
-      return NextResponse.json(serializeSpace(result.row));
+      return NextResponse.json({ ...serializeSpace(result.row), ...(lifecycleCounts ? { active_linked: lifecycleCounts } : {}) });
     }
 
     allowedFields.updatedAt = new Date();
@@ -94,8 +109,13 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(serializeSpace(row));
+    return NextResponse.json({ ...serializeSpace(row), ...(lifecycleCounts ? { active_linked: lifecycleCounts } : {}) });
   } catch (err) {
+    if (err instanceof ParentLifecycleError) {
+      if (err.code === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (err.code === "invalid_expected_updated_at") return NextResponse.json({ error: err.message }, { status: 400 });
+      return conflictResponse(serializeSpace(err.current as typeof spaces.$inferSelect));
+    }
     console.error(err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

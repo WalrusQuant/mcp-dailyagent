@@ -2,8 +2,9 @@ import { NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "@/lib/mcp/server";
 import { authenticateMcpRequest } from "@/lib/mcp/auth";
-import { extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
+import { containsToolCall, extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
 import { consumeToken, consumeAuthFailToken } from "@/lib/mcp/rate-limit";
+import { getProfileCapabilities } from "@/lib/profile-capabilities";
 
 /**
  * MCP Server endpoint — handles all MCP communication via Streamable HTTP.
@@ -18,10 +19,15 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
   // so the original body stream stays intact for the transport. Only the
   // method name and tool name are extracted — never arguments.
   let rpcInfo: { rpc_method?: string; tool?: string } = {};
+  let invokesTool = false;
   if (request.method === "POST") {
     try {
       const text = await request.clone().text();
-      if (text) rpcInfo = extractRpcInfo(JSON.parse(text));
+      if (text) {
+        const envelope = JSON.parse(text);
+        rpcInfo = extractRpcInfo(envelope);
+        invokesTool = containsToolCall(envelope);
+      }
     } catch {
       // Malformed body — let the transport produce the user-facing error.
     }
@@ -62,6 +68,26 @@ async function handleMcpRequest(request: NextRequest): Promise<Response> {
   }
 
   const { auth } = authResult.result;
+
+  if (invokesTool) {
+    const { toolCallingEnabled } = await getProfileCapabilities(auth.userId);
+    if (!toolCallingEnabled) {
+      const response = new Response(JSON.stringify({ error: "tool_calling_disabled" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+      logMcpRequest({
+        http_method: request.method,
+        status: response.status,
+        duration_ms: Date.now() - startedAt,
+        outcome: "error",
+        user_id: auth.userId,
+        client_id: auth.clientId,
+        ...rpcInfo,
+      });
+      return response;
+    }
+  }
 
   // Abuse-guard rate limit. Bucket is keyed by userId because the bearer
   // token is constant in a single-user self-host — keying by token would

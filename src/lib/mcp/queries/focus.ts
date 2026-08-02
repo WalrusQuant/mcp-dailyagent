@@ -1,8 +1,9 @@
 import { db } from "@/lib/db/client";
 import { focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lt, lte, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext, zonedDateRange, zonedDayRange } from "@/lib/date-context";
 import { isOwned } from "@/lib/db/ownership";
 
 export function serializeSession(s: typeof focusSessions.$inferSelect) {
@@ -68,11 +69,10 @@ export async function getFocusSessions(
   params?: GetFocusSessionsParams
 ): Promise<QueryResult<FocusSession[]>> {
   try {
-    const defaultFrom = new Date();
-    defaultFrom.setDate(defaultFrom.getDate() - 7);
-
-    const from = params?.from || defaultFrom.toISOString();
-    const to = params?.to || new Date().toISOString();
+    const context = await resolveDateContext(userId);
+    const range = params?.from && params?.to
+      ? { start: new Date(params.from), end: new Date(params.to) }
+      : zonedDateRange(addDays(context.today, -6), context.today, context.timezone);
 
     const rows = await db
       .select()
@@ -80,8 +80,8 @@ export async function getFocusSessions(
       .where(
         and(
           eq(focusSessions.userId, userId),
-          gte(focusSessions.startedAt, new Date(from)),
-          lte(focusSessions.startedAt, new Date(to))
+          gte(focusSessions.startedAt, range.start),
+          params?.to ? lte(focusSessions.startedAt, range.end) : lt(focusSessions.startedAt, range.end)
         )
       )
       .orderBy(desc(focusSessions.startedAt));
@@ -96,7 +96,8 @@ export async function getTodayFocusStats(
   userId: string
 ): Promise<QueryResult<TodayFocusStats>> {
   try {
-    const today = getToday();
+    const context = await resolveDateContext(userId);
+    const range = zonedDayRange(context.today, context.timezone);
 
     const rows = await db
       .select({ durationMinutes: focusSessions.durationMinutes })
@@ -105,7 +106,8 @@ export async function getTodayFocusStats(
         and(
           eq(focusSessions.userId, userId),
           eq(focusSessions.status, "completed"),
-          gte(focusSessions.startedAt, new Date(`${today}T00:00:00`))
+          gte(focusSessions.startedAt, range.start),
+          lt(focusSessions.startedAt, range.end)
         )
       );
 

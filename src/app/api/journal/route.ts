@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const today = getToday();
+  const { today } = await resolveDateContext(userId);
 
   try {
     const [row] = await db

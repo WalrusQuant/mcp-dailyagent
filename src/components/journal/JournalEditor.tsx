@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { JournalEntry } from "@/types/database";
 import { useToast } from "@/lib/toast-context";
+import {
+  clearJournalDraft,
+  readJournalDraft,
+  writeJournalDraft,
+} from "@/lib/journal-drafts";
 
 interface JournalEditorProps {
   entryId?: string;
@@ -12,6 +17,7 @@ interface JournalEditorProps {
   /** ISO timestamp from last known server version (for optimistic concurrency) */
   initialUpdatedAt?: string | null;
   date: string;
+  draftOwnerId: string;
   onSave: (entry: JournalEntry) => void;
   onDelete?: () => void;
   /** Called when a 409 conflict requires reloading the entry from the server */
@@ -26,6 +32,7 @@ export function JournalEditor({
   initialMood = null,
   initialUpdatedAt = null,
   date,
+  draftOwnerId,
   onSave,
   onDelete,
   onConflictReload,
@@ -35,26 +42,22 @@ export function JournalEditor({
   const [mood, setMood] = useState<number | null>(initialMood);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [recoveredDraft, setRecoveredDraft] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef(initialContent);
+  const lastSavedMoodRef = useRef(initialMood);
 
   const entryIdRef = useRef<string | undefined>(entryId);
   useEffect(() => {
-    if (entryId) entryIdRef.current = entryId;
+    entryIdRef.current = entryId;
   }, [entryId]);
 
   // Server version for optimistic concurrency (PATCH only)
   const updatedAtRef = useRef<string | null>(initialUpdatedAt);
   useEffect(() => {
-    if (initialUpdatedAt) updatedAtRef.current = initialUpdatedAt;
+    updatedAtRef.current = initialUpdatedAt;
   }, [initialUpdatedAt]);
-
-  // When parent reloads entry after conflict, resync local state
-  useEffect(() => {
-    setContent(initialContent);
-    setMood(initialMood);
-    lastSavedRef.current = initialContent;
-  }, [entryId, date]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on identity change
 
   const contentRef = useRef(content);
   contentRef.current = content;
@@ -63,6 +66,46 @@ export function JournalEditor({
 
   const inFlightRef = useRef(false);
   const pendingRef = useRef(false);
+  const draftRevisionRef = useRef<string | null>(null);
+  const draftIdentity = `${draftOwnerId}:${date}`;
+  const loadedDraftIdentityRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    setDraftReady(false);
+    setRecoveredDraft(false);
+    setContent(initialContent);
+    setMood(initialMood);
+    contentRef.current = initialContent;
+    moodRef.current = initialMood;
+    lastSavedRef.current = initialContent;
+    lastSavedMoodRef.current = initialMood;
+    entryIdRef.current = entryId;
+    updatedAtRef.current = initialUpdatedAt;
+    draftRevisionRef.current = null;
+
+    const draft = readJournalDraft(localStorage, draftOwnerId, date);
+    if (draft && (draft.content !== initialContent || draft.mood !== initialMood)) {
+      setContent(draft.content);
+      setMood(draft.mood);
+      contentRef.current = draft.content;
+      moodRef.current = draft.mood;
+      draftRevisionRef.current = draft.revision;
+      setRecoveredDraft(true);
+    }
+    loadedDraftIdentityRef.current = draftIdentity;
+    setDraftReady(true);
+  }, [draftIdentity, date, draftOwnerId, entryId, initialContent, initialMood, initialUpdatedAt]);
+
+  useEffect(() => {
+    if (!draftReady || loadedDraftIdentityRef.current !== draftIdentity) return;
+    if (content === lastSavedRef.current && mood === lastSavedMoodRef.current) {
+      clearJournalDraft(localStorage, draftOwnerId, date);
+      draftRevisionRef.current = null;
+      return;
+    }
+    const draft = writeJournalDraft(localStorage, draftOwnerId, date, content, mood);
+    draftRevisionRef.current = draft.revision;
+  }, [content, mood, date, draftOwnerId, draftIdentity, draftReady]);
 
   const save = useCallback(async () => {
     if (inFlightRef.current) {
@@ -74,6 +117,7 @@ export function JournalEditor({
       pendingRef.current = false;
       const text = contentRef.current;
       const moodVal = moodRef.current;
+      const draftRevision = draftRevisionRef.current;
       if (!text.trim()) return;
 
       inFlightRef.current = true;
@@ -108,6 +152,10 @@ export function JournalEditor({
           if (data.id) entryIdRef.current = data.id;
           if (data.updated_at) updatedAtRef.current = data.updated_at;
           lastSavedRef.current = text;
+          lastSavedMoodRef.current = moodVal;
+          if (draftRevision) clearJournalDraft(localStorage, draftOwnerId, date, draftRevision);
+          if (draftRevisionRef.current === draftRevision) draftRevisionRef.current = null;
+          setRecoveredDraft(false);
           onSave(data);
           if (contentRef.current !== lastSavedRef.current) pendingRef.current = true;
         } else {
@@ -128,7 +176,7 @@ export function JournalEditor({
         setIsSaving(false);
       }
     } while (pendingRef.current);
-  }, [date, onSave, addToast, onConflictReload]);
+  }, [date, draftOwnerId, onSave, addToast, onConflictReload]);
 
   useEffect(() => {
     if (content === lastSavedRef.current) return;
@@ -148,6 +196,26 @@ export function JournalEditor({
 
   return (
     <div className="space-y-4">
+      {recoveredDraft && (
+        <div role="status" className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm" style={{ background: "var(--accent-primary-soft)", color: "var(--text-secondary)" }}>
+          <span>Recovered an unsaved draft from this device.</span>
+          <button
+            type="button"
+            className="btn-ghost px-2 py-1 text-xs"
+            onClick={() => {
+              clearJournalDraft(localStorage, draftOwnerId, date);
+              draftRevisionRef.current = null;
+              setContent(initialContent);
+              setMood(initialMood);
+              contentRef.current = initialContent;
+              moodRef.current = initialMood;
+              setRecoveredDraft(false);
+            }}
+          >
+            Discard draft
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
           Mood:
@@ -179,6 +247,7 @@ export function JournalEditor({
       )}
 
       <textarea
+        aria-label="Journal entry"
         value={content}
         onChange={(e) => setContent(e.target.value)}
         className="w-full rounded-lg px-4 py-3 text-sm focus:outline-none resize-none min-h-[120px] md:min-h-[200px]"
@@ -205,6 +274,8 @@ export function JournalEditor({
               try {
                 const response = await fetch(`/api/journal/${entryId}`, { method: "DELETE" });
                 if (response.ok) {
+                  clearJournalDraft(localStorage, draftOwnerId, date);
+                  draftRevisionRef.current = null;
                   onDelete();
                 } else {
                   addToast("Failed to delete entry");
@@ -220,6 +291,7 @@ export function JournalEditor({
             className="p-2 rounded-lg text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
             style={{ color: "var(--text-muted)" }}
             title="Delete entry"
+            aria-label="Delete journal entry"
           >
             {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
           </button>

@@ -10,7 +10,8 @@ import { WorkoutLogCard } from "./WorkoutLogCard";
 import { WorkoutLogger, loadWorkoutDraft } from "./WorkoutLogger";
 import { TemplateFormModal } from "./TemplateFormModal";
 import { WorkoutStats } from "./WorkoutStats";
-import { addDays, getHistoricalDateOrToday, getToday } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { LoadError } from "@/components/shared/LoadError";
 
 type TemplateWithExercises = WorkoutTemplate & { workout_exercises?: WorkoutExercise[] };
@@ -19,7 +20,8 @@ type LogWithExercises = WorkoutLog & { workout_log_exercises?: WorkoutLogExercis
 type LogFilter = "all" | "7d" | "30d" | "custom";
 
 export function WorkoutDashboard({ initialDate }: { initialDate?: string }) {
-  const selectedDate = getHistoricalDateOrToday(initialDate);
+  const { today } = useClientDateContext();
+  const selectedDate = initialDate && initialDate <= today ? initialDate : today;
   const hasValidInitialDate = initialDate !== undefined && selectedDate === initialDate;
   const [templates, setTemplates] = useState<TemplateWithExercises[]>([]);
   const [logs, setLogs] = useState<LogWithExercises[]>([]);
@@ -29,8 +31,8 @@ export function WorkoutDashboard({ initialDate }: { initialDate?: string }) {
   const [activeWorkout, setActiveWorkout] = useState<TemplateWithExercises | null | "quick">(null);
   const [editingLog, setEditingLog] = useState<LogWithExercises | null>(null);
   const [logFilter, setLogFilter] = useState<LogFilter>(() => hasValidInitialDate ? "custom" : "30d");
-  const [customFrom, setCustomFrom] = useState(() => hasValidInitialDate ? selectedDate : addDays(getToday(), -30));
-  const [customTo, setCustomTo] = useState(() => hasValidInitialDate ? selectedDate : getToday());
+  const [customFrom, setCustomFrom] = useState(() => hasValidInitialDate ? selectedDate : addDays(today, -29));
+  const [customTo, setCustomTo] = useState(() => hasValidInitialDate ? selectedDate : today);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const { addToast } = useToast();
@@ -38,13 +40,13 @@ export function WorkoutDashboard({ initialDate }: { initialDate?: string }) {
   const logsQuery = useCallback(() => {
     if (logFilter === "all") return "/api/workouts/logs";
     if (logFilter === "7d") {
-      return `/api/workouts/logs?from=${addDays(getToday(), -6)}&to=${getToday()}`;
+      return `/api/workouts/logs?from=${addDays(today, -6)}&to=${today}`;
     }
     if (logFilter === "30d") {
-      return `/api/workouts/logs?from=${addDays(getToday(), -29)}&to=${getToday()}`;
+      return `/api/workouts/logs?from=${addDays(today, -29)}&to=${today}`;
     }
     return `/api/workouts/logs?from=${customFrom}&to=${customTo}`;
-  }, [logFilter, customFrom, customTo]);
+  }, [logFilter, customFrom, customTo, today]);
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -355,7 +357,7 @@ export function WorkoutDashboard({ initialDate }: { initialDate?: string }) {
                 type="date"
                 value={customTo}
                 min={customFrom}
-                max={getToday()}
+                max={today}
                 onChange={(e) => setCustomTo(e.target.value)}
                 className="rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                 style={{

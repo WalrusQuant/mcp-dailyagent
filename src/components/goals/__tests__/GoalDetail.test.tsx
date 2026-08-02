@@ -72,4 +72,46 @@ describe("GoalDetail lifecycle", () => {
       expected_updated_at: "2026-08-01T13:00:00.000Z",
     });
   });
+
+  it("warns before closing a goal that still has active linked work", async () => {
+    const withActiveWork = {
+      ...GOAL,
+      tasks: [{
+        id: "task-1",
+        user_id: "user-1",
+        title: "Open task",
+        notes: null,
+        priority: "A1",
+        done: false,
+        done_at: null,
+        task_date: "2026-08-01",
+        space_id: null,
+        goal_id: GOAL.id,
+        recurrence: null,
+        sort_order: 0,
+        created_at: GOAL.created_at,
+        updated_at: GOAL.updated_at,
+      }],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      return {
+        ok: true,
+        json: async () => String(input).endsWith("/progress") ? [] : withActiveWork,
+      } as Response;
+    });
+    const confirmMock = vi.fn(() => false);
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("confirm", confirmMock);
+
+    render(
+      <ToastProvider>
+        <GoalDetail goalId={GOAL.id} onBack={vi.fn()} />
+      </ToastProvider>
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Complete goal" }));
+
+    expect(confirmMock).toHaveBeenCalledWith(expect.stringContaining("1 active task"));
+    expect(fetchMock.mock.calls.some((call) => call[1]?.method === "PATCH")).toBe(false);
+  });
 });

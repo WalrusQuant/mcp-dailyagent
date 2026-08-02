@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { useId, useState } from "react";
 import { useToast } from "@/lib/toast-context";
 import { Space } from "@/types/database";
+import { FormModal } from "@/components/shared/FormModal";
 
 interface SpaceFormModalProps {
   space?: Space | null;
@@ -18,14 +18,7 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
   const [deadline, setDeadline] = useState(space?.deadline || "");
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleEsc);
-    return () => document.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
+  const id = useId();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,28 +70,15 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div
-        className="relative rounded-xl shadow-lg z-10 max-h-[90vh] overflow-y-auto"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", width: "420px", maxWidth: "calc(100vw - 2rem)" }}
-      >
-        <div className="flex items-center justify-between p-4" style={{ borderBottom: "1px solid var(--border-default)" }}>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            {space ? "Edit Space" : "New Space"}
-          </h2>
-          <button onClick={onClose} className="p-1" style={{ color: "var(--text-muted)" }}>
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+    <FormModal title={space ? "Edit Space" : "New Space"} onClose={onClose}>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-name`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Name *
             </label>
             <input
               type="text"
+              id={`${id}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
@@ -108,15 +88,16 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
                 border: "1px solid var(--border-default)",
               }}
               placeholder="Space name"
-              autoFocus
+              data-autofocus
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-description`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Description
             </label>
             <textarea
+              id={`${id}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
@@ -132,10 +113,11 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+              <label htmlFor={`${id}-status`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
                 Status
               </label>
               <select
+                id={`${id}-status`}
                 value={status}
                 onChange={(e) => setStatus(e.target.value as "active" | "paused" | "completed")}
                 className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
@@ -147,10 +129,11 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+              <label htmlFor={`${id}-deadline`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
                 Deadline
               </label>
               <input
+                id={`${id}-deadline`}
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
@@ -179,7 +162,6 @@ export function SpaceFormModal({ space, onClose, onSave }: SpaceFormModalProps) 
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </FormModal>
   );
 }

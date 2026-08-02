@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -69,7 +69,7 @@ export function registerInsightTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "insights:read");
       if (scopeError) return errorResult(scopeError);
 
-      const date = args.date ?? getToday();
+      const date = args.date ?? await getProfileToday(auth.userId);
       const result = await getInsightsForDate(auth.userId, date);
       if (result.error) return errorResult(`Error: ${result.error}`);
 
@@ -96,7 +96,7 @@ export function registerInsightTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "insights:write");
       if (scopeError) return errorResult(scopeError);
 
-      const date = args.cache_date ?? getToday();
+      const date = args.cache_date ?? await getProfileToday(auth.userId);
       const result = await saveInsights(auth.userId, date, args.insights);
       if (result.error) return errorResult(`Error: ${result.error}`);
 

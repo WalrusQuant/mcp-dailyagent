@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { insightCache } from "@/lib/db/schema";
@@ -8,7 +8,7 @@ import { getUserId } from "@/lib/auth";
 export async function GET() {
   try {
     const userId = getUserId();
-    const today = getToday();
+    const { today } = await resolveDateContext(userId);
 
     const rows = await db
       .select()

@@ -9,10 +9,9 @@ import { getToday, addDays, getDayOfWeek } from "@/lib/dates";
  *   (today in-progress does not break the streak).
  * - Any other unlogged applicable day ends the streak immediately.
  */
-export function calculateStreak(logs: string[], targetDays: number[]): number {
+export function calculateStreak(logs: string[], targetDays: number[], today = getToday()): number {
   const logSet = new Set(logs);
   let streak = 0;
-  const today = getToday();
   let checkDate = today;
   let skippedToday = false;
 

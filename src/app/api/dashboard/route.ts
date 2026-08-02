@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habits, habitLogs, journalEntries, workoutLogs, focusSessions, goals } from "@/lib/db/schema";
-import { eq, and, gte, lte, asc, desc, inArray } from "drizzle-orm";
+import { eq, and, gte, lt, lte, asc, desc, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-import { getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext, zonedDayRange } from "@/lib/date-context";
 import { calculateStreak } from "@/lib/habit-stats";
 
 export async function GET() {
   const userId = getUserId();
 
-  const today = getToday();
+  const dateContext = await resolveDateContext(userId);
+  const today = dateContext.today;
+  const todayRange = zonedDayRange(today, dateContext.timezone);
   const weekAgo = addDays(today, -7);
   // Fetch enough log history to compute a streak (up to 365 days back)
   const streakWindowStart = addDays(today, -364);
@@ -79,7 +82,8 @@ export async function GET() {
           and(
             eq(focusSessions.userId, userId),
             eq(focusSessions.status, "completed"),
-            gte(focusSessions.startedAt, new Date(`${today}T00:00:00`))
+            gte(focusSessions.startedAt, todayRange.start),
+            lt(focusSessions.startedAt, todayRange.end)
           )
         ),
       db
@@ -129,7 +133,7 @@ export async function GET() {
           Array.isArray(habit.targetDays) && habit.targetDays.length > 0
             ? habit.targetDays
             : [1, 2, 3, 4, 5, 6, 7];
-        const streak = calculateStreak(logsByHabit[habit.id] ?? [], targetDays);
+        const streak = calculateStreak(logsByHabit[habit.id] ?? [], targetDays, today);
         if (streak > maxStreak) maxStreak = streak;
       }
     }

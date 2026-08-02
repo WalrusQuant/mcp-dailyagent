@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { FormModal } from "@/components/shared/FormModal";
 import { useToast } from "@/lib/toast-context";
 import { Goal } from "@/types/database";
@@ -31,6 +31,7 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
   const [progress, setProgress] = useState(goal?.progress || 0);
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+  const id = useId();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,25 +98,27 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
     <FormModal title={goal ? "Edit Goal" : "New Goal"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-title`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Title *
           </label>
           <input
+            id={`${id}-title`}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
             style={{ background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
             placeholder="What do you want to achieve?"
-            autoFocus
+            data-autofocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor={`${id}-description`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Description
           </label>
           <textarea
+            id={`${id}-description`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
@@ -127,10 +130,11 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-category`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Category
             </label>
             <select
+              id={`${id}-category`}
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
@@ -142,10 +146,11 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-target-date`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Target Date
             </label>
             <input
+              id={`${id}-target-date`}
               type="date"
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
@@ -157,10 +162,11 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
 
         {goal && (
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-status`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Status
             </label>
             <select
+              id={`${id}-status`}
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
@@ -174,9 +180,9 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
         )}
 
         <div>
-          <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+          <div className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
             Progress Tracking
-          </label>
+          </div>
           <div className="flex gap-2">
             {(["auto", "manual"] as const).map((mode) => (
               <button
@@ -189,6 +195,7 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
                   color: progressMode === mode ? "var(--bg-base)" : "var(--text-secondary)",
                   border: `1px solid ${progressMode === mode ? "var(--accent-primary)" : "var(--border-default)"}`,
                 }}
+                aria-pressed={progressMode === mode}
               >
                 {mode === "auto" ? "Auto (from tasks/habits)" : "Manual"}
               </button>
@@ -198,10 +205,11 @@ export function GoalFormModal({ goal, onClose, onSave }: GoalFormModalProps) {
 
         {progressMode === "manual" && (
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            <label htmlFor={`${id}-progress`} className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
               Progress: {progress}%
             </label>
             <input
+              id={`${id}-progress`}
               type="range"
               min={0}
               max={100}

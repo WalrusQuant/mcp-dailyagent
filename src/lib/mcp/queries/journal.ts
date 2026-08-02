@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { journalEntries } from "@/lib/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 
 export function serializeEntry(e: typeof journalEntries.$inferSelect) {
   return {
@@ -105,7 +105,7 @@ export async function createOrUpdateJournalEntry(
   input: CreateOrUpdateJournalInput
 ): Promise<QueryResult<JournalEntry>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
     const entryDate = input.entry_date || today;
 
     const [row] = await db

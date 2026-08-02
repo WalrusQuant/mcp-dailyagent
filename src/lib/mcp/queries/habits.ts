@@ -2,9 +2,10 @@ import { db } from "@/lib/db/client";
 import { habits, habitLogs } from "@/lib/db/schema";
 import { eq, and, gte, lte, asc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
-import { getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
-import { isOwned } from "@/lib/db/ownership";
+import { isAssignableRelationship } from "@/lib/db/ownership";
 
 export function serializeHabit(h: typeof habits.$inferSelect) {
   return {
@@ -100,7 +101,7 @@ export async function getHabitsWithTodayStatus(
   userId: string
 ): Promise<QueryResult<HabitWithStatus[]>> {
   try {
-    const today = getToday();
+    const today = await getProfileToday(userId);
 
     const [habitsRows, logsRows] = await Promise.all([
       db
@@ -131,8 +132,8 @@ export async function createHabit(
   input: CreateHabitInput
 ): Promise<QueryResult<Habit>> {
   try {
-    if (input.goal_id && !(await isOwned("goal", input.goal_id, userId))) {
-      return { data: null, error: "goal_id must reference one of your goals" };
+    if (input.goal_id && !(await isAssignableRelationship(db, "goal", input.goal_id, userId))) {
+      return { data: null, error: "goal_id must reference one of your goals and it must be active" };
     }
 
     const [row] = await db
@@ -201,7 +202,7 @@ export async function getHabitStats(
 ): Promise<QueryResult<HabitStats>> {
   try {
     const safeDays = Math.max(1, days);
-    const endDateStr = getToday();
+    const endDateStr = await getProfileToday(userId);
     const startDateStr = addDays(endDateStr, -(safeDays - 1));
 
     const habitRows = await db

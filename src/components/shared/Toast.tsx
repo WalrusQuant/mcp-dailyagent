@@ -29,7 +29,10 @@ function ToastItem({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2.5 rounded-lg shadow-lg max-w-xs transition-all duration-300"
+      role={type === "error" ? "alert" : "status"}
+      aria-live={type === "error" ? "assertive" : "polite"}
+      aria-atomic="true"
+      className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg shadow-lg sm:w-auto sm:max-w-xs transition-all duration-300"
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border-default)",
@@ -38,10 +41,11 @@ function ToastItem({
         opacity: visible ? 1 : 0,
       }}
     >
-      <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>
+      <span className="text-sm flex-1 min-w-0 break-words" style={{ color: "var(--text-primary)" }}>
         {message}
       </span>
       <button
+        aria-label="Dismiss notification"
         onClick={() => onRemove(id)}
         className="p-0.5 shrink-0"
         style={{ color: "var(--text-muted)" }}
@@ -59,7 +63,7 @@ export function ToastContainer() {
 
   return (
     <div
-      className="fixed right-4 z-[80] flex flex-col gap-2"
+      className="fixed left-4 right-4 z-[80] flex flex-col gap-2 sm:left-auto"
       style={{ bottom: "calc(60px + env(safe-area-inset-bottom, 0px) + 1rem)" }}
     >
       {toasts.map((toast) => (

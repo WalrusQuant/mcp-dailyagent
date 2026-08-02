@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Task, Habit } from "@/types/database";
 import { useFocusTimerContext } from "@/lib/focus-timer-context";
 import { useToast } from "@/lib/toast-context";
-import { getToday } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 
 interface DailyStartCardProps {
   tasks: { total: number; done: number; topPriorities: Task[] };
@@ -18,6 +18,7 @@ interface DailyStartCardProps {
 export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailyStartCardProps) {
   const timer = useFocusTimerContext();
   const { addToast } = useToast();
+  const { today } = useClientDateContext();
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && sessionStorage.getItem("daily-start-dismissed") === "true"
   );
@@ -42,7 +43,6 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
       if (statsRes.ok) {
         const data = await statsRes.json();
         const logged = new Set<string>();
-        const today = getToday();
         for (const h of data.habits ?? []) {
           if ((h.recentLogs as string[] | undefined)?.includes(today)) {
             logged.add(h.id);
@@ -53,7 +53,7 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
     } catch {
       setHabitList([]);
     }
-  }, [habitList]);
+  }, [habitList, today]);
 
   // Fire once after paint without useEffect setState-on-mount lint
   useEffect(() => {
@@ -92,7 +92,6 @@ export function DailyStartCard({ tasks, habits, focus, onTaskComplete }: DailySt
   };
 
   const handleToggleHabit = async (habitId: string) => {
-    const today = getToday();
     const wasLogged = loggedToday.has(habitId);
     setLoggedToday((prev) => {
       const next = new Set(prev);

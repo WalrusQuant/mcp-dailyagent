@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db/client";
@@ -8,7 +8,7 @@ import { getAuth, checkScope, textResult, errorResult, conflictResult, NOT_AUTHE
 import { dateSchema, habitFrequencySchema, uuidSchema } from "./validators";
 import { getHabitStats } from "@/lib/mcp/queries/habits";
 import { updateWithVersion } from "@/lib/db/optimistic";
-import { isOwned } from "@/lib/db/ownership";
+import { isAssignableRelationship } from "@/lib/db/ownership";
 
 // ---------------------------------------------------------------------------
 // Query helpers
@@ -119,7 +119,7 @@ async function deleteHabit(userId: string, habitId: string) {
 }
 
 async function toggleHabitLog(userId: string, habitId: string, date?: string) {
-  const today = getToday();
+  const today = await getProfileToday(userId);
   const logDate = date ?? today;
 
   try {
@@ -230,8 +230,8 @@ export function registerHabitTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (args.goal_id && !(await isOwned("goal", args.goal_id, auth.userId))) {
-        return errorResult("Error: goal_id must reference one of your goals");
+      if (args.goal_id && !(await isAssignableRelationship(db, "goal", args.goal_id, auth.userId))) {
+        return errorResult("Error: goal_id must reference one of your goals and it must be active");
       }
 
       const result = await createHabit(auth.userId, args);
@@ -292,8 +292,8 @@ export function registerHabitTools(server: McpServer) {
       const scopeError = checkScope(auth.scopes, "habits:write");
       if (scopeError) return errorResult(scopeError);
 
-      if (args.goal_id && !(await isOwned("goal", args.goal_id, auth.userId))) {
-        return errorResult("Error: goal_id must reference one of your goals");
+      if (args.goal_id && !(await isAssignableRelationship(db, "goal", args.goal_id, auth.userId))) {
+        return errorResult("Error: goal_id must reference one of your goals and it must be active");
       }
 
       if (args.expected_updated_at) {

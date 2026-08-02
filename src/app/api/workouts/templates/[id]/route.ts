@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeTemplate } from "@/lib/mcp/queries/workouts";
 import { readJsonBody } from "@/lib/api-body";
+import { updateWorkoutTemplate } from "@/lib/workouts/templates";
 
 async function getTemplateWithExercises(id: string, userId: string) {
   const rows = await db
@@ -54,69 +55,25 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const allowedFields: Partial<typeof workoutTemplates.$inferInsert> = {};
-  if (typeof body.name === "string") allowedFields.name = body.name;
-  if (typeof body.description === "string" || body.description === null)
-    allowedFields.description = body.description as string | null;
-
-  if (Object.keys(allowedFields).length === 0 && !Array.isArray(body.exercises)) {
+  if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) {
+    return NextResponse.json({ error: "name must be a non-empty string" }, { status: 400 });
+  }
+  if (body.description !== undefined && typeof body.description !== "string" && body.description !== null) {
+    return NextResponse.json({ error: "description must be a string or null" }, { status: 400 });
+  }
+  if (body.exercises !== undefined && !Array.isArray(body.exercises)) {
+    return NextResponse.json({ error: "exercises must be an array" }, { status: 400 });
+  }
+  if (body.name === undefined && body.description === undefined && body.exercises === undefined) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
   try {
-    // Verify the template exists and belongs to this user before touching
-    // child rows — the exercise delete below is keyed by template id alone.
-    const [owned] = await db
-      .select({ id: workoutTemplates.id })
-      .from(workoutTemplates)
-      .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
-    if (!owned) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    if (Object.keys(allowedFields).length > 0) {
-      await db
-        .update(workoutTemplates)
-        .set(allowedFields)
-        .where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
-    }
-
-    type TemplateExerciseInput = {
-      name: string;
-      exercise_type?: string;
-      sort_order?: number;
-      default_sets?: number;
-      default_reps?: number;
-      default_weight?: number;
-      default_duration?: number;
-      notes?: string;
-    };
-    const bodyExercises = body.exercises as TemplateExerciseInput[];
-    if (Array.isArray(bodyExercises)) {
-      // Replace atomically: if the insert fails, the delete rolls back and
-      // the previous exercises survive.
-      await db.transaction(async (tx) => {
-        await tx.delete(workoutExercises).where(eq(workoutExercises.templateId, id));
-
-        if (bodyExercises.length > 0) {
-          await tx.insert(workoutExercises).values(
-            bodyExercises.map((ex) => ({
-              templateId: id,
-              name: ex.name,
-              exerciseType: (ex.exercise_type as "strength" | "timed" | "cardio") || "strength",
-              sortOrder: ex.sort_order ?? 0,
-              defaultSets: ex.default_sets ?? null,
-              defaultReps: ex.default_reps ?? null,
-              defaultWeight: ex.default_weight?.toString() ?? null,
-              defaultDuration: ex.default_duration ?? null,
-              notes: ex.notes ?? null,
-            }))
-          );
-        }
-      });
-    }
-
-    const result = await getTemplateWithExercises(id, userId);
+    const result = await updateWorkoutTemplate(userId, id, {
+      name: typeof body.name === "string" ? body.name.trim() : undefined,
+      description: body.description as string | null | undefined,
+      exercises: body.exercises,
+    });
     if (!result) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

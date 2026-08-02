@@ -2,6 +2,7 @@ import { db } from "@/lib/db/client";
 import { spaces } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { QueryResult } from "@/lib/mcp/types";
+import { transitionSpace } from "@/lib/parent-lifecycle";
 
 export function serializeSpace(s: typeof spaces.$inferSelect) {
   return {
@@ -97,17 +98,20 @@ export async function updateSpace(
 ): Promise<QueryResult<Space>> {
   try {
     const updates: Partial<typeof spaces.$inferInsert> = {};
-
     if (typeof fields.name === "string") updates.name = fields.name;
     if (typeof fields.description === "string" || fields.description === null)
       updates.description = fields.description;
-    if (
-      typeof fields.status === "string" &&
-      ["active", "paused", "completed"].includes(fields.status)
-    ) {
-      updates.status = fields.status as "active" | "paused" | "completed";
-    }
 
+    if (typeof fields.status === "string") {
+      const transitioned = await transitionSpace(
+        userId,
+        spaceId,
+        fields.status as "active" | "paused" | "completed",
+        undefined,
+        updates
+      );
+      return { data: rowToSpace(transitioned.row), error: null };
+    }
     updates.updatedAt = new Date();
 
     const [row] = await db

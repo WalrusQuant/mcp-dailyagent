@@ -1,6 +1,7 @@
 "use client";
 
-import { getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 
 interface HabitStatsProps {
   habitName: string;
@@ -12,7 +13,7 @@ interface HabitStatsProps {
 
 export function HabitStats({ habitName, color, streak, completionRate, loggedDates }: HabitStatsProps) {
   // Build 30-day grid (5 rows x 6 cols)
-  const today = getToday();
+  const { today } = useClientDateContext();
   const days: { date: string; logged: boolean }[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = addDays(today, -i);

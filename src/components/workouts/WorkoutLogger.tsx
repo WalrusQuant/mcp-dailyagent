@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { Plus, Save, X } from "lucide-react";
 import { WorkoutTemplate, WorkoutExercise, WorkoutLog, WorkoutLogExercise } from "@/types/database";
 import { ExerciseSetInput } from "./ExerciseSetInput";
-import { getToday } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { useToast } from "@/lib/toast-context";
 
 interface ExerciseEntry {
@@ -66,6 +66,8 @@ function setsFromTemplateExercise(e: WorkoutExercise) {
 }
 
 export function WorkoutLogger({ template, existingLog, onSave, onCancel }: WorkoutLoggerProps) {
+  const { today } = useClientDateContext();
+  const id = useId();
   const isEdit = !!existingLog;
   const [draft] = useState<WorkoutDraft | null>(() => (isEdit ? null : loadWorkoutDraft()));
   const matchesDraft = !isEdit && !!draft && draft.templateId === (template?.id ?? null);
@@ -77,7 +79,7 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
     isEdit ? existingLog!.notes || "" : matchesDraft ? draft!.notes || "" : ""
   );
   const [logDate, setLogDate] = useState(
-    isEdit ? existingLog!.log_date : matchesDraft && draft!.logDate ? draft!.logDate : getToday()
+    isEdit ? existingLog!.log_date : matchesDraft && draft!.logDate ? draft!.logDate : today
   );
   const [durationMinutes, setDurationMinutes] = useState<number | "">(
     isEdit ? existingLog!.duration_minutes ?? "" : ""
@@ -230,6 +232,7 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <input
+          aria-label="Workout name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -260,13 +263,14 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
 
       <div className="flex flex-wrap gap-3">
         <div>
-          <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+          <label htmlFor={`${id}-date`} className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
             Date
           </label>
           <input
+            id={`${id}-date`}
             type="date"
             value={logDate}
-            max={getToday()}
+            max={today}
             onChange={(e) => setLogDate(e.target.value)}
             className="rounded-lg px-3 py-2 text-sm focus:outline-none"
             style={{
@@ -277,10 +281,11 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
           />
         </div>
         <div>
-          <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+          <label htmlFor={`${id}-duration`} className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
             Duration (min)
           </label>
           <input
+            id={`${id}-duration`}
             type="number"
             min={0}
             value={durationMinutes}
@@ -299,10 +304,11 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
       </div>
 
       <div>
-        <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+        <label htmlFor={`${id}-notes`} className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>
           Notes
         </label>
         <textarea
+          id={`${id}-notes`}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
@@ -336,6 +342,7 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
 
       <div className="flex flex-col md:flex-row gap-2">
         <input
+          aria-label="New exercise name"
           type="text"
           value={newExerciseName}
           onChange={(e) => setNewExerciseName(e.target.value)}
@@ -350,6 +357,7 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
         />
         <div className="flex gap-2">
           <select
+            aria-label="New exercise type"
             value={newExerciseType}
             onChange={(e) => setNewExerciseType(e.target.value)}
             className="flex-1 md:flex-none rounded-lg px-2 py-2.5 md:py-2 text-sm focus:outline-none"
@@ -364,6 +372,7 @@ export function WorkoutLogger({ template, existingLog, onSave, onCancel }: Worko
             <option value="cardio">Cardio</option>
           </select>
           <button
+            aria-label="Add exercise"
             onClick={addExercise}
             disabled={!newExerciseName.trim()}
             className="p-2.5 md:p-2 rounded-lg transition-opacity disabled:opacity-50"

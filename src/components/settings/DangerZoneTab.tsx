@@ -188,10 +188,11 @@ export function DangerZoneTab() {
               </div>
             </div>
             <div>
-              <label className="block text-xs mb-1.5" style={{ color: "var(--text-muted)" }}>
+              <label htmlFor="wipe-confirmation" className="block text-xs mb-1.5" style={{ color: "var(--text-muted)" }}>
                 Type <strong>{CONFIRM_PHRASE}</strong> to confirm:
               </label>
               <input
+                id="wipe-confirmation"
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}

@@ -86,7 +86,43 @@ describe("create_workout_template", () => {
   });
 });
 
+describe("update_workout_template", () => {
+  it("atomically updates scalars and replaces exercises", async () => {
+    const created = expectOk<{ id: string }>(await h.call("create_workout_template", {
+      name: "Old", exercises: JSON.stringify([{ name: "Curl" }]),
+    }, ctx));
+    const updated = expectOk<{ name: string; workout_exercises: { name: string }[] }>(
+      await h.call("update_workout_template", {
+        template_id: created.id,
+        name: "New",
+        exercises: JSON.stringify([{ name: "Squat", default_sets: 3 }]),
+      }, ctx)
+    );
+    expect(updated.name).toBe("New");
+    expect(updated.workout_exercises.map((exercise) => exercise.name)).toEqual(["Squat"]);
+  });
+
+  it("does not update another user's template", async () => {
+    const created = expectOk<{ id: string }>(await h.call("create_workout_template", { name: "Private" }, ctx));
+    const result = await h.call("update_workout_template", { template_id: created.id, name: "Nope" }, {
+      userId: OTHER_USER_ID, scopes: SCOPES,
+    });
+    expect(expectError(result)).toContain("not found");
+  });
+});
+
 describe("log_workout + list_workout_logs", () => {
+  it("copies template exercises into a stable log snapshot", async () => {
+    const template = expectOk<{ id: string }>(await h.call("create_workout_template", {
+      name: "Strength",
+      exercises: JSON.stringify([{ name: "Squat", default_sets: 3, default_reps: 5 }]),
+    }, ctx));
+    const log = expectOk<{ template_id: string; workout_log_exercises: unknown[] }>(await h.call("log_workout", {
+      name: "Strength", log_date: "2026-06-09", template_id: template.id,
+    }, ctx));
+    expect(log.template_id).toBe(template.id);
+    expect(log.workout_log_exercises).toHaveLength(1);
+  });
   it("rejects a template owned by another user without creating a log", async () => {
     const { db } = await getTestDb();
     const [template] = await db
@@ -146,20 +182,19 @@ describe("update_workout_log", () => {
     const id = await seedLog();
     const updated = expectOk<{
       name: string;
-      durationMinutes: number;
+      duration_minutes: number;
       workout_log_exercises: unknown[];
     }>(await h.call("update_workout_log", { log_id: id, name: "Renamed", duration_minutes: 30 }, ctx));
 
     expect(updated.name).toBe("Renamed");
-    // MCP tools return raw drizzle rows (camelCase), unlike the snake_case dashboard API.
-    expect(updated.durationMinutes).toBe(30);
+    expect(updated.duration_minutes).toBe(30);
     // Exercises untouched because the field was omitted.
     expect(updated.workout_log_exercises).toHaveLength(1);
   });
 
   it("replaces the exercise list when exercises is provided", async () => {
     const id = await seedLog();
-    const updated = expectOk<{ workout_log_exercises: { exerciseName: string }[] }>(
+    const updated = expectOk<{ workout_log_exercises: { exercise_name: string }[] }>(
       await h.call(
         "update_workout_log",
         { log_id: id, exercises: JSON.stringify([{ name: "Deadlift", sets: 1, reps: 5 }]) },
@@ -167,7 +202,7 @@ describe("update_workout_log", () => {
       )
     );
     expect(updated.workout_log_exercises).toHaveLength(1);
-    expect(updated.workout_log_exercises[0].exerciseName).toBe("Deadlift");
+    expect(updated.workout_log_exercises[0].exercise_name).toBe("Deadlift");
   });
 
   it("clears exercises when given an empty array", async () => {

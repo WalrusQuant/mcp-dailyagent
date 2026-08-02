@@ -1,4 +1,5 @@
 import { JournalView } from "@/components/journal/JournalView";
+import { getUserId } from "@/lib/auth";
 
 export default async function JournalPage({
   searchParams,
@@ -6,5 +7,5 @@ export default async function JournalPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const { date } = await searchParams;
-  return <JournalView initialDate={date} />;
+  return <JournalView initialDate={date} draftOwnerId={getUserId()} />;
 }

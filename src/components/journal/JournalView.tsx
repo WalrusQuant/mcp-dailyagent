@@ -8,12 +8,13 @@ import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { JournalEditor } from "./JournalEditor";
 import { JournalEntryCard } from "./JournalEntryCard";
-import { getHistoricalDateOrToday, getToday } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { useToast } from "@/lib/toast-context";
 import { LoadError } from "@/components/shared/LoadError";
 
-export function JournalView({ initialDate }: { initialDate?: string }) {
-  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
+export function JournalView({ initialDate, draftOwnerId }: { initialDate?: string; draftOwnerId: string }) {
+  const { today } = useClientDateContext();
+  const [date, setDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const [todayEntry, setTodayEntry] = useState<JournalEntry | null>(null);
   const [recentEntries, setRecentEntries] = useState<JournalEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -112,7 +113,7 @@ export function JournalView({ initialDate }: { initialDate?: string }) {
     <div className="max-w-2xl mx-auto p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Journal</h1>
-        <DateNavigation date={date} onDateChange={setDate} maxDate={getToday()} />
+        <DateNavigation date={date} onDateChange={setDate} maxDate={today} />
       </div>
 
       {/* Key on date only: remounting when the first save assigns an id would
@@ -124,6 +125,7 @@ export function JournalView({ initialDate }: { initialDate?: string }) {
         initialMood={todayEntry?.mood}
         initialUpdatedAt={todayEntry?.updated_at ?? null}
         date={date}
+        draftOwnerId={draftOwnerId}
         onSave={handleSave}
         onDelete={handleDelete}
         onConflictReload={() => loadData(date)}
@@ -143,6 +145,7 @@ export function JournalView({ initialDate }: { initialDate?: string }) {
           />
           {searchQuery && (
             <button
+              aria-label="Clear journal search"
               onClick={() => setSearchQuery("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
               style={{ color: "var(--text-muted)" }}

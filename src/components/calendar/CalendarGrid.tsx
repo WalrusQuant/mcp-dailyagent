@@ -1,6 +1,6 @@
 "use client";
 
-import { getToday } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { CalendarDayCell } from "./CalendarDayCell";
 import type { DaySummary } from "./types";
 
@@ -21,7 +21,7 @@ export function CalendarGrid({
   selectedDate,
   onSelectDate,
 }: CalendarGridProps) {
-  const today = getToday();
+  const { today } = useClientDateContext();
   const weekCount = gridDates.length / 7;
 
   return (

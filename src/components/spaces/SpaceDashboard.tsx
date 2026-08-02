@@ -17,6 +17,7 @@ import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { useToast } from "@/lib/toast-context";
 import { CompletionButton } from "@/components/shared/CompletionButton";
 import { LoadError } from "@/components/shared/LoadError";
+import { formatDate } from "@/lib/dates";
 
 const PRIORITY_COLORS: Record<string, string> = {
   A1: "var(--accent-negative)",
@@ -144,6 +145,9 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
     if (!space) return;
 
     const nextStatus = space.status === "completed" ? "active" : "completed";
+    if (nextStatus === "completed" && openTasks.length > 0 && !confirm(
+      `Complete this space with ${openTasks.length} active task${openTasks.length === 1 ? "" : "s"}? Existing links will be kept, but new work cannot be assigned.`
+    )) return;
     setIsUpdatingStatus(true);
     try {
       const response = await fetch(`/api/spaces/${spaceId}`, {
@@ -364,9 +368,9 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}
         >
           <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-            <label className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+            <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
               Progress
-            </label>
+            </span>
             <div className="flex items-center gap-3">
               {tasks.length > 0 && (
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -398,11 +402,7 @@ export function SpaceDashboard({ spaceId }: { spaceId: string }) {
               <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                 <Calendar className="w-3 h-3" />
                 Deadline:{" "}
-                {new Date(space.deadline + "T00:00:00").toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                {formatDate(space.deadline, "long")}
               </div>
             ) : (
               <span />

@@ -5,7 +5,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { serializeHabit } from "@/lib/mcp/queries/habits";
 import { readJsonBody } from "@/lib/api-body";
-import { isOwned } from "@/lib/db/ownership";
+import { isAssignableRelationship } from "@/lib/db/ownership";
 import { uuidSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (typeof goal_id === "string" && !(await isOwned("goal", goal_id, userId))) {
-      return NextResponse.json({ error: "goal_id must reference one of your goals" }, { status: 400 });
+    if (typeof goal_id === "string" && !(await isAssignableRelationship(db, "goal", goal_id, userId))) {
+      return NextResponse.json({ error: "goal_id must reference one of your goals and it must be active" }, { status: 400 });
     }
 
     const [row] = await db

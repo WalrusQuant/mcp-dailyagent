@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { focusSessions, tasks } from "@/lib/db/schema";
-import { eq, and, gte, inArray } from "drizzle-orm";
+import { eq, and, gte, lt, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-import { getToday, addDays, toLocalDate } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext, zonedDate, zonedDateRange } from "@/lib/date-context";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -18,9 +19,9 @@ export async function GET(request: NextRequest) {
   }
   const days = Math.max(1, parseInt(daysParam ?? "7", 10));
 
-  const from = new Date();
-  from.setDate(from.getDate() - (days - 1));
-  from.setHours(0, 0, 0, 0);
+  const dateContext = await resolveDateContext(userId);
+  const firstDay = addDays(dateContext.today, -(days - 1));
+  const range = zonedDateRange(firstDay, dateContext.today, dateContext.timezone);
 
   try {
     const sessions = await db
@@ -35,7 +36,8 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(focusSessions.userId, userId),
-          gte(focusSessions.startedAt, from)
+          gte(focusSessions.startedAt, range.start),
+          lt(focusSessions.startedAt, range.end)
         )
       )
       .orderBy(focusSessions.startedAt);
@@ -50,13 +52,12 @@ export async function GET(request: NextRequest) {
 
     // Build daily breakdown
     const dailyMap = new Map<string, { sessions: number; minutes: number }>();
-    const firstDay = addDays(getToday(), -(days - 1));
     for (let i = 0; i < days; i++) {
       dailyMap.set(addDays(firstDay, i), { sessions: 0, minutes: 0 });
     }
 
     for (const s of completedSessions) {
-      const key = toLocalDate(s.startedAt);
+      const key = zonedDate(s.startedAt, dateContext.timezone);
       const entry = dailyMap.get(key);
       if (entry) {
         entry.sessions += 1;

@@ -3,11 +3,14 @@
 import { useState, useEffect } from "react";
 import { Loader2, Save } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
+import { TIMEZONE_CHANGED_EVENT } from "@/lib/client-date-context";
 
 export function AccountTab() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState<string | null>(null);
   const [timezone, setTimezone] = useState("UTC");
+  const [toolCallingEnabled, setToolCallingEnabled] = useState(true);
+  const [briefingEnabled, setBriefingEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -25,6 +28,8 @@ export function AccountTab() {
         setDisplayName(data.display_name || "");
         setEmail(data.email || null);
         setTimezone(data.timezone || "UTC");
+        setToolCallingEnabled(data.tool_calling_enabled ?? true);
+        setBriefingEnabled(data.briefing_enabled ?? true);
       } catch {
         setLoadError(true);
       } finally {
@@ -40,12 +45,18 @@ export function AccountTab() {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ display_name: displayName || null, timezone }),
+        body: JSON.stringify({
+          display_name: displayName || null,
+          timezone,
+          tool_calling_enabled: toolCallingEnabled,
+          briefing_enabled: briefingEnabled,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to save");
       }
+      window.dispatchEvent(new CustomEvent(TIMEZONE_CHANGED_EVENT, { detail: timezone }));
       addToast("Profile updated", "success");
     } catch (err) {
       addToast(
@@ -87,19 +98,20 @@ export function AccountTab() {
       <div className="space-y-4">
         {email && (
           <div>
-            <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+            <div className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
               Email
-            </label>
+            </div>
             <p className="text-sm px-4 py-3 rounded-lg" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
               {email}
             </p>
           </div>
         )}
         <div>
-          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor="profile-display-name" className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
             Display Name
           </label>
           <input
+            id="profile-display-name"
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -116,10 +128,11 @@ export function AccountTab() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+          <label htmlFor="profile-timezone" className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
             Timezone
           </label>
           <select
+            id="profile-timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
             className="w-full rounded-lg px-4 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] transition-colors"
@@ -134,6 +147,36 @@ export function AccountTab() {
             ))}
           </select>
         </div>
+
+        <fieldset className="space-y-3">
+          <legend className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+            Agent Access
+          </legend>
+          <label className="flex items-start gap-3 rounded-lg px-4 py-3 cursor-pointer" style={{ background: "var(--bg-elevated)" }}>
+            <input
+              type="checkbox"
+              checked={toolCallingEnabled}
+              onChange={(event) => setToolCallingEnabled(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>Allow agent tool calls</span>
+              <span className="block text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Resources and prompts remain readable when agent tools are disabled.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-lg px-4 py-3 cursor-pointer" style={{ background: "var(--bg-elevated)" }}>
+            <input
+              type="checkbox"
+              checked={briefingEnabled}
+              onChange={(event) => setBriefingEnabled(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>Show and store daily briefings</span>
+              <span className="block text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Turning this off hides saved briefings and rejects new ones.</span>
+            </span>
+          </label>
+        </fieldset>
       </div>
 
       <button

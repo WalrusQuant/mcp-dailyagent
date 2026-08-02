@@ -22,6 +22,8 @@ export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(),
   email: text("email").notNull(),
   displayName: text("display_name"),
+  // Deprecated compatibility columns; no longer exposed by the profile API.
+  // Drop only after every deployed instance has crossed this release.
   avatarUrl: text("avatar_url"),
   timezone: text("timezone").notNull().default("UTC"),
   isAdmin: boolean("is_admin").notNull().default(false),
@@ -132,6 +134,22 @@ export const goalProgressLogs = pgTable(
 // ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
+export const taskRecurrenceSeries = pgTable(
+  "task_recurrence_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    rule: jsonb("rule").notNull(),
+    anchorDate: date("anchor_date").notNull(),
+    endsBefore: date("ends_before"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_task_recurrence_series_user").on(t.userId)]
+);
+
 export const tasks = pgTable(
   "tasks",
   {
@@ -150,6 +168,10 @@ export const tasks = pgTable(
     spaceId: uuid("space_id").references(() => spaces.id, { onDelete: "set null" }),
     goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
     recurrence: jsonb("recurrence"),
+    recurrenceSeriesId: uuid("recurrence_series_id").references(() => taskRecurrenceSeries.id, {
+      onDelete: "set null",
+    }),
+    scheduledDate: date("scheduled_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -159,6 +181,10 @@ export const tasks = pgTable(
     index("idx_tasks_space").on(t.spaceId),
     index("idx_tasks_goal").on(t.goalId),
     index("idx_tasks_rolled_from").on(t.rolledFrom),
+    uniqueIndex("tasks_recurrence_series_scheduled_unique").on(
+      t.recurrenceSeriesId,
+      t.scheduledDate
+    ),
     check("tasks_priority_check", sql`${t.priority} ~ '^[A-C][1-9]$'`),
   ]
 );
@@ -411,4 +437,3 @@ export const insightCache = pgTable(
     uniqueIndex("insight_cache_user_date_unique").on(t.userId, t.cacheDate),
   ]
 );
-

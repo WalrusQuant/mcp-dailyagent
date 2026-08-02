@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { tasks, habitLogs, habits, journalEntries, workoutLogs, focusSessions } from "@/lib/db/schema";
-import { eq, and, gte, lte, inArray } from "drizzle-orm";
-import { getCalendarGridDates, toLocalDate } from "@/lib/dates";
+import { eq, and, gte, lte, lt, inArray } from "drizzle-orm";
+import { getCalendarGridDates, getDayOfWeek } from "@/lib/dates";
 import type { DaySummary } from "@/components/calendar/types";
 import { getUserId } from "@/lib/auth";
 import { yearMonthSchema } from "@/lib/validation";
+import { resolveDateContext, zonedDate, zonedDateRange } from "@/lib/date-context";
 
 export async function GET(request: NextRequest) {
   const userId = getUserId();
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
   const gridDates = getCalendarGridDates(parsedMonth.data);
   const startDate = gridDates[0];
   const endDate = gridDates[gridDates.length - 1];
+  const dateContext = await resolveDateContext(userId);
+  const focusRange = zonedDateRange(startDate, endDate, dateContext.timezone);
 
   try {
     const [taskRows, habitLogRows, habitRows, journalRows, workoutRows, focusRows] =
@@ -77,8 +80,8 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(focusSessions.userId, userId),
-              gte(focusSessions.startedAt, new Date(`${startDate}T00:00:00`)),
-              lte(focusSessions.startedAt, new Date(`${endDate}T23:59:59`)),
+              gte(focusSessions.startedAt, focusRange.start),
+              lt(focusSessions.startedAt, focusRange.end),
               inArray(focusSessions.status, ["completed", "active"])
             )
           ),
@@ -124,8 +127,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const date of gridDates) {
-      const d = new Date(date + "T00:00:00");
-      const dow = d.getDay() === 0 ? 7 : d.getDay();
+      const dow = getDayOfWeek(date);
       let expectedCount = 0;
       for (const [, habit] of habitMap) {
         if (habit.targetDays.includes(dow)) expectedCount++;
@@ -148,7 +150,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const f of focusRows) {
-      const date = toLocalDate(f.startedAt);
+      const date = zonedDate(f.startedAt, dateContext.timezone);
       const day = ensureDay(date);
       day.focus.sessions++;
       day.focus.minutes += f.durationMinutes ?? 0;

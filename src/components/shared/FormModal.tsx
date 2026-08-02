@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { X } from "lucide-react";
+import { useAccessibleDialog } from "@/hooks/useAccessibleDialog";
 
 interface FormModalProps {
   title: string;
@@ -11,13 +11,7 @@ interface FormModalProps {
 }
 
 export function FormModal({ title, onClose, children, width = "420px" }: FormModalProps) {
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleEsc);
-    return () => document.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
+  const { dialogRef, titleId } = useAccessibleDialog(onClose);
 
   // z-[75] clears the mobile bottom nav (z-[60]) and its More sheet (z-[70]) so
   // the footer buttons stay tappable, while staying under toasts (z-[80]).
@@ -31,6 +25,11 @@ export function FormModal({ title, onClose, children, width = "420px" }: FormMod
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="relative z-10 max-h-full overflow-y-auto"
         style={{
           background: "var(--bg-surface)",
@@ -45,7 +44,7 @@ export function FormModal({ title, onClose, children, width = "420px" }: FormMod
           className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: "1px solid var(--border-subtle)" }}
         >
-          <h2 className="heading-md">{title}</h2>
+          <h2 id={titleId} className="heading-md">{title}</h2>
           <button
             onClick={onClose}
             className="btn-ghost p-1.5"

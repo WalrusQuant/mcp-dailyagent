@@ -3,7 +3,8 @@ import { db } from "@/lib/db/client";
 import { workoutLogs, workoutLogExercises } from "@/lib/db/schema";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
-import { getToday, addDays } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { resolveDateContext } from "@/lib/date-context";
 
 interface SetData {
   reps?: number;
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
   }
   const days = Math.max(1, parseInt(daysParam ?? "30", 10));
 
-  const sinceDate = addDays(getToday(), -days);
+  const { today } = await resolveDateContext(userId);
+  const sinceDate = addDays(today, -(days - 1));
 
   try {
     const logs = await db

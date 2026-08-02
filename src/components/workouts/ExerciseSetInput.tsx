@@ -70,6 +70,7 @@ export function ExerciseSetInput({ exerciseName, exerciseType, sets, onChange, o
             {exerciseType === "timed" && (
               <div className="flex items-center gap-1 flex-1">
                 <input
+                  aria-label={`${exerciseName} set ${i + 1} duration in seconds`}
                   type="number"
                   value={set.duration ?? ""}
                   onChange={(e) => updateSet(i, "duration", parseInt(e.target.value) || 0)}
@@ -86,6 +87,7 @@ export function ExerciseSetInput({ exerciseName, exerciseType, sets, onChange, o
             {exerciseType === "strength" && (
               <div className="flex items-center gap-1 flex-1">
                 <input
+                  aria-label={`${exerciseName} set ${i + 1} repetitions`}
                   type="number"
                   value={set.reps ?? ""}
                   onChange={(e) => updateSet(i, "reps", parseInt(e.target.value) || 0)}
@@ -100,6 +102,7 @@ export function ExerciseSetInput({ exerciseName, exerciseType, sets, onChange, o
                   ×
                 </span>
                 <input
+                  aria-label={`${exerciseName} set ${i + 1} weight in pounds`}
                   type="number"
                   value={set.weight ?? ""}
                   onChange={(e) => updateSet(i, "weight", parseFloat(e.target.value) || 0)}
@@ -116,6 +119,7 @@ export function ExerciseSetInput({ exerciseName, exerciseType, sets, onChange, o
             {exerciseType === "cardio" && (
               <div className="flex items-center gap-1 flex-1 flex-wrap">
                 <input
+                  aria-label={`${exerciseName} set ${i + 1} duration in seconds`}
                   type="number"
                   value={set.duration ?? ""}
                   onChange={(e) => updateSet(i, "duration", parseInt(e.target.value) || 0)}
@@ -127,6 +131,7 @@ export function ExerciseSetInput({ exerciseName, exerciseType, sets, onChange, o
                   sec
                 </span>
                 <input
+                  aria-label={`${exerciseName} set ${i + 1} repetitions`}
                   type="number"
                   value={set.reps ?? ""}
                   onChange={(e) => updateSet(i, "reps", parseInt(e.target.value) || 0)}

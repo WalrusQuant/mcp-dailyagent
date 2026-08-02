@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { zonedDate } from "@/lib/zoned-dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -17,20 +17,20 @@ import { eq } from "drizzle-orm";
 const SCOPES = ["tasks:read", "tasks:write"];
 const ctx = { userId: TEST_USER_ID, scopes: SCOPES };
 
-const TODAY = getToday();
+const TODAY = zonedDate(new Date(), "UTC");
 
 interface TaskRow {
   id: string;
   title: string;
   notes: string | null;
   priority: string;
-  taskDate: string;
+  task_date: string;
   done: boolean;
-  doneAt: string | null;
-  spaceId: string | null;
-  goalId: string | null;
+  done_at: string | null;
+  space_id: string | null;
+  goal_id: string | null;
   recurrence: unknown;
-  updatedAt: string;
+  updated_at: string;
 }
 
 let h: ReturnType<typeof createToolHarness>;
@@ -71,23 +71,22 @@ describe("task tools — auth & scope", () => {
 });
 
 describe("create_task + list_tasks", () => {
-  it("creates a task with defaults and returns camelCase raw row", async () => {
+  it("creates a task with defaults using the MCP snake_case contract", async () => {
     const created = await seedTask({ title: "Buy groceries" });
     expect(created.title).toBe("Buy groceries");
     // Defaults applied by the tool.
     expect(created.priority).toBe("B1");
     expect(created.done).toBe(false);
-    expect(created.taskDate).toBe(TODAY);
-    // Raw drizzle camelCase keys, not snake_case.
-    expect(created).toHaveProperty("taskDate");
-    expect(created).not.toHaveProperty("task_date");
-    expect(created.updatedAt).toBeTruthy();
+    expect(created.task_date).toBe(TODAY);
+    expect(created).toHaveProperty("task_date");
+    expect(created).not.toHaveProperty("taskDate");
+    expect(created.updated_at).toBeTruthy();
   });
 
   it("honors explicit priority and date", async () => {
     const created = await seedTask({ title: "Plan", priority: "A1", task_date: "2026-06-01" });
     expect(created.priority).toBe("A1");
-    expect(created.taskDate).toBe("2026-06-01");
+    expect(created.task_date).toBe("2026-06-01");
   });
 
   it("lists tasks for an explicit date", async () => {
@@ -131,7 +130,7 @@ describe("create_task + list_tasks", () => {
       .values({ userId: OTHER_USER_ID, name: "Private" })
       .returning();
     const result = await h.call("create_task", { title: "Must roll back", space_id: foreignSpace.id }, ctx);
-    expect(expectError(result)).toContain("Space not found");
+    expect(expectError(result)).toContain("Space is not assignable");
     const rows = await db.select().from(tasks).where(eq(tasks.title, "Must roll back"));
     expect(rows).toHaveLength(0);
   });
@@ -173,7 +172,7 @@ describe("update_task — legacy (last-write-wins)", () => {
     const task = await seedTask();
     const updated = expectOk<TaskRow>(await h.call("update_task", { task_id: task.id, done: true }, ctx));
     expect(updated.done).toBe(true);
-    expect(updated.doneAt).toBeTruthy();
+    expect(updated.done_at).toBeTruthy();
   });
 
   it("returns not found for an unknown task", async () => {
@@ -218,7 +217,7 @@ describe("update_task — optimistic concurrency", () => {
     const updated = expectOk<TaskRow>(
       await h.call(
         "update_task",
-        { task_id: task.id, expected_updated_at: task.updatedAt, title: "Updated" },
+        { task_id: task.id, expected_updated_at: task.updated_at, title: "Updated" },
         ctx
       )
     );
@@ -257,7 +256,7 @@ describe("complete_task", () => {
     const task = await seedTask();
     const done = expectOk<TaskRow>(await h.call("complete_task", { task_id: task.id }, ctx));
     expect(done.done).toBe(true);
-    expect(done.doneAt).toBeTruthy();
+    expect(done.done_at).toBeTruthy();
   });
 
   it("returns not found for an unknown task", async () => {
@@ -330,13 +329,13 @@ describe("create_task / update_task — recurrence and links", () => {
         ctx
       )
     );
-    expect(updated.goalId).toBe(goal.id);
+    expect(updated.goal_id).toBe(goal.id);
     expect(updated.recurrence).toEqual({ type: "weekdays" });
 
     const cleared = expectOk<TaskRow>(
       await h.call("update_task", { task_id: task.id, goal_id: null, recurrence: null }, ctx)
     );
-    expect(cleared.goalId).toBeNull();
+    expect(cleared.goal_id).toBeNull();
     expect(cleared.recurrence).toBeNull();
   });
 
@@ -412,7 +411,7 @@ describe("recurrence — idempotency and field preservation", () => {
       await h.call("complete_task", { task_id: recurring.id, expected_updated_at: recurring.updatedAt.toISOString() }, ctx)
     );
     // Retry with a fresh token on the already-done task.
-    expectOk(await h.call("complete_task", { task_id: recurring.id, expected_updated_at: first.updatedAt }, ctx));
+    expectOk(await h.call("complete_task", { task_id: recurring.id, expected_updated_at: first.updated_at }, ctx));
 
     expect(await tasksOn("2026-06-06")).toHaveLength(1);
   });
@@ -429,7 +428,7 @@ describe("recurrence — idempotency and field preservation", () => {
 
     const next = await tasksOn("2026-06-06");
     expect(next).toHaveLength(1);
-    expect(next[0].goalId).toBe(goal.id);
+    expect(next[0].goal_id).toBe(goal.id);
     expect(next[0].notes).toBe("with goal");
   });
 

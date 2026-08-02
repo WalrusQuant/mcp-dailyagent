@@ -9,7 +9,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { HabitRow } from "./HabitRow";
 import { HabitFormModal } from "./HabitFormModal";
 import { HabitStats } from "./HabitStats";
-import { getHistoricalDateOrToday, getToday, startOfWeek, getDateRange, endOfWeek, addDays } from "@/lib/dates";
+import { startOfWeek, getDateRange, endOfWeek, addDays, getDayOfWeek } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import { calculateStreak, getApplicableDays } from "@/lib/habit-stats";
 import { useToast } from "@/lib/toast-context";
 
@@ -22,7 +23,8 @@ interface HabitWithStats {
 }
 
 export function HabitTracker({ initialDate }: { initialDate?: string }) {
-  const [date, setDate] = useState(() => getHistoricalDateOrToday(initialDate));
+  const { today } = useClientDateContext();
+  const [date, setDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const [habitsWithStats, setHabitsWithStats] = useState<HabitWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -67,7 +69,7 @@ export function HabitTracker({ initialDate }: { initialDate?: string }) {
         // Build sparkline: last 30 days, 1 = logged, 0 = not
         const recentData: number[] = [];
         for (let i = 29; i >= 0; i--) {
-          const d = addDays(getToday(), -i);
+          const d = addDays(today, -i);
           recentData.push(logs.has(d) ? 1 : 0);
         }
 
@@ -96,7 +98,7 @@ export function HabitTracker({ initialDate }: { initialDate?: string }) {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [showArchived, weekStart]);
+  }, [showArchived, weekStart, today]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,7 +109,6 @@ export function HabitTracker({ initialDate }: { initialDate?: string }) {
   const handleToggle = async (habitId: string, toggleDate: string) => {
     // Optimistic update: predict the toggled state before the server responds
     const prevHabitsWithStats = habitsWithStats;
-    const today = getToday();
     const windowStart = addDays(today, -29);
 
     setHabitsWithStats((prev) =>
@@ -291,7 +292,7 @@ export function HabitTracker({ initialDate }: { initialDate?: string }) {
             />
             Show archived
           </label>
-          <DateNavigation date={date} onDateChange={setDate} mode="week" maxDate={getToday()} />
+          <DateNavigation date={date} onDateChange={setDate} mode="week" maxDate={today} />
           <button
             onClick={() => { setEditingHabit(null); setShowForm(true); }}
             className="p-2 rounded-lg transition-opacity hover:opacity-90"
@@ -310,7 +311,7 @@ export function HabitTracker({ initialDate }: { initialDate?: string }) {
         <div className="flex gap-1.5">
           {weekDates.map((d) => (
             <div key={d} className="w-7 text-center text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-              {new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3)}
+              {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])[getDayOfWeek(d) - 1]}
             </div>
           ))}
         </div>

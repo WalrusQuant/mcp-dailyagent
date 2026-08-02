@@ -3,6 +3,11 @@ import HabitsPage from "../habits/page";
 import JournalPage from "../journal/page";
 import WorkoutsPage from "../workouts/page";
 import FocusPage from "../focus/page";
+import { beforeAll } from "vitest";
+
+beforeAll(() => {
+  process.env.SELF_HOSTED_USER_ID = "00000000-0000-4000-8000-000000000001";
+});
 
 describe("calendar date deep links", () => {
   it.each([

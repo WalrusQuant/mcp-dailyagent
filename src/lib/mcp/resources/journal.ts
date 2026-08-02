@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getAuth, checkScope } from "@/lib/mcp/tools/helpers";
 import { getJournalEntry, getRecentJournalEntries } from "@/lib/mcp/queries/journal";
-import { getToday } from "@/lib/dates";
+import { getProfileToday } from "@/lib/date-context";
 import type { Extra } from "@/lib/mcp/tools/helpers";
 
 export function registerJournalResources(server: McpServer) {
@@ -21,7 +21,7 @@ export function registerJournalResources(server: McpServer) {
         };
       }
 
-      const result = await getJournalEntry(auth.userId, getToday());
+      const result = await getJournalEntry(auth.userId, await getProfileToday(auth.userId));
       if (result.error) throw new Error(result.error);
 
       return {

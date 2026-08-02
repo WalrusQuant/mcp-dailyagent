@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2, FileText, AlertCircle } from "lucide-react";
 import { DateNavigation } from "@/components/shared/DateNavigation";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { startOfWeek, getToday } from "@/lib/dates";
+import { startOfWeek } from "@/lib/dates";
+import { useClientDateContext } from "@/lib/client-date-context";
 import ReactMarkdown from "react-markdown";
 import { StatCard } from "@/components/shared/StatCard";
 import { ReviewSection } from "./ReviewSection";
@@ -21,7 +22,8 @@ interface WeekStats {
 }
 
 export function WeeklyReview() {
-  const [weekStart, setWeekStart] = useState(startOfWeek(getToday()));
+  const { today } = useClientDateContext();
+  const [weekStart, setWeekStart] = useState(startOfWeek(today));
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);

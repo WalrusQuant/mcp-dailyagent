@@ -1,4 +1,4 @@
-import { getToday } from "@/lib/dates";
+import { zonedDate } from "@/lib/zoned-dates";
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 vi.mock("@/lib/db/client", async () => {
@@ -17,7 +17,7 @@ const WRITE = ["insights:write"];
 const ALL = [...READ, ...WRITE];
 const ctx = { userId: TEST_USER_ID, scopes: ALL };
 
-const TODAY = getToday();
+const TODAY = zonedDate(new Date(), "UTC");
 
 interface InsightRow {
   id: string;

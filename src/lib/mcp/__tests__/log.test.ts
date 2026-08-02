@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
+import { containsToolCall, extractRpcInfo, logMcpRequest } from "@/lib/mcp/log";
 
 describe("extractRpcInfo", () => {
   it("returns rpc_method for a single request", () => {
@@ -44,6 +44,16 @@ describe("extractRpcInfo", () => {
         params: { name: 42 },
       })
     ).toEqual({ rpc_method: "tools/call" });
+  });
+});
+
+describe("containsToolCall", () => {
+  it("detects a tool call anywhere in a batch", () => {
+    expect(containsToolCall([
+      { jsonrpc: "2.0", id: 1, method: "resources/read" },
+      { jsonrpc: "2.0", id: 2, method: "tools/call" },
+    ])).toBe(true);
+    expect(containsToolCall([{ method: "tools/list" }, { method: "prompts/get" }])).toBe(false);
   });
 });
 

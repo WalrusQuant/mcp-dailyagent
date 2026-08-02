@@ -4,7 +4,7 @@ import { tasks } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 import { conflictResponse } from "@/lib/api-conflict";
-import { serializeTask, maybeSpawnNextOccurrence } from "@/lib/mcp/queries/tasks";
+import { serializeTask } from "@/lib/mcp/queries/tasks";
 import { getTagsForTask } from "@/lib/mcp/queries/tags";
 import { readJsonBody } from "@/lib/api-body";
 import { calendarDateSchema, recurrenceSchema, uuidSchema } from "@/lib/validation";
@@ -63,6 +63,13 @@ export async function PATCH(
       );
     }
   }
+  if (
+    body.recurrence_scope !== undefined &&
+    body.recurrence_scope !== "occurrence" &&
+    body.recurrence_scope !== "future"
+  ) {
+    return NextResponse.json({ error: "recurrence_scope must be occurrence or future" }, { status: 400 });
+  }
 
   for (const field of ["space_id", "goal_id"] as const) {
     const value = body[field];
@@ -104,24 +111,15 @@ export async function PATCH(
   }
 
   try {
-    let wasAlreadyDone = false;
-    if (body.done === true) {
-      const [prior] = await db
-        .select({ done: tasks.done })
-        .from(tasks)
-        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-      wasAlreadyDone = prior?.done ?? false;
-    }
-
     const result = await updateTaskAggregate(userId, id, {
       patch: allowedFields,
       tagIds: hasTagUpdate ? (body.tag_ids as string[]) : undefined,
       expectedUpdatedAt: typeof body.expected_updated_at === "string" ? body.expected_updated_at : undefined,
+      recurrenceScope:
+        body.recurrence_scope === "occurrence" || body.recurrence_scope === "future"
+          ? body.recurrence_scope
+          : undefined,
     });
-
-    if (body.done === true) {
-      await maybeSpawnNextOccurrence(userId, result.task, wasAlreadyDone);
-    }
     return NextResponse.json({ ...serializeTask(result.task), tags: result.tags });
   } catch (err) {
     if (err instanceof TaskMutationError) {
@@ -131,6 +129,9 @@ export async function PATCH(
       }
       if (err.code === "conflict" && err.current) return conflictResponse(serializeTask(err.current));
       if (err.code === "relationship_not_found") {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      if (err.code === "invalid_recurrence") {
         return NextResponse.json({ error: err.message }, { status: 400 });
       }
     }
