@@ -7,10 +7,15 @@ vi.mock("@/lib/db/client", async () => {
   return { db, schema };
 });
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { tasks } from "@/lib/db/schema";
 import { getTestDb, OTHER_USER_ID, resetDb, TEST_USER_ID } from "@/test/db-harness";
-import { reorderTasksAggregate, TaskMutationError, updateTaskAggregate } from "@/lib/tasks/mutations";
+import {
+  completeTaskAggregate,
+  reorderTasksAggregate,
+  TaskMutationError,
+  updateTaskAggregate,
+} from "@/lib/tasks/mutations";
 
 beforeEach(async () => {
   await resetDb();
@@ -31,6 +36,31 @@ describe("task aggregate mutations", () => {
 
     const [stored] = await db.select().from(tasks).where(eq(tasks.id, task.id));
     expect(stored.updatedAt).toEqual(task.updatedAt);
+  });
+
+  it("completes a never-edited task when updated_at has microsecond precision", async () => {
+    // defaultNow() stores µs; the API serializes toISOString() (ms). Exact
+    // equality on updated_at rejects the match and blocks toggle-complete.
+    const { db } = await getTestDb();
+    const [task] = await db
+      .insert(tasks)
+      .values({ userId: TEST_USER_ID, title: "Publish: FIP Is Not ERA", taskDate: "2026-08-08" })
+      .returning();
+
+    await db.execute(sql`
+      UPDATE tasks
+      SET updated_at = '2026-08-02 20:31:13.077456+00',
+          created_at = '2026-08-02 20:31:13.077456+00'
+      WHERE id = ${task.id}
+    `);
+
+    const [reloaded] = await db.select().from(tasks).where(eq(tasks.id, task.id));
+    const clientToken = reloaded.updatedAt.toISOString();
+    expect(clientToken).toBe("2026-08-02T20:31:13.077Z");
+
+    const result = await completeTaskAggregate(TEST_USER_ID, task.id, clientToken);
+    expect(result.task.done).toBe(true);
+    expect(result.task.doneAt).toBeInstanceOf(Date);
   });
 
   it("prevalidates reorder ownership and leaves every sort order unchanged", async () => {

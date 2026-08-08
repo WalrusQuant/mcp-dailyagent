@@ -1,5 +1,6 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { versionPredicate } from "@/lib/db/optimistic";
 import { tags, taskRecurrenceSeries, tasks, taskTags } from "@/lib/db/schema";
 import { serializeTag, type SerializedTag } from "@/lib/mcp/queries/tags";
 import { isAssignableRelationship, isOwnedRelationship } from "@/lib/db/ownership";
@@ -385,12 +386,18 @@ export async function updateTaskAggregate(
     const recurrence = hasRecurrenceChange ? (patch.recurrence as object | null) : undefined;
     if (hasRecurrenceChange) delete patch.recurrence;
 
+    // Version match uses date_trunc('milliseconds') so client tokens from
+    // toISOString() (ms precision) still match rows created via defaultNow()
+    // (µs precision in Postgres). Exact eq(updatedAt) fails for never-edited rows.
+    const ownership = and(eq(tasks.id, taskId), eq(tasks.userId, userId));
+    const versioned = expectedDate
+      ? and(ownership, versionPredicate(tasks, expectedDate))
+      : ownership;
+
     let task = existing;
     if (Object.keys(patch).length > 0) {
       const updatedAt = new Date();
-      let condition = expectedDate
-        ? and(eq(tasks.id, taskId), eq(tasks.userId, userId), eq(tasks.updatedAt, expectedDate))
-        : and(eq(tasks.id, taskId), eq(tasks.userId, userId));
+      let condition = versioned;
       if (patch.done === true && !existing.done) {
         condition = and(condition, eq(tasks.done, false));
       }
@@ -403,7 +410,7 @@ export async function updateTaskAggregate(
         const [current] = await tx
           .select()
           .from(tasks)
-          .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+          .where(ownership)
           .limit(1);
         if (!current) throw new TaskMutationError("not_found", "Task not found");
         const completionOnly = Object.keys(patch).every((key) => key === "done" || key === "doneAt");
@@ -417,10 +424,7 @@ export async function updateTaskAggregate(
       }
     } else if (tagIds !== undefined && !hasRecurrenceChange) {
       const updatedAt = new Date();
-      const condition = expectedDate
-        ? and(eq(tasks.id, taskId), eq(tasks.userId, userId), eq(tasks.updatedAt, expectedDate))
-        : and(eq(tasks.id, taskId), eq(tasks.userId, userId));
-      const [updated] = await tx.update(tasks).set({ updatedAt }).where(condition).returning();
+      const [updated] = await tx.update(tasks).set({ updatedAt }).where(versioned).returning();
       if (!updated) throw new TaskMutationError("conflict", "Task was modified", existing);
       task = updated;
     }
@@ -428,15 +432,12 @@ export async function updateTaskAggregate(
     if (hasRecurrenceChange) {
       if (Object.keys(patch).length === 0) {
         const updatedAt = new Date();
-        const condition = expectedDate
-          ? and(eq(tasks.id, taskId), eq(tasks.userId, userId), eq(tasks.updatedAt, expectedDate))
-          : and(eq(tasks.id, taskId), eq(tasks.userId, userId));
-        const [touched] = await tx.update(tasks).set({ updatedAt }).where(condition).returning();
+        const [touched] = await tx.update(tasks).set({ updatedAt }).where(versioned).returning();
         if (!touched) {
           const [current] = await tx
             .select()
             .from(tasks)
-            .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+            .where(ownership)
             .limit(1);
           if (!current) throw new TaskMutationError("not_found", "Task not found");
           throw new TaskMutationError("conflict", "Task was modified", current);

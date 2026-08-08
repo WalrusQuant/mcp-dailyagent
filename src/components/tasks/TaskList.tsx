@@ -217,11 +217,25 @@ export function TaskList({ initialDate }: { initialDate?: string }) {
         const updated = await response.json();
         setTasks((prev) => prev.map((t) => t.id === task.id ? updated : t));
         addToast(newDone ? "Task completed" : "Task unchecked");
-      } else {
-        // Revert on non-ok response (e.g. 409 optimistic concurrency)
-        setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
-        addToast("Failed to update task");
+        return;
       }
+
+      // Revert; on 409 refresh from server `current` so the next toggle uses a
+      // fresh version token instead of failing forever until a full reload.
+      if (response.status === 409) {
+        try {
+          const body = await response.json();
+          if (body?.current && typeof body.current === "object") {
+            setTasks((prev) => prev.map((t) => (t.id === task.id ? body.current : t)));
+            addToast("Task was updated elsewhere — try again");
+            return;
+          }
+        } catch {
+          // fall through to generic revert
+        }
+      }
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      addToast("Failed to update task");
     } catch (error) {
       console.error("Failed to toggle task:", error);
       setTasks((prev) => prev.map((t) => t.id === task.id ? task : t));
