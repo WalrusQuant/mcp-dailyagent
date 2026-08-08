@@ -30,21 +30,38 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const { toggle: toggleCommandPalette } = useCommandPalette();
 
-  // Fix iOS PWA bottom gap: innerHeight excludes ~62px on initial load
-  // in standalone mode, but screen.height is always correct (874 vs 812).
-  // Use screen.height on mount, innerHeight on resize (corrected by then).
+  // Keep --app-height in sync with the usable layout viewport.
+  // Do NOT use screen.height: on iOS PWA it is taller than the visible
+  // area, so an absolute bottom bar floated above a gap (or sat clipped)
+  // until a full relaunch resettled the measure. BottomNav is fixed now,
+  // but the shell still needs a correct height for scroll regions.
   useEffect(() => {
-    const isStandalone = "standalone" in navigator &&
-      (navigator as unknown as { standalone: boolean }).standalone;
-    document.documentElement.style.setProperty(
-      "--app-height",
-      `${isStandalone ? screen.height : window.innerHeight}px`
-    );
-    const onResize = () => {
-      document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
+    const setAppHeight = () => {
+      const height = Math.round(window.innerHeight);
+      if (height > 0) {
+        document.documentElement.style.setProperty("--app-height", `${height}px`);
+      }
     };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+
+    setAppHeight();
+    // iOS often reports a transitional height on first paint / resume.
+    const t1 = window.setTimeout(setAppHeight, 50);
+    const t2 = window.setTimeout(setAppHeight, 350);
+
+    window.addEventListener("resize", setAppHeight);
+    window.addEventListener("orientationchange", setAppHeight);
+    // bfcache restore (swipe-back / relaunch from switcher)
+    window.addEventListener("pageshow", setAppHeight);
+    window.visualViewport?.addEventListener("resize", setAppHeight);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("resize", setAppHeight);
+      window.removeEventListener("orientationchange", setAppHeight);
+      window.removeEventListener("pageshow", setAppHeight);
+      window.visualViewport?.removeEventListener("resize", setAppHeight);
+    };
   }, []);
 
   useKeyboardShortcuts([

@@ -56,6 +56,7 @@ export function BottomNav() {
       setKeyboardOpen(vv.height < window.innerHeight * 0.75);
     };
 
+    handleResize();
     vv.addEventListener("resize", handleResize);
     return () => vv.removeEventListener("resize", handleResize);
   }, []);
@@ -64,11 +65,15 @@ export function BottomNav() {
 
   const isMoreActive = MORE_ITEMS.some((item) => pathname.startsWith(item.href));
 
+  // fixed (not absolute): the bar must pin to the viewport bottom. Absolute
+  // positioning was relative to the app shell, whose --app-height is often
+  // wrong on first iOS/PWA open (nav floated above the home indicator until
+  // a full close/reopen resettled the height).
   return (
     <>
       {/* More sheet overlay */}
       {showMore && (
-        <div className="absolute inset-0 z-[70] md:hidden" onClick={() => setShowMore(false)}>
+        <div className="fixed inset-0 z-[70] md:hidden" onClick={() => setShowMore(false)}>
           <div className="absolute inset-0" style={{ background: "rgba(15, 17, 21, 0.55)", backdropFilter: "blur(2px)" }} />
           <div
             ref={dialogRef}
@@ -132,7 +137,7 @@ export function BottomNav() {
 
       {/* Bottom tab bar */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-[60] md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-[60] md:hidden"
         style={{
           background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
           backdropFilter: "blur(12px)",
