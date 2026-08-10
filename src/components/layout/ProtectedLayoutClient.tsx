@@ -25,6 +25,83 @@ const CommandPalette = dynamic(
 
 const BottomNav = dynamic(() => import("./BottomNav").then((m) => m.BottomNav), { ssr: false });
 
+type ViewportSnapshot = {
+  label: string;
+  inner: number;
+  visual: number | null;
+  visualOffsetTop: number | null;
+  document: number;
+  screen: number;
+  shell: number | null;
+  shellBottom: number | null;
+  navBottom: number | null;
+  standalone: boolean;
+};
+
+function ViewportDebug() {
+  const [snapshots, setSnapshots] = useState<ViewportSnapshot[]>([]);
+
+  useEffect(() => {
+    const measure = (label: string) => {
+      const viewport = window.visualViewport;
+      const shell = document.querySelector<HTMLElement>("[data-app-shell]");
+      const nav = document.querySelector<HTMLElement>("[data-bottom-nav]");
+      const shellRect = shell?.getBoundingClientRect();
+      const navRect = nav?.getBoundingClientRect();
+      const standalone = window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+      const snapshot: ViewportSnapshot = {
+        label,
+        inner: Math.round(window.innerHeight),
+        visual: viewport ? Math.round(viewport.height) : null,
+        visualOffsetTop: viewport ? Math.round(viewport.offsetTop) : null,
+        document: document.documentElement.clientHeight,
+        screen: window.screen.height,
+        shell: shell?.clientHeight ?? null,
+        shellBottom: shellRect ? Math.round(shellRect.bottom) : null,
+        navBottom: navRect ? Math.round(navRect.bottom) : null,
+        standalone,
+      };
+
+      setSnapshots((current) => [...current.slice(-7), snapshot]);
+    };
+
+    const frame = window.requestAnimationFrame(() => measure("frame"));
+    measure("mount");
+    const timers = [100, 500, 1500].map((delay) => window.setTimeout(() => measure(`${delay}ms`), delay));
+    const onResize = () => measure("resize");
+    const onPageShow = () => measure("pageshow");
+
+    window.addEventListener("resize", onResize);
+    window.addEventListener("pageshow", onPageShow);
+    window.visualViewport?.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("scroll", onResize);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("pageshow", onPageShow);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("scroll", onResize);
+    };
+  }, []);
+
+  return (
+    <div
+      data-viewport-debug
+      className="fixed top-1 left-1 z-[9999] m-0 max-w-[calc(100vw-0.5rem)] overflow-x-auto rounded bg-black/90 p-2 font-mono text-[9px] leading-tight text-lime-300 pointer-events-none"
+    >
+      {snapshots.map((snapshot, index) => (
+        <div key={`${snapshot.label}-${index}`}>
+          {`${snapshot.label} standalone=${snapshot.standalone ? "Y" : "N"} inner=${snapshot.inner} visual=${snapshot.visual ?? "-"} offsetTop=${snapshot.visualOffsetTop ?? "-"} doc=${snapshot.document} screen=${snapshot.screen} shell=${snapshot.shell ?? "-"} shellBottom=${snapshot.shellBottom ?? "-"} navBottom=${snapshot.navBottom ?? "-"}`}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -58,7 +135,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   ]);
 
   return (
-    <div className="flex w-full overflow-hidden relative" style={{ background: "var(--bg-base)", height: "var(--app-height, 100dvh)" }}>
+    <div data-app-shell className="flex w-full overflow-hidden relative" style={{ background: "var(--bg-base)", height: "var(--app-height, 100dvh)" }}>
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -80,6 +157,8 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       </div>
 
       <BottomNav />
+
+      <ViewportDebug />
 
       <ToastContainer />
       <CommandPalette />

@@ -132,6 +132,7 @@ export function BottomNav() {
 
       {/* Bottom tab bar */}
       <div
+        data-bottom-nav
         className="absolute bottom-0 left-0 right-0 z-[60] md:hidden"
         style={{
           background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
