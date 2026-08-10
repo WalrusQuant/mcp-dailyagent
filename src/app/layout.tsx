@@ -67,19 +67,6 @@ export default function RootLayout({
         className={`${interTight.variable} ${newsreader.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <ThemeProvider>{children}</ThemeProvider>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch((err) => {
-                    console.error('Service worker registration failed:', err);
-                  });
-                });
-              }
-            `,
-          }}
-        />
       </body>
     </html>
   );
