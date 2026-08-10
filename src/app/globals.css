@@ -434,6 +434,18 @@ mark {
   color: var(--text-primary);
 }
 
+/* Typography supplies a fixed dark link color by default, which disappears
+   against the dark dashboard card. Keep briefing links on the app theme. */
+.briefing-markdown a {
+  color: var(--accent-primary);
+  font-weight: 500;
+  text-decoration-color: color-mix(in srgb, var(--accent-primary) 65%, transparent);
+}
+
+.briefing-markdown a:hover {
+  color: var(--accent-primary-hover);
+}
+
 /* Touch device overrides — reveal hidden action buttons */
 @media (hover: none) {
   [data-touch-action="sidebar"] { display: flex !important; }
