@@ -434,6 +434,12 @@ mark {
   color: var(--text-primary);
 }
 
+/* Briefing emphasis is Markdown <strong>; Typography's default is too dark
+   for the dashboard card in dark mode. */
+.briefing-markdown strong {
+  color: var(--text-primary);
+}
+
 /* Typography supplies a fixed dark link color by default, which disappears
    against the dark dashboard card. Keep briefing links on the app theme. */
 .briefing-markdown a {
